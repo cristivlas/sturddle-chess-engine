@@ -2025,9 +2025,9 @@ namespace search
         auto now = std::chrono::system_clock::now();
         auto millisec = duration_cast<std::chrono::milliseconds>(now - _time_start).count();
 
-        /* update nodes-per-second */
-        ASSERT(_tt);
-
+        /*
+         * Update nodes-per-second for the this thread.
+         */
         if (millisec)
             _tt->set_nps((1000 * _tt->nodes()) / millisec);
         else
@@ -2144,7 +2144,7 @@ namespace search
     /*
      * Allow for apps to implement strength levels by slowing down the engine.
      */
-    void Context::nanosleep(int nanosec)
+    int64_t Context::nanosleep(int nanosec)
     {
 #if defined(_POSIX_VERSION)
         timespec delay = { 0, nanosec };
@@ -2168,7 +2168,7 @@ namespace search
         }
 #endif /* _POSIX_VERSION */
 
-        check_time_and_update_nps();
+        return check_time_and_update_nps();
     }
 
 

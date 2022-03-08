@@ -437,7 +437,7 @@ cdef extern from 'context.h' namespace 'search':
 
         ContextPtr      best() const
         ContextPtr      first_move()
-        void            nanosleep(int) nogil
+        int64_t         nanosleep(int) nogil
 
         @staticmethod
         void            cancel() nogil
@@ -849,9 +849,9 @@ cdef class SearchAlgorithm:
         return self.context.get_pv()
 
 
-    cpdef nanosleep(self, int nanosec):
+    cpdef int64_t nanosleep(self, int nanosec):
         with nogil:
-            deref(self.context._ctxt).nanosleep(nanosec)
+            return deref(self.context._ctxt).nanosleep(nanosec)
 
 
     @property

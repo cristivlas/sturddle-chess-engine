@@ -289,7 +289,7 @@ namespace search
         static void log_message(LogLevel, const std::string&, bool force = true);
 
         score_t     material_gain(bool same_square = false) const;
-        void        nanosleep(int nanosec);
+        int64_t     nanosleep(int nanosec);
         ContextPtr  next(bool null_move = false, bool = false, score_t = 0);
         int         next_move_index() { return _move_maker.current(*this); }
         bool        on_next();
