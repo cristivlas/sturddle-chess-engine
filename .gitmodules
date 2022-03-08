@@ -1,0 +1,6 @@
+[submodule "libpopcnt"]
+	path = libpopcnt
+	url = https://github.com/kimwalisch/libpopcnt.git
+[submodule "thread-pool"]
+	path = thread-pool
+	url = https://github.com/bshoshany/thread-pool.git
