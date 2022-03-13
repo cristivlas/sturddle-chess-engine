@@ -125,11 +125,10 @@ DECLARE_PARAM(  DEBUG_PRUNING,                        0,    0,       1)
 DECLARE_PARAM(  EVAL_FUZZ,                            0,    0,     100)
 DECLARE_PARAM(  FIFTY_MOVES_RULE,                     1,    0,       1)
 DECLARE_PARAM(  FUTILITY_PRUNING,                     1,    0,       1)
-DECLARE_PARAM(  HISTORY_THRESHOLD,                   95,    0,     100)
 DECLARE_PARAM(  LATE_MOVE_REDUCTION_COUNT,            4,    0,     100)
 DECLARE_PARAM(  MANAGE_TIME,                          1,    0,       1)
 DECLARE_PARAM(  MOVE_MAKER_PRUNE_COUNT,               0,    0,     100)
-DECLARE_PARAM(  MULTICUT,                             1,    0,       1)
+DECLARE_PARAM(  MULTICUT,                             0,    0,       1)
 
 #if ADAPTIVE_NULL_MOVE
 DECLARE_PARAM(  NULL_MOVE_FACTOR,                   200,   10,    1000)
@@ -143,15 +142,16 @@ DECLARE_PARAM(  SINGULAR_MARGIN,                      6,    0,     250)
 DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
 
 /* Move ordering */
-DECLARE_PARAM(  CAPTURE_LAST_MOVED_BONUS,            70,    0,     100)
-DECLARE_PARAM(  HISTORY_COUNTER_MOVE_BONUS,          20,    0,     100)
+DECLARE_PARAM(  CAPTURE_LAST_MOVED_BONUS,            21,    0,     100)
+DECLARE_PARAM(  COUNTER_MOVE_BONUS,                  20,    0,     100)
+DECLARE_PARAM(  HISTORY_HIGH,                        95,    0,     100)
 
 /* Tactical evaluation */
 DECLARE_PARAM(  BISHOP_PAIR,                         67,    0,     100)
 DECLARE_PARAM(  BISHOPS_STRENGTH,                    13,    0,     100)
-DECLARE_PARAM(  CHECK_BONUS,                         45,    0,     100)
-DECLARE_PARAM(  CENTER_ATTACKS,                      11,    0,     100)
-DECLARE_PARAM(  CENTER_OCCUPANCY,                    71,    0,     100)
+DECLARE_PARAM(  CHECK_BONUS,                         50,    0,     100)
+DECLARE_PARAM(  CENTER_ATTACKS,                      16,    0,     100)
+DECLARE_PARAM(  CENTER_OCCUPANCY,                     3,    0,     100)
 DECLARE_PARAM(  REDUNDANT_ROOK,                     -33, -500,       0)
 
 DECLARE_PARAM(  ENDGAME_CONNECTED_ROOKS,              6,    0,     100)
@@ -510,7 +510,7 @@ namespace search
         ASSERT(move);
         ASSERT(move != _move);
 
-        return _tt->history_score(*this, move) + HISTORY_COUNTER_MOVE_BONUS * (move == _counter_move);
+        return _tt->history_score(*this, move) + COUNTER_MOVE_BONUS * (move == _counter_move);
     }
 
 
@@ -1372,7 +1372,7 @@ namespace search
                     }
                     _tt_entry._eval = eval;
                 }
-                /* 2. Tactical (skip in midgame if above LAZY_EVAL_MARGIN or low depth) */
+                /* 2. Tactical (skip in midgame if above LAZY_EVAL_MARGIN or very low depth) */
                 else if (state().is_endgame() || (abs(eval) < LAZY_EVAL_MARGIN && depth() > 3))
 	            {
                     eval += SIGN[turn] * eval_tactical(*this);
@@ -1434,7 +1434,7 @@ namespace search
             _extension += ONE_PLY * (
                    _move == _parent->_tt_entry._hash_move
                 && abs(_parent->_tt_entry._value) < MATE_HIGH
-                && _parent->history_score(_move) > HISTORY_THRESHOLD
+                && _parent->history_score(_move) > HISTORY_HIGH
                 && get_tt()->historical_counters(*_parent, _move).first > 10000);
 
             const auto extend = std::min(1, _extension / ONE_PLY);
@@ -1524,7 +1524,8 @@ namespace search
             return nullptr;
 
         ASSERT(null_move || move->_state);
-        ASSERT(null_move || move->_group != MoveOrder::ILLEGAL_MOVES);
+        ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
+        ASSERT(null_move || move->_group < MoveOrder::UNORDERED_MOVES);
 
         auto ctxt = intrusive_ptr<Context>(new Context);
 
@@ -1552,10 +1553,6 @@ namespace search
             ctxt->_state = &ctxt->_statebuf;
             flip(ctxt->_state->turn);
             ctxt->_is_null_move = true;
-        #if 0
-            ctxt->_futility_pruning = false;
-            ctxt->_multicut_allowed = false;
-        #endif
         }
 
         ctxt->_algorithm = _algorithm;
@@ -2307,7 +2304,19 @@ namespace search
             }
             else
             {
+            #if 0
                 move._group = capture_gain > 0 ? WINNING_CAPTURES : EQUAL_CAPTURES;
+            #else
+                if (move._group > 0)
+                {
+                    move._group = MoveOrder::WINNING_CAPTURES;
+                    move._score = capture_gain;
+                }
+                else
+                {
+                    move._group = MoveOrder::EQUAL_CAPTURES;
+                }
+            #endif
 
                 /*
                  * Add sorting score bonus for capturing
@@ -2375,6 +2384,7 @@ namespace search
             {
                 _have_pruned_moves = true;
                 move._group = MoveOrder::PRUNED_MOVES;
+                ++ctxt.get_tt()->_futility_prune_count;
                 return false;
             }
         }
@@ -2671,6 +2681,17 @@ namespace search
     }
 
 
+    static inline const Move* match_killer(const KillerMoves* killers, const Move& move)
+    {
+        if (killers)
+            for (size_t i = 0; i != 2; ++i)
+                if ((*killers)[i] == move)
+                    return &(*killers)[i];
+
+        return nullptr;
+    }
+
+
     /*
      * Order moves in multiple phases (passes). The idea is to minimize make_move() calls,
      * which validate the legality of the move. The granularity (number of phases) should
@@ -2688,7 +2709,7 @@ namespace search
         const KillerMoves* killer_moves = nullptr;
 
         /* "confidence bar" for historical scores */
-        const auto hist_threshold = HISTORY_THRESHOLD / (1 + exp(6 - ctxt.iteration()));
+        const auto hist_threshold = HISTORY_HIGH / (1 + exp(6 - ctxt.iteration()));
 
         _have_move = false;
 
@@ -2725,8 +2746,7 @@ namespace search
                 case 1:
                     if (move == ctxt._prev)
                     {
-                        make_move(ctxt, move,
-                            ctxt._ply > 0 ? MoveOrder::HASH_MOVES : MoveOrder::PREV_ITER);
+                        make_move(ctxt, move, ctxt._ply ? MoveOrder::HASH_MOVES : MoveOrder::PREV_ITER);
                     }
                     else if (ctxt._tt_entry._hash_move == move)
                     {
@@ -2739,22 +2759,16 @@ namespace search
                     break;
 
                 case 2: /* Captures and killer moves. */
+                    if (move._state ? move._state->capture_value : ctxt.state().is_capture(move))
                     {
-                        const bool is_capture =
-                            move._state ? move._state->capture_value : ctxt.state().is_capture(move);
-                        if (is_capture)
-                        {
-                            make_capture(ctxt, move, same_square_gain);
-                            break;
-                        }
+                        make_capture(ctxt, move, same_square_gain);
+                        break;
                     }
-                    if (killer_moves)
+
+                    if (auto k_move = match_killer(killer_moves, move))
                     {
-                        if (auto k_move = killer_moves->match(move))
-                        {
-                            make_move(ctxt, move, MoveOrder::KILLER_MOVES, k_move->_score);
-                            break;
-                        }
+                        make_move(ctxt, move, MoveOrder::KILLER_MOVES, k_move->_score);
+                        break;
                     }
                     break;
 

@@ -379,7 +379,7 @@ cdef extern from 'context.h':
         int min_val
         int max_val
 
-    void _set_param(string, int, bint) nogil except+
+    void _set_param(string, int, bint) except+
 
     map[string, int] _get_params() except+
     map[string, Param] _get_param_info() except+
@@ -442,16 +442,13 @@ cdef extern from 'context.h' namespace 'search':
         @staticmethod
         void            cancel() nogil
 
-        @staticmethod
-        bint            is_cancelled() nogil
-
-        @staticmethod
-        void            init() nogil
-
         int64_t         check_time_and_update_nps()
+
+        @staticmethod
+        void            init()
+
         bint            is_leftmost() const
         bint            is_null_move() const
-        void            reinitialize(int) nogil
 
         @staticmethod
         void            set_time_limit_ms(int millisec) nogil
@@ -463,22 +460,20 @@ cdef extern from 'context.h' namespace 'search':
         const vector[BaseMove]& get_pv() nogil const
 
 
+cpdef board_from_state(state: BoardState):
+    board = chess.Board()
+    state.copy_to_board(board)
+    return board
 
-# ---------------------------------------------------------------------
-#
-# ---------------------------------------------------------------------
-class BoardPlus(chess.Board):
-    def __init__(self, state: BoardState, fen=chess.STARTING_FEN, *args):
-        chess.Board.__init__(self, fen, *args)
-        state.copy_to_board(self)
-        self.state = state
+
+cdef board_from_cxx_state(const State& state):
+    cdef BoardState board_state = BoardState()
+    board_state._state = state
+    return board_from_state(board_state)
 
 
 cdef void print_state(const State& state) except* with gil:
-    cdef BoardState board_state = BoardState()
-    board_state._state = state
-    board = BoardPlus(board_state)
-    print_board(board)
+    print_board(board_from_cxx_state(state))
 
 
 cdef void report(self, vector[ContextPtr]& ctxts) except* with gil:
@@ -506,10 +501,7 @@ cdef string pgn(ContextPtr ctxt) except* with gil:
 
 
 cdef string epd(const State& state) except* with gil:
-    cdef BoardState board_state = BoardState()
-    board_state._state = state
-    board = BoardPlus(board_state)
-    return board.epd().encode()
+    return board_from_cxx_state(state).epd().encode()
 
 
 cdef set_log_level(level, setLevel):
@@ -579,11 +571,7 @@ cdef class NodeContext:
 
 
     def board(self):
-        cdef BoardState state = BoardState()
-        state._state = deref(self._ctxt.get()._state)
-        board = chess.Board()
-        state.copy_to_board(board)
-        return board
+        return board_from_cxx_state(deref(self._ctxt.get()._state))
 
 
     cpdef best(self):
@@ -702,9 +690,11 @@ cdef extern from 'search.h' namespace 'search':
         const   size_t _check_nodes
         const   size_t _eval_count
         const   size_t _endgame_nodes
+        const   size_t _futility_prune_count
         const   size_t _history_counters
         const   size_t _history_counters_hit
         const   size_t _hits
+        const   size_t _late_move_prune_count
         const   size_t _null_move_not_ok
         const   size_t _nps
         const   size_t _null_move_cutoffs
@@ -748,9 +738,11 @@ cdef task_stats(const TranspositionTable& table):
     return {
         'eval-count': table._eval_count,
         'endgame-nodes': table._endgame_nodes,
+        'futility-prune-count': table._futility_prune_count,
         'history-counters': table._history_counters,
         'history-counters-hit': table._history_counters_hit,
         'in-check-nodes': table._check_nodes,
+        'late-move-prune-count': table._late_move_prune_count,
         'nodes': table.nodes(),
         'nps': table._nps,
         'null-move-cutoffs': table._null_move_cutoffs,
@@ -1090,7 +1082,7 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0
-__minor__   = 76
+__minor__   = 77
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
 

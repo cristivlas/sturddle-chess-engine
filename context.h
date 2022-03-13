@@ -218,9 +218,9 @@ namespace search
 
         HistoryPtr  _history;
 
+        Move        _cutoff_move;   /* from current state to the next */
         Move        _move;          /* from parent to current state */
         BaseMove    _prev;          /* best move from previous iteration */
-        BaseMove    _cutoff_move;   /* from current state to the next */
         BaseMove    _excluded;      /* singular extension search */
 
         State*      _state = nullptr;
@@ -250,6 +250,7 @@ namespace search
         score_t     evaluate();     /* call _evaluate and do the above */
         score_t     evaluate_end();
         score_t     evaluate_material(bool with_piece_squares = true);
+
         void        extend();       /* fractional extensions */
         ContextPtr  first_move();
         score_t     futility_margin();
@@ -283,7 +284,7 @@ namespace search
         bool        is_singleton() const { return _is_singleton; }
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
 
-        LMR   late_move_reduce(bool prune);
+        LMR         late_move_reduce(bool prune);
         static int  late_move_reduction_count();
 
         static void log_message(LogLevel, const std::string&, bool force = true);

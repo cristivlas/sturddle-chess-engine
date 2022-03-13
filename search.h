@@ -42,6 +42,15 @@ constexpr score_t HALF_WINDOW = chess::WEIGHT[chess::PAWN] / 4;
 namespace search
 {
     struct Context;
+    class TranspositionTable;
+
+    /*
+     * Search algorithms
+     */
+    score_t negamax(Context&, TranspositionTable&);
+    score_t mtdf(Context&, score_t, TranspositionTable&);
+    score_t iterative(Context&, TranspositionTable&, int);
+
 
     using BaseMove = chess::BaseMove;
     using BaseMovesList = std::vector<BaseMove>;
@@ -85,6 +94,7 @@ namespace search
 
         inline T& lookup(chess::PieceType piece_type, const Move& move)
         {
+            ASSERT(piece_type != PieceType::NONE);
             ASSERT(move);
             return _table[piece_type][move.to_square()];
         }
@@ -97,56 +107,7 @@ namespace search
         T _table[7][64] = {};
     };
 
-
-    template<int SIZE> struct Refutations
-    {
-        Move    _move[SIZE];
-        int     _slot = 0;
-
-        void set_slot(int i, const Move& move, score_t score)
-        {
-            _move[i] = move;
-            _move[i]._score = score;
-            _move[i]._state = nullptr;
-        }
-
-        inline void add(const Move& move, score_t score)
-        {
-            /*
-             * Do not store zero-score moves, they may mean draw (which is path-dependent).
-             */
-            if (score && move)
-            {
-                for (int i = 0; i < SIZE; ++i)
-                {
-                    if (move == _move[i]) /* matches existing slot? */
-                    {
-                        _slot = i;
-                        _move[i]._score = score;
-                        return;
-                    }
-                }
-
-                _slot = (_slot + 1) % SIZE;
-                set_slot(_slot, move, score);
-            }
-        }
-
-        inline const Move* match(const Move& move) const
-        {
-            for (int i = 0; i < SIZE; ++i)
-            {
-                if (_move[i] == move)
-                    return &_move[i];
-            }
-            return nullptr;
-        }
-
-        const Move& most_recent() const { return _move[_slot]; }
-    };
-
-
-    using KillerMoves = Refutations<KILLER_MOVE_ENTRIES>;
+    using KillerMoves = std::array<Move, 2>;
     using KillerMovesTable = std::vector<KillerMoves>;
 
 
@@ -223,9 +184,11 @@ namespace search
         size_t _check_nodes = 0;
         size_t _eval_count = 0;
         size_t _endgame_nodes = 0;
+        size_t _futility_prune_count = 0;
         size_t _history_counters = 0;
         size_t _history_counters_hit = 0;
         size_t _hits = 0;
+        size_t _late_move_prune_count = 0;
         size_t _nodes = 0;
         size_t _nps = 0; /* nodes per second */
         size_t _null_move_cutoffs = 0;
@@ -247,12 +210,12 @@ namespace search
 
         const score_t* lookup(Context&);
 
-        void store(Context&, score_t score, score_t alpha);
-        void store(Context&, TT_Entry&, score_t, score_t);
-
-        void store_killer_move(const Context&, score_t);
+        void store(Context&, score_t alpha);
+        void store(Context&, TT_Entry&, score_t);
 
         void store_countermove(const Context&);
+        void store_killer_move(const Context&);
+
         void store_pv(Context&, bool = false);
 
         const std::pair<int, int>& historical_counters(const Context&, const Move&) const;
@@ -271,8 +234,8 @@ namespace search
         size_t nps() const { return _nps; }
         void set_nps(size_t nps) { _nps = nps; }
 
-        void history_update_non_cutoffs(const Context&);
-        void history_update_cutoffs(const Context&);
+        void history_update_cutoffs(const Move&);
+        void history_update_non_cutoffs(const Move&);
 
         void update_stats(const Context&);
 
@@ -287,13 +250,5 @@ namespace search
     private:
         static TablePtr _table; /* shared hashtable */
     };
-
-
-    /*
-     * Search algorithms
-     */
-    score_t negamax(Context&, TranspositionTable&);
-    score_t mtdf(Context&, score_t, TranspositionTable&);
-    score_t iterative(Context&, TranspositionTable&, int);
 
 }

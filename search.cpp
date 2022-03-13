@@ -224,21 +224,6 @@ Move TranspositionTable::lookup_countermove(const Context& ctxt) const
 }
 
 
-void TranspositionTable::store_countermove(const Context& ctxt)
-{
-    if (ctxt._move)
-    {
-        ASSERT(ctxt._cutoff_move);
-#if USE_BUTTERFLY_TABLES
-        _countermoves[ctxt.turn()][ctxt._move] = ctxt._cutoff_move;
-#else
-        const auto pt = ctxt.state().piece_type_at(ctxt._move.to_square());
-        _countermoves[ctxt.turn()].lookup(pt, ctxt._move) = ctxt._cutoff_move;
-#endif /* USE_BUTTERFLY_TABLES */
-    }
-}
-
-
 const score_t* TranspositionTable::lookup(Context& ctxt)
 {
     if (ctxt._excluded)
@@ -286,11 +271,12 @@ void TranspositionTable::update_stats(const Context& ctxt)
 }
 
 
-void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t score, score_t alpha)
+void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha)
 {
-    ASSERT(score > SCORE_MIN);
-    ASSERT(score < SCORE_MAX);
+    ASSERT(ctxt._score > SCORE_MIN);
+    ASSERT(ctxt._score < SCORE_MAX);
     ASSERT(alpha < ctxt._beta);
+    ASSERT(ctxt._alpha >= alpha);
 
     if (entry.is_valid() && !entry.matches(ctxt.state()))
     {
@@ -307,28 +293,29 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t score, sc
 
     ++entry._version;
 
-    /* Store hash move. */
+    /* Store hash move (cutoff or best) */
     auto move = ctxt._cutoff_move;
 
     if (!move && ctxt.best())
         move = ctxt.best()->_move;
 
     if (move
-        || (entry.is_lower() && score < entry._value)
-        || (entry.is_upper() && score > entry._value)
+        || (entry.is_lower() && ctxt._score < entry._value)
+        || (entry.is_upper() && ctxt._score > entry._value)
        )
         entry._hash_move = move;
 
     entry._alpha = alpha;
     entry._beta = ctxt._beta;
-    entry._value = score;
+    entry._value = ctxt._score;
     entry._hash = ctxt.state().hash();
     entry._depth = ctxt.depth();
 
-    /* Cache static eval and capture scores. */
+    /* cache static eval */
     if (ctxt._tt_entry._eval > SCORE_MIN)
         entry._eval = ctxt._tt_entry._eval;
 
+    /* cache capture estimates */
     if (ctxt._tt_entry._capt > SCORE_MIN)
         entry._capt = ctxt._tt_entry._capt;
 
@@ -336,22 +323,39 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t score, sc
 }
 
 
-void TranspositionTable::store(Context& ctxt, score_t score, score_t alpha)
+void TranspositionTable::store(Context& ctxt, score_t alpha)
 {
-    ASSERT(score > SCORE_MIN);
-    ASSERT(score < SCORE_MAX);
+    ASSERT(ctxt._score > SCORE_MIN);
+    ASSERT(ctxt._score < SCORE_MAX);
 
     update_stats(ctxt);
 
     if (auto p = _table->lookup(ctxt.state(), true, ctxt.depth()))
     {
-        store(ctxt, *p, score, alpha);
+        store(ctxt, *p, alpha);
     }
 }
 
 
-void TranspositionTable::store_killer_move(const Context& ctxt, score_t score)
+void TranspositionTable::store_countermove(const Context& ctxt)
 {
+    if (ctxt._move)
+    {
+        ASSERT(ctxt._cutoff_move);
+#if USE_BUTTERFLY_TABLES
+        _countermoves[ctxt.turn()][ctxt._move] = ctxt._cutoff_move;
+#else
+        const auto pt = ctxt.state().piece_type_at(ctxt._move.to_square());
+        _countermoves[ctxt.turn()].lookup(pt, ctxt._move) = ctxt._cutoff_move;
+#endif /* USE_BUTTERFLY_TABLES */
+    }
+}
+
+
+void TranspositionTable::store_killer_move(const Context& ctxt)
+{
+    ASSERT(ctxt._score); /* do not store draws */
+
 #if KILLER_MOVE_HEURISTIC
     const auto& move = ctxt._cutoff_move;
     if (!move)
@@ -362,7 +366,14 @@ void TranspositionTable::store_killer_move(const Context& ctxt, score_t score)
     if (_killer_moves.size() <= size_t(ctxt._ply))
         _killer_moves.resize(2 * ctxt._ply + 1);
 
-    _killer_moves[ctxt._ply].add(move, score);
+    auto& killers = _killer_moves[ctxt._ply];
+
+    if (killers[0] != move)
+    {
+        killers[1] = killers[0];
+        killers[0] = move;
+        killers[0]._score = ctxt._score;
+    }
 
 #endif /* KILLER_MOVE_HEURISTIC */
 }
@@ -477,33 +488,41 @@ float TranspositionTable::history_score(const Context& ctxt, const Move& move) c
 }
 
 
-void TranspositionTable::history_update_non_cutoffs(const Context& ctxt)
+void TranspositionTable::history_update_non_cutoffs(const Move& move)
 {
-    if (ctxt._move)
+    if (move)
     {
+        ASSERT(move._state);
+        ASSERT(move._state->capture_value == 0);
+
+        const auto turn = !move._state->turn; /* side that moved */
 #if USE_BUTTERFLY_TABLES
-        ++_hcounters[!ctxt.turn()][ctxt._move].second;
+        ++_hcounters[turn][move].second;
 #else
-        const auto pt = ctxt.state().piece_type_at(ctxt._move.to_square());
-        ++_hcounters[!ctxt.turn()].lookup(pt, ctxt._move).second;
+        const auto pt = move._state->piece_type_at(move.to_square());
+        ++_hcounters[turn].lookup(pt, move).second;
 #endif /* USE_BUTTERFLY_TABLES */
     }
 }
 
 
-void TranspositionTable::history_update_cutoffs(const Context& ctxt)
+void TranspositionTable::history_update_cutoffs(const Move& move)
 {
-    if (ctxt._move)
-    {
+    ASSERT(move);
+    ASSERT(move._state);
+    ASSERT(move._state->capture_value == 0);
+
+    const auto turn = !move._state->turn; /* side that moved */
+
 #if USE_BUTTERFLY_TABLES
-        auto& counts = _hcounters[!ctxt.turn()][ctxt._move];
+    auto& counts = _hcounters[turn][move];
 #else
-        const auto pt = ctxt.state().piece_type_at(ctxt._move.to_square());
-        auto& counts = _hcounters[!ctxt.turn()].lookup(pt, ctxt._move);
+    const auto pt = move._state->piece_type_at(move.to_square());
+    ASSERT(pt != PieceType::NONE);
+    auto& counts = _hcounters[turn].lookup(pt, move);
 #endif /* USE_BUTTERFLY_TABLES */
-        ++counts.first;
-        ++counts.second;
-    }
+    ++counts.first;
+    ++counts.second;
 }
 
 
@@ -520,11 +539,6 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
     ASSERT(&ctxt == null_move_ctxt._parent);
 
     null_move_ctxt.rewind();
-
-#if 0
-    null_move_ctxt._futility_pruning = false;
-    null_move_ctxt._multicut_allowed = false;
-#endif
 
     null_move_ctxt._null_move_allowed[null_move_ctxt.turn()] = false;
     null_move_ctxt._score = SCORE_MIN;
@@ -645,9 +659,20 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
 }
 
 
+inline void
+update_pruned(TranspositionTable& table, Context& ctxt, const Context& next, size_t& count)
+{
+    ASSERT(!next.is_capture());
+
+    ++ctxt._pruned_count;
+    ++count;
+}
+
+
 score_t search::negamax(Context& ctxt, TranspositionTable& table)
 {
     ASSERT(ctxt._beta > SCORE_MIN);
+    ASSERT(ctxt._score <= ctxt._alpha);
 
     ctxt.set_tt(&table);
     /*
@@ -673,21 +698,16 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     table._nodes += !COUNT_VALID_MOVES_AS_NODES;
 
     const auto alpha = ctxt._alpha;
-    score_t score = SCORE_MIN;
 
     if (ctxt.is_leaf())
     {
         ctxt._is_terminal = true;
-        score = ctxt._score = ctxt.evaluate();
+        ctxt._score = ctxt.evaluate();
 
-        ASSERT(score > SCORE_MIN);
-        ASSERT(score < SCORE_MAX);
+        ASSERT(ctxt._score > SCORE_MIN);
+        ASSERT(ctxt._score < SCORE_MAX);
     }
-    else if (multicut(ctxt, table))
-    {
-        score = ctxt._score;
-    }
-    else if (!ctxt.is_cancelled())
+    else if (!multicut(ctxt, table) && !ctxt.is_cancelled())
     {
         ASSERT(ctxt._alpha < ctxt._beta);
 
@@ -746,7 +766,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
                     if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune(moves_count))
                     {
-                        ++ctxt._pruned_count;
+                        update_pruned(table, ctxt, *next_ctxt, table._futility_prune_count);
                         continue;
                     }
                 }
@@ -775,10 +795,10 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     auto s_beta = std::max(ctxt._tt_entry._value - ctxt.singular_margin(), SCORE_MIN + 1);
 
                     /*
-                     * Hack: use ply + 1 for the singular search to avoid clobbering
+                     * Hack: use ply + 2 for the singular search to avoid clobbering
                      * the current context _move_maker's _moves and _states stacks.
                      */
-                    auto s_ctxt = ctxt.clone(ctxt._ply + 1);
+                    auto s_ctxt = ctxt.clone(ctxt._ply + 2);
 
                     s_ctxt->set_initial_moves(ctxt.get_moves());
                     s_ctxt->_excluded = next_ctxt->_move;
@@ -786,11 +806,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     s_ctxt->_alpha = s_beta - 1;
                     s_ctxt->_beta = s_beta;
                     s_ctxt->_score = SCORE_MIN;
-                #if 0
-                    s_ctxt->_futility_pruning = false;
-                    s_ctxt->_null_move_allowed = false;
-                    s_ctxt->_multicut_allowed = false;
-                #endif
 
                     const auto value = negamax(*s_ctxt, table);
 
@@ -828,7 +843,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 /* Late-move reduction and pruning */
                 if (moves_count && next_ctxt->late_move_reduce(prune_ok) == LMR::Prune)
                 {
-                    ++ctxt._pruned_count;
+                    update_pruned(table, ctxt, *next_ctxt, table._late_move_prune_count);
                     continue;
                 }
 
@@ -844,6 +859,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             if (ctxt.is_beta_cutoff(next_ctxt, move_score))
             {
                 ASSERT(ctxt._score == move_score);
+                ASSERT(ctxt._cutoff_move || next_ctxt->is_null_move());
 
                 if (next_ctxt->is_null_move())
                 {
@@ -885,10 +901,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         ASSERT (next_ctxt->_move == ctxt._cutoff_move);
                         ASSERT (!ctxt.state().is_capture(ctxt._cutoff_move));
 
-                        if (!next_ctxt->is_qsearch())
-                            table.store_killer_move(ctxt, move_score);
+                        /* zero-score moves may mean draw (path-dependent) */
+                        if (move_score && !next_ctxt->is_qsearch())
+                            table.store_killer_move(ctxt);
 
-                        table.history_update_cutoffs(*next_ctxt);
+                        table.history_update_cutoffs(next_ctxt->_move);
                     }
                 }
 
@@ -899,7 +916,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             }
             else if (!next_ctxt->is_capture())
             {
-                table.history_update_non_cutoffs(*next_ctxt);
+                table.history_update_non_cutoffs(next_ctxt->_move);
             }
 
             /*
@@ -916,29 +933,24 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 return move_score;
             }
         }
+        ASSERT(ctxt._score <= ctxt._alpha || ctxt.best());
 
         if (!ctxt.is_cancelled())
         {
             if (!ctxt.has_moves())
             {
                 /* checkmate or stalemate? */
-                score = ctxt.evaluate_end();
-                ctxt._score = score;
+                ctxt._score = ctxt.evaluate_end();
 
-                ASSERT(score > SCORE_MIN);
-                ASSERT(score < SCORE_MAX);
+                ASSERT(ctxt._score > SCORE_MIN);
+                ASSERT(ctxt._score < SCORE_MAX);
             }
-            else
+            else if (!ctxt._excluded)
             {
-                if (!ctxt._excluded)
-                {
-                    /* algorithm invariants */
-                    ASSERT(ctxt._score > SCORE_MIN);
-                    ASSERT(ctxt._score < SCORE_MAX);
-                    ASSERT(ctxt._alpha >= ctxt._score);
-                }
-
-                score = ctxt._score;
+                /* algorithm invariants */
+                ASSERT(ctxt._score > SCORE_MIN);
+                ASSERT(ctxt._score < SCORE_MAX);
+                ASSERT(ctxt._alpha >= ctxt._score);
             }
         }
     }
@@ -948,14 +960,10 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
      * which are path-dependent; and the general wisdom is to not store root
      * nodes either (https://www.stmintz.com/ccc/index.php?id=93686)
      */
-    if (score != 0
-        && ctxt._ply != 0
-        && !ctxt._excluded
-        && !ctxt.is_cancelled()
-       )
-        table.store(ctxt, score, alpha);
+    if (ctxt._score && ctxt._ply && !ctxt._excluded && !ctxt.is_cancelled())
+        table.store(ctxt, alpha);
 
-    return score;
+    return ctxt._score;
 }
 
 
@@ -1125,7 +1133,8 @@ public:
 
                     if (search_iteration(*t_ctxt, *t_ctxt->get_tt(), score) > SCORE_MIN)
                     {
-                        t_ctxt->get_tt()->store_pv(*t_ctxt);
+                        if (t_ctxt->best())
+                            t_ctxt->get_tt()->store_pv(*t_ctxt);
                     }
                 }
                 catch(const std::exception& e)
