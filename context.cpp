@@ -127,7 +127,6 @@ DECLARE_PARAM(  FIFTY_MOVES_RULE,                     1,    0,       1)
 DECLARE_PARAM(  FUTILITY_PRUNING,                     1,    0,       1)
 DECLARE_PARAM(  LATE_MOVE_REDUCTION_COUNT,            4,    0,     100)
 DECLARE_PARAM(  MANAGE_TIME,                          1,    0,       1)
-DECLARE_PARAM(  MOVE_MAKER_PRUNE_COUNT,               0,    0,     100)
 DECLARE_PARAM(  MULTICUT,                             0,    0,       1)
 
 #if ADAPTIVE_NULL_MOVE
