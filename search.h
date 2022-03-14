@@ -94,7 +94,7 @@ namespace search
 
         inline T& lookup(chess::PieceType piece_type, const Move& move)
         {
-            ASSERT(piece_type != PieceType::NONE);
+            ASSERT(piece_type != chess::PieceType::NONE);
             ASSERT(move);
             return _table[piece_type][move.to_square()];
         }

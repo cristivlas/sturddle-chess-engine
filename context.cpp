@@ -2364,30 +2364,14 @@ namespace search
 
         ASSERT(move._state->capture_value == 0);
 
+        /* capturing the king is an illegal move (Louis XV?) */
         if (move._state->kings & BB_SQUARES[move.to_square()])
         {
             mark_as_illegal(move);
-            return false; /* capturing the king is an illegal move */
+            return false;
         }
 
         move._state->apply_move(move);
-
-        ASSERT(move._state->turn != ctxt.turn());
-
-        if (futility
-            && _current > MOVE_MAKER_PRUNE_COUNT
-            && move._state->simple_score)
-        {
-            auto val = futility + move._state->simple_score * SIGN[!move._state->turn];
-
-            if (val < ctxt._alpha || val < ctxt._score)
-            {
-                _have_pruned_moves = true;
-                move._group = MoveOrder::PRUNED_MOVES;
-                ++ctxt.get_tt()->_futility_prune_count;
-                return false;
-            }
-        }
 
         if (move._state->is_check(ctxt.turn()))
         {
@@ -2403,6 +2387,26 @@ namespace search
         }
 
         incremental_update(move, ctxt);
+
+        /* idea: combine futility pruning with late-move pruning */
+        if (futility
+            && move._state->capture_value == 0
+            && move._state->promotion == 0
+            && ctxt.depth() >= 0
+            && ctxt.depth() < int(LMP._size)
+            && _current >= LMP._counters[ctxt.depth()])
+        {
+            auto val = futility + move._state->simple_score * SIGN[!move._state->turn];
+
+            if (val < ctxt._alpha || val < ctxt._score)
+            {
+                _have_pruned_moves = true;
+                move._group = MoveOrder::PRUNED_MOVES;
+                ++ctxt.get_tt()->_futility_prune_count;
+
+                return false;
+            }
+        }
 
         /* consistency check */
         ASSERT((move._state->capture_value != 0) == ctxt.state().is_capture(move));

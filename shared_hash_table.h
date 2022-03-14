@@ -24,7 +24,7 @@ namespace search
 {
     class SharedHashTable
     {
-        static constexpr int BUCKET_SIZE = 5;
+        static constexpr int BUCKET_SIZE = 4;
 
         using entry_t = TT_Entry;
         using data_t = std::vector<entry_t>;
