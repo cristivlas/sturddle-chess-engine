@@ -24,7 +24,7 @@ namespace search
 {
     class SharedHashTable
     {
-        static constexpr int BUCKET_SIZE = 4;
+        static constexpr int BUCKET_SIZE = 16;
 
         using entry_t = TT_Entry;
         using data_t = std::vector<entry_t>;
@@ -57,23 +57,12 @@ namespace search
     #if SMP
             std::atomic_bool* lock_p() { return &_ht->_locks[_ix]; }
 
-            inline void lock(bool try_lock)
+            inline void lock()
             {
-                if (try_lock)
-                {
-                    if (!std::atomic_exchange_explicit(lock_p(), true, ACQUIRE))
-                    {
-                        _locked = true;
-                        entry()->_lock = this;
-                    }
-                }
-                else
-                {
-                    while (std::atomic_exchange_explicit(lock_p(), true, ACQUIRE))
-                        ;
-                    _locked = true;
-                    entry()->_lock = this;
-                }
+                while (std::atomic_exchange_explicit(lock_p(), true, ACQUIRE))
+                    ;
+                _locked = true;
+                entry()->_lock = this;
             }
 
             inline void release()
@@ -96,11 +85,11 @@ namespace search
             SpinLock() = default;
 
         public:
-            SpinLock(SharedHashTable& ht, size_t ix, bool acquire = true, bool try_lock = false)
+            SpinLock(SharedHashTable& ht, size_t ix, bool acquire = true)
                 : _ht(&ht), _ix(ix)
             {
                 if (acquire)
-                    lock(try_lock);
+                    lock();
             }
 
             ~SpinLock()
@@ -135,8 +124,8 @@ namespace search
         public:
             Proxy() = default;
 
-            Proxy(SharedHashTable& ht, size_t ix, bool acquire, bool try_lock = false)
-                : SpinLock(ht, ix, acquire, try_lock)
+            Proxy(SharedHashTable& ht, size_t ix, bool acquire)
+                : SpinLock(ht, ix, acquire)
                 , _entry(this->entry())
             {
             }
@@ -183,13 +172,7 @@ namespace search
 
             for (size_t i = index, j = 0; j < BUCKET_SIZE; ++j)
             {
-            #if 0
-                Proxy p(*this, i, true, acquire_for_writing);
-                if (!p)
-                    continue;
-            #else
                 Proxy p(*this, i, true);
-            #endif
 
                 if (!p->is_valid())
                 {
@@ -218,10 +201,25 @@ namespace search
                         depth = p->_depth;
                     }
                 }
+
                 i = (h + (j + 1) * (j + 1)) % _data.size();
             }
 
+        #if 0
+            /*
+             * acquire_for_writing == true: lock and return the entry at index;
+             * otherwise: return unlocked Proxy, which means nullptr (no match).
+             */
             return Proxy(*this, index, acquire_for_writing);
+        #else
+            /* alternative policy: overwrite entries of lower depths only */
+            Proxy p(*this, index, acquire_for_writing);
+
+            if (p && p->_depth <= depth)
+                return p;
+
+            return Proxy();
+        #endif
         }
 
         inline size_t capacity() const { return _data.size(); }

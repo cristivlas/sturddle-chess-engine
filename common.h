@@ -46,10 +46,7 @@ using score_t = int32_t;
 
 #define ADAPTIVE_NULL_MOVE                  true
 
-#if !defined(LOW_MEMORY_PROFILE) && (__arm__ || __aarch64__)
-  /* lower memory requirements for mobile */
-  #define LOW_MEMORY_PROFILE                true
-#endif /* LOW_MEMORY_PROFILE */
+#define CACHE_HEURISTIC_CUTOFFS             false
 
 /*
  * Count valid moves made as nodes if true, otherwise use effectively
@@ -71,6 +68,11 @@ using score_t = int32_t;
 #define EXCHANGES_DETECT_CHECKMATE          false
 
 #define KILLER_MOVE_HEURISTIC               true
+
+#if !defined(LOW_MEMORY_PROFILE) && (__arm__ || __aarch64__)
+  /* lower memory requirements for mobile */
+  #define LOW_MEMORY_PROFILE                true
+#endif /* LOW_MEMORY_PROFILE */
 
 #define MTDF_CSTAR_BISECT                   true
 
@@ -127,13 +129,9 @@ constexpr int CALLBACK_COUNT                = 8192;
 
 constexpr int ENDGAME_PIECE_COUNT           = 12;
 
-/* https://www.chessprogramming.org/Late_Move_Reductions */
-constexpr int LATE_MOVE_REDUCTION           = 1;
-
 /* https://www.chessprogramming.org/Multi-Cut */
 constexpr int MULTICUT_M                    = 6;
 constexpr int MULTICUT_C                    = 3;
-constexpr int MULTICUT_REDUCTION            = 3;
 
 constexpr int KILLER_MOVE_ENTRIES           = 2;
 

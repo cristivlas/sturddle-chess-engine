@@ -35,9 +35,7 @@ struct Param { int val = 0; int min_val; int max_val; };
 
 extern std::map<std::string, Param> _get_param_info();
 extern void _set_param(const std::string&, int value, bool echo=false);
-extern void _set_margins(const std::vector<int>&, bool echo=false);
 extern std::map<std::string, int> _get_params();
-extern const std::vector<int>& _get_margins();
 
 
 namespace search
@@ -111,7 +109,7 @@ namespace search
         void generate_unordered_moves(Context&);
         const Move* get_move_at(Context& ctxt, int index, score_t futility = 0);
 
-        void make_capture(Context&, Move&, score_t);
+        void make_capture(Context&, Move&);
         bool make_move(Context&, Move&, score_t futility = 0);
         bool make_move(Context&, Move&, MoveOrder, score_t = 0);
         void mark_as_illegal(Move&);
@@ -163,6 +161,7 @@ namespace search
         Reduced,
         PVS,
     };
+
 
     /*
      * The context of a searched node.
@@ -227,8 +226,8 @@ namespace search
         TT_Entry    _tt_entry;
         Square      _capture_square = Square::UNDEFINED;
 
-        ContextPtr  best() const { return _best; } /* best response from side-to-move */
-        void        set_best(const ContextPtr& best) { best->_parent=this; _best = best; }
+        const ContextPtr& best() const { return _best; }
+        void set_best(const ContextPtr& best) { best->_parent = this; _best = best; }
 
         static void cancel();
         static int  cpu_cores();
@@ -236,7 +235,7 @@ namespace search
         bool        can_forward_prune() const;
         bool        can_prune(int) const;
         bool        can_prune_move(const Move&i, int) const;
-        bool        can_reduce() const;
+        bool        can_reduce();
 
         int64_t     check_time_and_update_nps(); /* return elapsed milliseconds */
         void        copy_move_state();
@@ -261,15 +260,14 @@ namespace search
 
         bool        is_beta_cutoff(const ContextPtr&, score_t);
         static bool is_cancelled() { return _cancel; }
-        bool        is_capture() const;
+        bool        is_capture() const { return state().capture_value != 0; }
         bool        is_check() const { return state().is_check(); }
         bool        is_evasion() const;
         bool        is_extended() const;
-        bool        is_improving(score_t margin);
+        bool        is_improving();
         bool        is_last_move();
         bool        is_leftmost() const { return _ply == 0 || _leftmost; }
         bool        is_leaf(); /* treat as terminal node ? */
-        bool        is_quiet() const;
         bool        is_qsearch() const { return _ply > _max_depth; }
         bool        is_mate_bound() const;
         bool        is_null_move_ok(); /* ok to generate null move? */
@@ -284,12 +282,11 @@ namespace search
         bool        is_singleton() const { return _is_singleton; }
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
 
-        LMR         late_move_reduce(bool prune);
+        LMR         late_move_reduce(bool prune, int move_count);
         static int  late_move_reduction_count();
 
         static void log_message(LogLevel, const std::string&, bool force = true);
 
-        score_t     material_gain(bool same_square = false) const;
         int64_t     nanosleep(int nanosec);
         ContextPtr  next(bool null_move = false, bool = false, score_t = 0);
         int         next_move_index() { return _move_maker.current(*this); }
@@ -342,25 +339,21 @@ namespace search
 
     private:
         const Move* get_next_move(score_t);
-        bool        has_cycle(const State&) const;
+        bool has_cycle(const State&) const;
 
-        float       history_score(const Move&) const;
-        int         repeated_count(const State&) const;
+        float history_score(const Move&) const;
+        int repeated_count(const State&) const;
 
         ContextPtr  _best; /* best search result */
         State       _statebuf;
-
         bool        _leftmost = false;
         mutable int _repetitions = -1;
-
-        /* https://www.chessprogramming.org/Countermove_Heuristic */
         Move        _counter_move;
-
         friend class MoveMaker;
         MoveMaker   _move_maker;
 
         static std::atomic_bool _cancel;
-        static std::mutex _mutex; /* allow updating time limit from another thread */
+        static std::mutex _mutex; /* update time limit from another thread */
 
         static asize_t  _callback_count;
         static int      _time_limit; /* milliseconds */
@@ -377,10 +370,9 @@ namespace search
     }
 
 
-    inline bool Context::is_improving(score_t margin = 0)
+    inline bool Context::is_improving()
     {
-        return _ply >= 2
-            && evaluate_material() > _parent->_parent->evaluate_material() + margin;
+        return _ply >= 2 && evaluate_material() > _parent->_parent->evaluate_material();
     }
 
 

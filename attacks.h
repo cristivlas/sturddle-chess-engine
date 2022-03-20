@@ -9,10 +9,10 @@
 namespace chess {
 class AttackTable {
     size_t (* const _hash)(uint64_t);
-    std::vector<uint64_t> _data;
+    uint64_t* _data = nullptr;
 
 public:
-    AttackTable(size_t (*hash)(uint64_t), std::function<void(std::vector<uint64_t>&)> init)
+    AttackTable(size_t (*hash)(uint64_t), std::function<void(uint64_t*&)> init)
         : _hash(hash) { init(_data);
     }
     inline uint64_t operator[] (uint64_t k) const {
@@ -166,8 +166,8 @@ template<size_t S> struct RightShift {
 
 
 static const AttackTable BB_FILE_ATTACKS[64] = {
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_21_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(497);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_21_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [497];
         data[0] = 0x0101010101010100ULL;
         data[1] = 0x0000000000000100ULL;
         data[17] = 0x0000000000010100ULL;
@@ -233,8 +233,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[495] = 0x0000000000010100ULL;
         data[496] = 0x0000000000000100ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x0202020202020200ULL;
         data[5] = 0x0000000000020200ULL;
         data[17] = 0x0000000000000200ULL;
@@ -300,8 +300,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0000000000000200ULL;
         data[510] = 0x0000000000000200ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_9_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(508);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_9_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [508];
         data[0] = 0x0404040404040400ULL;
         data[3] = 0x0000000000000400ULL;
         data[11] = 0x0000000000040400ULL;
@@ -367,8 +367,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[504] = 0x0000000004040400ULL;
         data[507] = 0x0000000000000400ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(508);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [508];
         data[0] = 0x0808080808080800ULL;
         data[1] = 0x0000000000080800ULL;
         data[8] = 0x0000000000000800ULL;
@@ -434,8 +434,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[498] = 0x0000000000080800ULL;
         data[507] = 0x0000000000000800ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(508);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [508];
         data[0] = 0x1010101010101000ULL;
         data[3] = 0x0000000000001000ULL;
         data[11] = 0x0000000000101000ULL;
@@ -501,8 +501,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[504] = 0x0000000010101000ULL;
         data[507] = 0x0000000000001000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x2020202020202000ULL;
         data[5] = 0x0000000000202000ULL;
         data[17] = 0x0000000000002000ULL;
@@ -568,8 +568,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0000000000002000ULL;
         data[510] = 0x0000000000002000ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x4040404040404000ULL;
         data[6] = 0x0000000000004000ULL;
         data[9] = 0x0000404040404000ULL;
@@ -635,8 +635,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[499] = 0x0000000000004000ULL;
         data[509] = 0x0000000000004000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x8080808080808000ULL;
         data[5] = 0x0000000000808000ULL;
         data[17] = 0x0000000000008000ULL;
@@ -702,8 +702,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0000000000008000ULL;
         data[510] = 0x0000000000008000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(491);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [491];
         data[0] = 0x0101010101010001ULL;
         data[2] = 0x0000000001010001ULL;
         data[9] = 0x0000000000010001ULL;
@@ -737,8 +737,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[477] = 0x0000000000010001ULL;
         data[490] = 0x0000000000010001ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x0202020202020002ULL;
         data[5] = 0x0000000000020002ULL;
         data[22] = 0x0000000002020002ULL;
@@ -772,8 +772,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[479] = 0x0000000000020002ULL;
         data[494] = 0x0000000000020002ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(491);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [491];
         data[0] = 0x0404040404040004ULL;
         data[2] = 0x0000000004040004ULL;
         data[9] = 0x0000000000040004ULL;
@@ -807,8 +807,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[477] = 0x0000000000040004ULL;
         data[490] = 0x0000000000040004ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(499);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [499];
         data[0] = 0x0808080808080008ULL;
         data[1] = 0x0000000000080008ULL;
         data[15] = 0x0000000008080008ULL;
@@ -842,8 +842,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[484] = 0x0000000808080008ULL;
         data[498] = 0x0000000000080008ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(485);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [485];
         data[0] = 0x1010101010100010ULL;
         data[2] = 0x0000000000100010ULL;
         data[30] = 0x0000000010100010ULL;
@@ -877,8 +877,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[456] = 0x0000001010100010ULL;
         data[484] = 0x0000000000100010ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x2020202020200020ULL;
         data[5] = 0x0000000000200020ULL;
         data[22] = 0x0000000020200020ULL;
@@ -912,8 +912,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[479] = 0x0000000000200020ULL;
         data[494] = 0x0000000000200020ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(491);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [491];
         data[0] = 0x4040404040400040ULL;
         data[2] = 0x0000000040400040ULL;
         data[9] = 0x0000000000400040ULL;
@@ -947,8 +947,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[477] = 0x0000000000400040ULL;
         data[490] = 0x0000000000400040ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x8080808080800080ULL;
         data[5] = 0x0000000000800080ULL;
         data[22] = 0x0000000080800080ULL;
@@ -982,8 +982,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[479] = 0x0000000000800080ULL;
         data[494] = 0x0000000000800080ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(503);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [503];
         data[0] = 0x0101010101000101ULL;
         data[2] = 0x0000000001000101ULL;
         data[22] = 0x0000000101000100ULL;
@@ -1017,8 +1017,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0001010101000100ULL;
         data[502] = 0x0000000001000100ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x0202020202000202ULL;
         data[17] = 0x0000000002000200ULL;
         data[22] = 0x0000000002000202ULL;
@@ -1052,8 +1052,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[439] = 0x0000000002000200ULL;
         data[506] = 0x0002020202000200ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(503);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [503];
         data[0] = 0x0404040404000404ULL;
         data[2] = 0x0000000004000404ULL;
         data[22] = 0x0000000404000400ULL;
@@ -1087,8 +1087,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0004040404000400ULL;
         data[502] = 0x0000000004000400ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(494);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [494];
         data[0] = 0x0808080808000808ULL;
         data[8] = 0x0000080808000800ULL;
         data[15] = 0x0000000008000808ULL;
@@ -1122,8 +1122,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[484] = 0x0000000808000808ULL;
         data[493] = 0x0000000008000800ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(476);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [476];
         data[0] = 0x1010101010001010ULL;
         data[8] = 0x0000000010001000ULL;
         data[16] = 0x0000101010001000ULL;
@@ -1157,8 +1157,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[456] = 0x0000001010001010ULL;
         data[475] = 0x0000000010001000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x2020202020002020ULL;
         data[17] = 0x0000000020002000ULL;
         data[22] = 0x0000000020002020ULL;
@@ -1192,8 +1192,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[439] = 0x0000000020002000ULL;
         data[506] = 0x0020202020002000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(503);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [503];
         data[0] = 0x4040404040004040ULL;
         data[2] = 0x0000000040004040ULL;
         data[22] = 0x0000004040004000ULL;
@@ -1227,8 +1227,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0040404040004000ULL;
         data[502] = 0x0000000040004000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x8080808080008080ULL;
         data[17] = 0x0000000080008000ULL;
         data[22] = 0x0000000080008080ULL;
@@ -1262,8 +1262,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[439] = 0x0000000080008000ULL;
         data[506] = 0x0080808080008000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x0101010100010101ULL;
         data[9] = 0x0000010100010000ULL;
         data[22] = 0x0000000100010100ULL;
@@ -1297,8 +1297,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0001010100010100ULL;
         data[509] = 0x0000010100010000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x0202020200020202ULL;
         data[32] = 0x0000020200020200ULL;
         data[38] = 0x0000020200020202ULL;
@@ -1332,8 +1332,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0002020200020200ULL;
         data[510] = 0x0000020200020000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x0404040400040404ULL;
         data[9] = 0x0000040400040000ULL;
         data[22] = 0x0000000400040400ULL;
@@ -1367,8 +1367,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0004040400040400ULL;
         data[509] = 0x0000040400040000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(499);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [499];
         data[0] = 0x0808080800080808ULL;
         data[8] = 0x0000080800080800ULL;
         data[22] = 0x0008080800080000ULL;
@@ -1402,8 +1402,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[484] = 0x0000000800080808ULL;
         data[498] = 0x0000000800080000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(512);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [512];
         data[0] = 0x1010101000101010ULL;
         data[16] = 0x0000101000101000ULL;
         data[44] = 0x0010101000100000ULL;
@@ -1437,8 +1437,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[484] = 0x0000001000100000ULL;
         data[511] = 0x0000101000100000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x2020202000202020ULL;
         data[32] = 0x0000202000202000ULL;
         data[38] = 0x0000202000202020ULL;
@@ -1472,8 +1472,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0020202000202000ULL;
         data[510] = 0x0000202000200000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x4040404000404040ULL;
         data[9] = 0x0000404000400000ULL;
         data[22] = 0x0000004000404000ULL;
@@ -1507,8 +1507,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0040404000404000ULL;
         data[509] = 0x0000404000400000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x8080808000808080ULL;
         data[32] = 0x0000808000808000ULL;
         data[38] = 0x0000808000808080ULL;
@@ -1542,8 +1542,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0080808000808000ULL;
         data[510] = 0x0000808000800000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x0101010001010101ULL;
         data[9] = 0x0000010001010000ULL;
         data[34] = 0x0001010001000000ULL;
@@ -1577,8 +1577,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0001010001010100ULL;
         data[509] = 0x0000010001010000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x0202020002020202ULL;
         data[17] = 0x0002020002000000ULL;
         data[21] = 0x0000020002000000ULL;
@@ -1612,8 +1612,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0002020002020200ULL;
         data[510] = 0x0000020002020000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x0404040004040404ULL;
         data[9] = 0x0000040004040000ULL;
         data[34] = 0x0004040004000000ULL;
@@ -1647,8 +1647,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0004040004040400ULL;
         data[509] = 0x0000040004040000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(508);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [508];
         data[0] = 0x0808080008080808ULL;
         data[8] = 0x0000080008080800ULL;
         data[15] = 0x0000080008000000ULL;
@@ -1682,8 +1682,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[493] = 0x0000080008000000ULL;
         data[507] = 0x0808080008000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(512);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [512];
         data[0] = 0x1010100010101010ULL;
         data[8] = 0x0010100010000000ULL;
         data[16] = 0x0000100010101000ULL;
@@ -1717,8 +1717,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[503] = 0x1010100010000000ULL;
         data[511] = 0x0000100010100000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x2020200020202020ULL;
         data[17] = 0x0020200020000000ULL;
         data[21] = 0x0000200020000000ULL;
@@ -1752,8 +1752,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0020200020202000ULL;
         data[510] = 0x0000200020200000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x4040400040404040ULL;
         data[9] = 0x0000400040400000ULL;
         data[34] = 0x0040400040000000ULL;
@@ -1787,8 +1787,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0040400040404000ULL;
         data[509] = 0x0000400040400000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x8080800080808080ULL;
         data[17] = 0x0080800080000000ULL;
         data[21] = 0x0000800080000000ULL;
@@ -1822,8 +1822,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0080800080808000ULL;
         data[510] = 0x0000800080800000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(503);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [503];
         data[0] = 0x0101000101010101ULL;
         data[2] = 0x0101000100000000ULL;
         data[34] = 0x0001000101000000ULL;
@@ -1857,8 +1857,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0001000101010100ULL;
         data[502] = 0x0001000100000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x0202000202020202ULL;
         data[17] = 0x0002000202000000ULL;
         data[22] = 0x0202000202000000ULL;
@@ -1892,8 +1892,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[495] = 0x0202000202000000ULL;
         data[506] = 0x0002000202020200ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(503);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [503];
         data[0] = 0x0404000404040404ULL;
         data[2] = 0x0404000400000000ULL;
         data[34] = 0x0004000404000000ULL;
@@ -1927,8 +1927,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0004000404040400ULL;
         data[502] = 0x0004000400000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(508);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [508];
         data[0] = 0x0808000808080808ULL;
         data[22] = 0x0008000808080000ULL;
         data[29] = 0x0808000808000000ULL;
@@ -1962,8 +1962,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[498] = 0x0008000800000000ULL;
         data[507] = 0x0808000808000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(504);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [504];
         data[0] = 0x1010001010101010ULL;
         data[8] = 0x0010001010000000ULL;
         data[44] = 0x0010001010100000ULL;
@@ -1997,8 +1997,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[484] = 0x0010001000000000ULL;
         data[503] = 0x1010001010000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x2020002020202020ULL;
         data[17] = 0x0020002020000000ULL;
         data[22] = 0x2020002020000000ULL;
@@ -2032,8 +2032,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[495] = 0x2020002020000000ULL;
         data[506] = 0x0020002020202000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(503);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [503];
         data[0] = 0x4040004040404040ULL;
         data[2] = 0x4040004000000000ULL;
         data[34] = 0x0040004040000000ULL;
@@ -2067,8 +2067,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[500] = 0x0040004040404000ULL;
         data[502] = 0x0040004000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x8080008080808080ULL;
         data[17] = 0x0080008080000000ULL;
         data[22] = 0x8080008080000000ULL;
@@ -2102,8 +2102,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[495] = 0x8080008080000000ULL;
         data[506] = 0x0080008080808000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(485);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [485];
         data[0] = 0x0100010101010101ULL;
         data[2] = 0x0100010000000000ULL;
         data[30] = 0x0100010100000000ULL;
@@ -2137,8 +2137,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[456] = 0x0100010000000000ULL;
         data[484] = 0x0100010000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x0200020202020202ULL;
         data[5] = 0x0200020000000000ULL;
         data[22] = 0x0200020202020000ULL;
@@ -2172,8 +2172,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[479] = 0x0200020000000000ULL;
         data[494] = 0x0200020000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(491);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [491];
         data[0] = 0x0400040404040404ULL;
         data[2] = 0x0400040404000000ULL;
         data[9] = 0x0400040000000000ULL;
@@ -2207,8 +2207,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[477] = 0x0400040000000000ULL;
         data[490] = 0x0400040000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_5_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_5_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x0800080808080808ULL;
         data[5] = 0x0800080000000000ULL;
         data[22] = 0x0800080808080000ULL;
@@ -2242,8 +2242,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[479] = 0x0800080000000000ULL;
         data[494] = 0x0800080000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_5_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(491);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_5_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [491];
         data[0] = 0x1000101010101010ULL;
         data[2] = 0x1000101010000000ULL;
         data[9] = 0x1000100000000000ULL;
@@ -2277,8 +2277,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[477] = 0x1000100000000000ULL;
         data[490] = 0x1000100000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x2000202020202020ULL;
         data[5] = 0x2000200000000000ULL;
         data[22] = 0x2000202020200000ULL;
@@ -2312,8 +2312,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[479] = 0x2000200000000000ULL;
         data[494] = 0x2000200000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(491);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [491];
         data[0] = 0x4000404040404040ULL;
         data[2] = 0x4000404040000000ULL;
         data[9] = 0x4000400000000000ULL;
@@ -2347,8 +2347,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[477] = 0x4000400000000000ULL;
         data[490] = 0x4000400000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_9_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x8000808080808080ULL;
         data[5] = 0x8000800000000000ULL;
         data[22] = 0x8000808080800000ULL;
@@ -2382,8 +2382,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[479] = 0x8000800000000000ULL;
         data[494] = 0x8000800000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_21_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(497);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_21_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [497];
         data[0] = 0x0001010101010101ULL;
         data[1] = 0x0001000000000000ULL;
         data[17] = 0x0001000000000000ULL;
@@ -2449,8 +2449,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[495] = 0x0001010101010000ULL;
         data[496] = 0x0001000000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x0002020202020202ULL;
         data[5] = 0x0002000000000000ULL;
         data[17] = 0x0002000000000000ULL;
@@ -2516,8 +2516,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0002000000000000ULL;
         data[510] = 0x0002020000000000ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_9_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(508);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_9_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [508];
         data[0] = 0x0004040404040404ULL;
         data[3] = 0x0004000000000000ULL;
         data[11] = 0x0004000000000000ULL;
@@ -2583,8 +2583,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[504] = 0x0004000000000000ULL;
         data[507] = 0x0004040000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(508);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [508];
         data[0] = 0x0008080808080808ULL;
         data[1] = 0x0008000000000000ULL;
         data[8] = 0x0008000000000000ULL;
@@ -2650,8 +2650,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[498] = 0x0008000000000000ULL;
         data[507] = 0x0008080808000000ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(508);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [508];
         data[0] = 0x0010101010101010ULL;
         data[3] = 0x0010000000000000ULL;
         data[11] = 0x0010000000000000ULL;
@@ -2717,8 +2717,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[504] = 0x0010000000000000ULL;
         data[507] = 0x0010100000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x0020202020202020ULL;
         data[5] = 0x0020000000000000ULL;
         data[17] = 0x0020000000000000ULL;
@@ -2784,8 +2784,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[506] = 0x0020000000000000ULL;
         data[510] = 0x0020200000000000ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(501);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [501];
         data[0] = 0x0040404040404040ULL;
         data[9] = 0x0040000000000000ULL;
         data[10] = 0x0040000000000000ULL;
@@ -2849,8 +2849,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
         data[490] = 0x0040400000000000ULL;
         data[500] = 0x0040000000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x0080808080808080ULL;
         data[5] = 0x0080000000000000ULL;
         data[17] = 0x0080000000000000ULL;
@@ -2919,8 +2919,8 @@ static const AttackTable BB_FILE_ATTACKS[64] = {
 };
 
 static const AttackTable BB_RANK_ATTACKS[64] = {
-    AttackTable(RightShift<1>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<1>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x00000000000000feULL;
         data[1] = 0x0000000000000002ULL;
         data[2] = 0x0000000000000006ULL;
@@ -2986,8 +2986,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000000000000006ULL;
         data[63] = 0x0000000000000002ULL;
     }),
-    AttackTable(RightShift<2>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<2>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x00000000000000fdULL;
         data[1] = 0x0000000000000005ULL;
         data[2] = 0x000000000000000dULL;
@@ -3021,8 +3021,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x000000000000000dULL;
         data[31] = 0x0000000000000005ULL;
     }),
-    AttackTable(RightShift<1>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(62);
+    AttackTable(RightShift<1>::hash, [](uint64_t *& data) {
+        data = new uint64_t [62];
         data[0] = 0x00000000000000fbULL;
         data[1] = 0x00000000000000faULL;
         data[4] = 0x000000000000000bULL;
@@ -3056,8 +3056,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[60] = 0x000000000000000bULL;
         data[61] = 0x000000000000000aULL;
     }),
-    AttackTable(RightShift<1>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(60);
+    AttackTable(RightShift<1>::hash, [](uint64_t *& data) {
+        data = new uint64_t [60];
         data[0] = 0x00000000000000f7ULL;
         data[1] = 0x00000000000000f6ULL;
         data[2] = 0x00000000000000f4ULL;
@@ -3091,8 +3091,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[58] = 0x0000000000000014ULL;
         data[59] = 0x0000000000000014ULL;
     }),
-    AttackTable(RightShift<1>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(56);
+    AttackTable(RightShift<1>::hash, [](uint64_t *& data) {
+        data = new uint64_t [56];
         data[0] = 0x00000000000000efULL;
         data[1] = 0x00000000000000eeULL;
         data[2] = 0x00000000000000ecULL;
@@ -3126,8 +3126,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[54] = 0x0000000000000028ULL;
         data[55] = 0x0000000000000028ULL;
     }),
-    AttackTable(RightShift<1>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(48);
+    AttackTable(RightShift<1>::hash, [](uint64_t *& data) {
+        data = new uint64_t [48];
         data[0] = 0x00000000000000dfULL;
         data[1] = 0x00000000000000deULL;
         data[2] = 0x00000000000000dcULL;
@@ -3161,8 +3161,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[46] = 0x0000000000000050ULL;
         data[47] = 0x0000000000000050ULL;
     }),
-    AttackTable(RightShift<1>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<1>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x00000000000000bfULL;
         data[1] = 0x00000000000000beULL;
         data[2] = 0x00000000000000bcULL;
@@ -3196,8 +3196,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x00000000000000a0ULL;
         data[31] = 0x00000000000000a0ULL;
     }),
-    AttackTable(RightShift<1>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<1>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x000000000000007fULL;
         data[1] = 0x000000000000007eULL;
         data[2] = 0x000000000000007cULL;
@@ -3263,8 +3263,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000000000000040ULL;
         data[63] = 0x0000000000000040ULL;
     }),
-    AttackTable(RightShift<9>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<9>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x000000000000fe00ULL;
         data[1] = 0x0000000000000200ULL;
         data[2] = 0x0000000000000600ULL;
@@ -3330,8 +3330,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000000000000600ULL;
         data[63] = 0x0000000000000200ULL;
     }),
-    AttackTable(RightShift<10>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<10>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x000000000000fd00ULL;
         data[1] = 0x0000000000000500ULL;
         data[2] = 0x0000000000000d00ULL;
@@ -3365,8 +3365,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x0000000000000d00ULL;
         data[31] = 0x0000000000000500ULL;
     }),
-    AttackTable(RightShift<9>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(62);
+    AttackTable(RightShift<9>::hash, [](uint64_t *& data) {
+        data = new uint64_t [62];
         data[0] = 0x000000000000fb00ULL;
         data[1] = 0x000000000000fa00ULL;
         data[4] = 0x0000000000000b00ULL;
@@ -3400,8 +3400,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[60] = 0x0000000000000b00ULL;
         data[61] = 0x0000000000000a00ULL;
     }),
-    AttackTable(RightShift<9>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(60);
+    AttackTable(RightShift<9>::hash, [](uint64_t *& data) {
+        data = new uint64_t [60];
         data[0] = 0x000000000000f700ULL;
         data[1] = 0x000000000000f600ULL;
         data[2] = 0x000000000000f400ULL;
@@ -3435,8 +3435,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[58] = 0x0000000000001400ULL;
         data[59] = 0x0000000000001400ULL;
     }),
-    AttackTable(RightShift<9>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(56);
+    AttackTable(RightShift<9>::hash, [](uint64_t *& data) {
+        data = new uint64_t [56];
         data[0] = 0x000000000000ef00ULL;
         data[1] = 0x000000000000ee00ULL;
         data[2] = 0x000000000000ec00ULL;
@@ -3470,8 +3470,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[54] = 0x0000000000002800ULL;
         data[55] = 0x0000000000002800ULL;
     }),
-    AttackTable(RightShift<9>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(48);
+    AttackTable(RightShift<9>::hash, [](uint64_t *& data) {
+        data = new uint64_t [48];
         data[0] = 0x000000000000df00ULL;
         data[1] = 0x000000000000de00ULL;
         data[2] = 0x000000000000dc00ULL;
@@ -3505,8 +3505,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[46] = 0x0000000000005000ULL;
         data[47] = 0x0000000000005000ULL;
     }),
-    AttackTable(RightShift<9>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<9>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x000000000000bf00ULL;
         data[1] = 0x000000000000be00ULL;
         data[2] = 0x000000000000bc00ULL;
@@ -3540,8 +3540,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x000000000000a000ULL;
         data[31] = 0x000000000000a000ULL;
     }),
-    AttackTable(RightShift<9>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<9>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x0000000000007f00ULL;
         data[1] = 0x0000000000007e00ULL;
         data[2] = 0x0000000000007c00ULL;
@@ -3607,8 +3607,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000000000004000ULL;
         data[63] = 0x0000000000004000ULL;
     }),
-    AttackTable(RightShift<17>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<17>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x0000000000fe0000ULL;
         data[1] = 0x0000000000020000ULL;
         data[2] = 0x0000000000060000ULL;
@@ -3674,8 +3674,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000000000060000ULL;
         data[63] = 0x0000000000020000ULL;
     }),
-    AttackTable(RightShift<18>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<18>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x0000000000fd0000ULL;
         data[1] = 0x0000000000050000ULL;
         data[2] = 0x00000000000d0000ULL;
@@ -3709,8 +3709,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x00000000000d0000ULL;
         data[31] = 0x0000000000050000ULL;
     }),
-    AttackTable(RightShift<17>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(62);
+    AttackTable(RightShift<17>::hash, [](uint64_t *& data) {
+        data = new uint64_t [62];
         data[0] = 0x0000000000fb0000ULL;
         data[1] = 0x0000000000fa0000ULL;
         data[4] = 0x00000000000b0000ULL;
@@ -3744,8 +3744,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[60] = 0x00000000000b0000ULL;
         data[61] = 0x00000000000a0000ULL;
     }),
-    AttackTable(RightShift<17>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(60);
+    AttackTable(RightShift<17>::hash, [](uint64_t *& data) {
+        data = new uint64_t [60];
         data[0] = 0x0000000000f70000ULL;
         data[1] = 0x0000000000f60000ULL;
         data[2] = 0x0000000000f40000ULL;
@@ -3779,8 +3779,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[58] = 0x0000000000140000ULL;
         data[59] = 0x0000000000140000ULL;
     }),
-    AttackTable(RightShift<17>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(56);
+    AttackTable(RightShift<17>::hash, [](uint64_t *& data) {
+        data = new uint64_t [56];
         data[0] = 0x0000000000ef0000ULL;
         data[1] = 0x0000000000ee0000ULL;
         data[2] = 0x0000000000ec0000ULL;
@@ -3814,8 +3814,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[54] = 0x0000000000280000ULL;
         data[55] = 0x0000000000280000ULL;
     }),
-    AttackTable(RightShift<17>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(48);
+    AttackTable(RightShift<17>::hash, [](uint64_t *& data) {
+        data = new uint64_t [48];
         data[0] = 0x0000000000df0000ULL;
         data[1] = 0x0000000000de0000ULL;
         data[2] = 0x0000000000dc0000ULL;
@@ -3849,8 +3849,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[46] = 0x0000000000500000ULL;
         data[47] = 0x0000000000500000ULL;
     }),
-    AttackTable(RightShift<17>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<17>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x0000000000bf0000ULL;
         data[1] = 0x0000000000be0000ULL;
         data[2] = 0x0000000000bc0000ULL;
@@ -3884,8 +3884,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x0000000000a00000ULL;
         data[31] = 0x0000000000a00000ULL;
     }),
-    AttackTable(RightShift<17>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<17>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x00000000007f0000ULL;
         data[1] = 0x00000000007e0000ULL;
         data[2] = 0x00000000007c0000ULL;
@@ -3951,8 +3951,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000000000400000ULL;
         data[63] = 0x0000000000400000ULL;
     }),
-    AttackTable(RightShift<25>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<25>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x00000000fe000000ULL;
         data[1] = 0x0000000002000000ULL;
         data[2] = 0x0000000006000000ULL;
@@ -4018,8 +4018,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000000006000000ULL;
         data[63] = 0x0000000002000000ULL;
     }),
-    AttackTable(RightShift<26>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<26>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x00000000fd000000ULL;
         data[1] = 0x0000000005000000ULL;
         data[2] = 0x000000000d000000ULL;
@@ -4053,8 +4053,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x000000000d000000ULL;
         data[31] = 0x0000000005000000ULL;
     }),
-    AttackTable(RightShift<25>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(62);
+    AttackTable(RightShift<25>::hash, [](uint64_t *& data) {
+        data = new uint64_t [62];
         data[0] = 0x00000000fb000000ULL;
         data[1] = 0x00000000fa000000ULL;
         data[4] = 0x000000000b000000ULL;
@@ -4088,8 +4088,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[60] = 0x000000000b000000ULL;
         data[61] = 0x000000000a000000ULL;
     }),
-    AttackTable(RightShift<25>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(60);
+    AttackTable(RightShift<25>::hash, [](uint64_t *& data) {
+        data = new uint64_t [60];
         data[0] = 0x00000000f7000000ULL;
         data[1] = 0x00000000f6000000ULL;
         data[2] = 0x00000000f4000000ULL;
@@ -4123,8 +4123,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[58] = 0x0000000014000000ULL;
         data[59] = 0x0000000014000000ULL;
     }),
-    AttackTable(RightShift<25>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(56);
+    AttackTable(RightShift<25>::hash, [](uint64_t *& data) {
+        data = new uint64_t [56];
         data[0] = 0x00000000ef000000ULL;
         data[1] = 0x00000000ee000000ULL;
         data[2] = 0x00000000ec000000ULL;
@@ -4158,8 +4158,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[54] = 0x0000000028000000ULL;
         data[55] = 0x0000000028000000ULL;
     }),
-    AttackTable(RightShift<25>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(48);
+    AttackTable(RightShift<25>::hash, [](uint64_t *& data) {
+        data = new uint64_t [48];
         data[0] = 0x00000000df000000ULL;
         data[1] = 0x00000000de000000ULL;
         data[2] = 0x00000000dc000000ULL;
@@ -4193,8 +4193,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[46] = 0x0000000050000000ULL;
         data[47] = 0x0000000050000000ULL;
     }),
-    AttackTable(RightShift<25>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<25>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x00000000bf000000ULL;
         data[1] = 0x00000000be000000ULL;
         data[2] = 0x00000000bc000000ULL;
@@ -4228,8 +4228,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x00000000a0000000ULL;
         data[31] = 0x00000000a0000000ULL;
     }),
-    AttackTable(RightShift<25>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<25>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x000000007f000000ULL;
         data[1] = 0x000000007e000000ULL;
         data[2] = 0x000000007c000000ULL;
@@ -4295,8 +4295,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000000040000000ULL;
         data[63] = 0x0000000040000000ULL;
     }),
-    AttackTable(RightShift<33>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<33>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x000000fe00000000ULL;
         data[1] = 0x0000000200000000ULL;
         data[2] = 0x0000000600000000ULL;
@@ -4362,8 +4362,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000000600000000ULL;
         data[63] = 0x0000000200000000ULL;
     }),
-    AttackTable(RightShift<34>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<34>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x000000fd00000000ULL;
         data[1] = 0x0000000500000000ULL;
         data[2] = 0x0000000d00000000ULL;
@@ -4397,8 +4397,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x0000000d00000000ULL;
         data[31] = 0x0000000500000000ULL;
     }),
-    AttackTable(RightShift<33>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(62);
+    AttackTable(RightShift<33>::hash, [](uint64_t *& data) {
+        data = new uint64_t [62];
         data[0] = 0x000000fb00000000ULL;
         data[1] = 0x000000fa00000000ULL;
         data[4] = 0x0000000b00000000ULL;
@@ -4432,8 +4432,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[60] = 0x0000000b00000000ULL;
         data[61] = 0x0000000a00000000ULL;
     }),
-    AttackTable(RightShift<33>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(60);
+    AttackTable(RightShift<33>::hash, [](uint64_t *& data) {
+        data = new uint64_t [60];
         data[0] = 0x000000f700000000ULL;
         data[1] = 0x000000f600000000ULL;
         data[2] = 0x000000f400000000ULL;
@@ -4467,8 +4467,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[58] = 0x0000001400000000ULL;
         data[59] = 0x0000001400000000ULL;
     }),
-    AttackTable(RightShift<33>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(56);
+    AttackTable(RightShift<33>::hash, [](uint64_t *& data) {
+        data = new uint64_t [56];
         data[0] = 0x000000ef00000000ULL;
         data[1] = 0x000000ee00000000ULL;
         data[2] = 0x000000ec00000000ULL;
@@ -4502,8 +4502,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[54] = 0x0000002800000000ULL;
         data[55] = 0x0000002800000000ULL;
     }),
-    AttackTable(RightShift<33>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(48);
+    AttackTable(RightShift<33>::hash, [](uint64_t *& data) {
+        data = new uint64_t [48];
         data[0] = 0x000000df00000000ULL;
         data[1] = 0x000000de00000000ULL;
         data[2] = 0x000000dc00000000ULL;
@@ -4537,8 +4537,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[46] = 0x0000005000000000ULL;
         data[47] = 0x0000005000000000ULL;
     }),
-    AttackTable(RightShift<33>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<33>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x000000bf00000000ULL;
         data[1] = 0x000000be00000000ULL;
         data[2] = 0x000000bc00000000ULL;
@@ -4572,8 +4572,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x000000a000000000ULL;
         data[31] = 0x000000a000000000ULL;
     }),
-    AttackTable(RightShift<33>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<33>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x0000007f00000000ULL;
         data[1] = 0x0000007e00000000ULL;
         data[2] = 0x0000007c00000000ULL;
@@ -4639,8 +4639,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000004000000000ULL;
         data[63] = 0x0000004000000000ULL;
     }),
-    AttackTable(RightShift<41>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<41>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x0000fe0000000000ULL;
         data[1] = 0x0000020000000000ULL;
         data[2] = 0x0000060000000000ULL;
@@ -4706,8 +4706,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000060000000000ULL;
         data[63] = 0x0000020000000000ULL;
     }),
-    AttackTable(RightShift<42>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<42>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x0000fd0000000000ULL;
         data[1] = 0x0000050000000000ULL;
         data[2] = 0x00000d0000000000ULL;
@@ -4741,8 +4741,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x00000d0000000000ULL;
         data[31] = 0x0000050000000000ULL;
     }),
-    AttackTable(RightShift<41>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(62);
+    AttackTable(RightShift<41>::hash, [](uint64_t *& data) {
+        data = new uint64_t [62];
         data[0] = 0x0000fb0000000000ULL;
         data[1] = 0x0000fa0000000000ULL;
         data[4] = 0x00000b0000000000ULL;
@@ -4776,8 +4776,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[60] = 0x00000b0000000000ULL;
         data[61] = 0x00000a0000000000ULL;
     }),
-    AttackTable(RightShift<41>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(60);
+    AttackTable(RightShift<41>::hash, [](uint64_t *& data) {
+        data = new uint64_t [60];
         data[0] = 0x0000f70000000000ULL;
         data[1] = 0x0000f60000000000ULL;
         data[2] = 0x0000f40000000000ULL;
@@ -4811,8 +4811,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[58] = 0x0000140000000000ULL;
         data[59] = 0x0000140000000000ULL;
     }),
-    AttackTable(RightShift<41>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(56);
+    AttackTable(RightShift<41>::hash, [](uint64_t *& data) {
+        data = new uint64_t [56];
         data[0] = 0x0000ef0000000000ULL;
         data[1] = 0x0000ee0000000000ULL;
         data[2] = 0x0000ec0000000000ULL;
@@ -4846,8 +4846,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[54] = 0x0000280000000000ULL;
         data[55] = 0x0000280000000000ULL;
     }),
-    AttackTable(RightShift<41>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(48);
+    AttackTable(RightShift<41>::hash, [](uint64_t *& data) {
+        data = new uint64_t [48];
         data[0] = 0x0000df0000000000ULL;
         data[1] = 0x0000de0000000000ULL;
         data[2] = 0x0000dc0000000000ULL;
@@ -4881,8 +4881,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[46] = 0x0000500000000000ULL;
         data[47] = 0x0000500000000000ULL;
     }),
-    AttackTable(RightShift<41>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<41>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x0000bf0000000000ULL;
         data[1] = 0x0000be0000000000ULL;
         data[2] = 0x0000bc0000000000ULL;
@@ -4916,8 +4916,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x0000a00000000000ULL;
         data[31] = 0x0000a00000000000ULL;
     }),
-    AttackTable(RightShift<41>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<41>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x00007f0000000000ULL;
         data[1] = 0x00007e0000000000ULL;
         data[2] = 0x00007c0000000000ULL;
@@ -4983,8 +4983,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0000400000000000ULL;
         data[63] = 0x0000400000000000ULL;
     }),
-    AttackTable(RightShift<49>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<49>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x00fe000000000000ULL;
         data[1] = 0x0002000000000000ULL;
         data[2] = 0x0006000000000000ULL;
@@ -5050,8 +5050,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0006000000000000ULL;
         data[63] = 0x0002000000000000ULL;
     }),
-    AttackTable(RightShift<50>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<50>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x00fd000000000000ULL;
         data[1] = 0x0005000000000000ULL;
         data[2] = 0x000d000000000000ULL;
@@ -5085,8 +5085,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x000d000000000000ULL;
         data[31] = 0x0005000000000000ULL;
     }),
-    AttackTable(RightShift<49>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(62);
+    AttackTable(RightShift<49>::hash, [](uint64_t *& data) {
+        data = new uint64_t [62];
         data[0] = 0x00fb000000000000ULL;
         data[1] = 0x00fa000000000000ULL;
         data[4] = 0x000b000000000000ULL;
@@ -5120,8 +5120,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[60] = 0x000b000000000000ULL;
         data[61] = 0x000a000000000000ULL;
     }),
-    AttackTable(RightShift<49>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(60);
+    AttackTable(RightShift<49>::hash, [](uint64_t *& data) {
+        data = new uint64_t [60];
         data[0] = 0x00f7000000000000ULL;
         data[1] = 0x00f6000000000000ULL;
         data[2] = 0x00f4000000000000ULL;
@@ -5155,8 +5155,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[58] = 0x0014000000000000ULL;
         data[59] = 0x0014000000000000ULL;
     }),
-    AttackTable(RightShift<49>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(56);
+    AttackTable(RightShift<49>::hash, [](uint64_t *& data) {
+        data = new uint64_t [56];
         data[0] = 0x00ef000000000000ULL;
         data[1] = 0x00ee000000000000ULL;
         data[2] = 0x00ec000000000000ULL;
@@ -5190,8 +5190,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[54] = 0x0028000000000000ULL;
         data[55] = 0x0028000000000000ULL;
     }),
-    AttackTable(RightShift<49>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(48);
+    AttackTable(RightShift<49>::hash, [](uint64_t *& data) {
+        data = new uint64_t [48];
         data[0] = 0x00df000000000000ULL;
         data[1] = 0x00de000000000000ULL;
         data[2] = 0x00dc000000000000ULL;
@@ -5225,8 +5225,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[46] = 0x0050000000000000ULL;
         data[47] = 0x0050000000000000ULL;
     }),
-    AttackTable(RightShift<49>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<49>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0x00bf000000000000ULL;
         data[1] = 0x00be000000000000ULL;
         data[2] = 0x00bc000000000000ULL;
@@ -5260,8 +5260,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x00a0000000000000ULL;
         data[31] = 0x00a0000000000000ULL;
     }),
-    AttackTable(RightShift<49>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<49>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x007f000000000000ULL;
         data[1] = 0x007e000000000000ULL;
         data[2] = 0x007c000000000000ULL;
@@ -5327,8 +5327,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0040000000000000ULL;
         data[63] = 0x0040000000000000ULL;
     }),
-    AttackTable(RightShift<57>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<57>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0xfe00000000000000ULL;
         data[1] = 0x0200000000000000ULL;
         data[2] = 0x0600000000000000ULL;
@@ -5394,8 +5394,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[62] = 0x0600000000000000ULL;
         data[63] = 0x0200000000000000ULL;
     }),
-    AttackTable(RightShift<58>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<58>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0xfd00000000000000ULL;
         data[1] = 0x0500000000000000ULL;
         data[2] = 0x0d00000000000000ULL;
@@ -5429,8 +5429,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0x0d00000000000000ULL;
         data[31] = 0x0500000000000000ULL;
     }),
-    AttackTable(RightShift<57>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(62);
+    AttackTable(RightShift<57>::hash, [](uint64_t *& data) {
+        data = new uint64_t [62];
         data[0] = 0xfb00000000000000ULL;
         data[1] = 0xfa00000000000000ULL;
         data[4] = 0x0b00000000000000ULL;
@@ -5464,8 +5464,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[60] = 0x0b00000000000000ULL;
         data[61] = 0x0a00000000000000ULL;
     }),
-    AttackTable(RightShift<57>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(60);
+    AttackTable(RightShift<57>::hash, [](uint64_t *& data) {
+        data = new uint64_t [60];
         data[0] = 0xf700000000000000ULL;
         data[1] = 0xf600000000000000ULL;
         data[2] = 0xf400000000000000ULL;
@@ -5499,8 +5499,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[58] = 0x1400000000000000ULL;
         data[59] = 0x1400000000000000ULL;
     }),
-    AttackTable(RightShift<57>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(56);
+    AttackTable(RightShift<57>::hash, [](uint64_t *& data) {
+        data = new uint64_t [56];
         data[0] = 0xef00000000000000ULL;
         data[1] = 0xee00000000000000ULL;
         data[2] = 0xec00000000000000ULL;
@@ -5534,8 +5534,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[54] = 0x2800000000000000ULL;
         data[55] = 0x2800000000000000ULL;
     }),
-    AttackTable(RightShift<57>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(48);
+    AttackTable(RightShift<57>::hash, [](uint64_t *& data) {
+        data = new uint64_t [48];
         data[0] = 0xdf00000000000000ULL;
         data[1] = 0xde00000000000000ULL;
         data[2] = 0xdc00000000000000ULL;
@@ -5569,8 +5569,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[46] = 0x5000000000000000ULL;
         data[47] = 0x5000000000000000ULL;
     }),
-    AttackTable(RightShift<57>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(32);
+    AttackTable(RightShift<57>::hash, [](uint64_t *& data) {
+        data = new uint64_t [32];
         data[0] = 0xbf00000000000000ULL;
         data[1] = 0xbe00000000000000ULL;
         data[2] = 0xbc00000000000000ULL;
@@ -5604,8 +5604,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
         data[30] = 0xa000000000000000ULL;
         data[31] = 0xa000000000000000ULL;
     }),
-    AttackTable(RightShift<57>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(64);
+    AttackTable(RightShift<57>::hash, [](uint64_t *& data) {
+        data = new uint64_t [64];
         data[0] = 0x7f00000000000000ULL;
         data[1] = 0x7e00000000000000ULL;
         data[2] = 0x7c00000000000000ULL;
@@ -5674,8 +5674,8 @@ static const AttackTable BB_RANK_ATTACKS[64] = {
 };
 
 static const AttackTable BB_DIAG_ATTACKS[64] = {
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x8040201008040200ULL;
         data[25] = 0x0000000000000200ULL;
         data[26] = 0x0000000000000200ULL;
@@ -5741,8 +5741,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[507] = 0x0000000000000200ULL;
         data[510] = 0x0000000008040200ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x0080402010080500ULL;
         data[33] = 0x0000000000080500ULL;
         data[38] = 0x0000002010080500ULL;
@@ -5776,8 +5776,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[503] = 0x0000000000000500ULL;
         data[506] = 0x0000000000080500ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(502);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [502];
         data[0] = 0x0000804020110a00ULL;
         data[51] = 0x0000000000000a00ULL;
         data[61] = 0x0000000000000a00ULL;
@@ -5811,8 +5811,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[498] = 0x0000004020100a00ULL;
         data[501] = 0x0000000000110a00ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_5_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_5_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x0000008041221400ULL;
         data[5] = 0x0000000040201400ULL;
         data[13] = 0x0000000001021400ULL;
@@ -5846,8 +5846,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[491] = 0x0000000000001400ULL;
         data[494] = 0x0000000000021400ULL;
     }),
-    AttackTable(RightShift<11>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(18566);
+    AttackTable(RightShift<11>::hash, [](uint64_t *& data) {
+        data = new uint64_t [18566];
         data[0] = 0x0000000182442800ULL;
         data[1] = 0x0000000080402800ULL;
         data[4] = 0x0000000102042800ULL;
@@ -5881,8 +5881,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[18564] = 0x0000000000042800ULL;
         data[18565] = 0x0000000000002800ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x0000010204885000ULL;
         data[25] = 0x0000000000085000ULL;
         data[30] = 0x0000000000085000ULL;
@@ -5916,8 +5916,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[498] = 0x0000000000085000ULL;
         data[506] = 0x0000000004885000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(502);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [502];
         data[0] = 0x000102040810a000ULL;
         data[10] = 0x000000000000a000ULL;
         data[40] = 0x000000000810a000ULL;
@@ -5951,8 +5951,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[481] = 0x000000000000a000ULL;
         data[501] = 0x000000000810a000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x0102040810204000ULL;
         data[3] = 0x0000000000004000ULL;
         data[10] = 0x0000000000204000ULL;
@@ -6018,8 +6018,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[504] = 0x0000000000004000ULL;
         data[506] = 0x0000000000004000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x4020100804020002ULL;
         data[37] = 0x0000000000020002ULL;
         data[54] = 0x0000000000020002ULL;
@@ -6053,8 +6053,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[488] = 0x0000000000020002ULL;
         data[509] = 0x0000000004020002ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x8040201008050005ULL;
         data[33] = 0x0000000008050005ULL;
         data[38] = 0x0000201008050005ULL;
@@ -6088,8 +6088,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[503] = 0x0000000000050005ULL;
         data[506] = 0x0000000008050005ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x00804020110a000aULL;
         data[2] = 0x00000000000a000aULL;
         data[7] = 0x00000020100a000aULL;
@@ -6123,8 +6123,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[481] = 0x00804020100a000aULL;
         data[506] = 0x00000000010a000aULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(502);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [502];
         data[0] = 0x0000804122140014ULL;
         data[5] = 0x0000000000140014ULL;
         data[15] = 0x0000004020140014ULL;
@@ -6158,8 +6158,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[450] = 0x0000804020140014ULL;
         data[501] = 0x0000000102140014ULL;
     }),
-    AttackTable(RightShift<19>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(18566);
+    AttackTable(RightShift<19>::hash, [](uint64_t *& data) {
+        data = new uint64_t [18566];
         data[0] = 0x0000018244280028ULL;
         data[1] = 0x0000008040280028ULL;
         data[4] = 0x0000010204280028ULL;
@@ -6193,8 +6193,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[18564] = 0x0000000004280028ULL;
         data[18565] = 0x0000000000280028ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(502);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [502];
         data[0] = 0x0001020488500050ULL;
         data[10] = 0x0000000000500050ULL;
         data[20] = 0x0000000000500050ULL;
@@ -6228,8 +6228,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[481] = 0x0000000000500050ULL;
         data[501] = 0x0000000088500050ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(502);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [502];
         data[0] = 0x0102040810a000a0ULL;
         data[10] = 0x0000000000a000a0ULL;
         data[40] = 0x0000000810a000a0ULL;
@@ -6263,8 +6263,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[481] = 0x0000000000a000a0ULL;
         data[501] = 0x0000000810a000a0ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(492);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [492];
         data[0] = 0x0204081020400040ULL;
         data[8] = 0x0000000020400040ULL;
         data[20] = 0x0000000000400040ULL;
@@ -6298,8 +6298,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[459] = 0x0000000000400040ULL;
         data[491] = 0x0000001020400040ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x2010080402000204ULL;
         data[25] = 0x0000000002000200ULL;
         data[29] = 0x0000000402000204ULL;
@@ -6333,8 +6333,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[481] = 0x0000000002000204ULL;
         data[510] = 0x0000000002000204ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x4020100805000508ULL;
         data[41] = 0x0000000805000500ULL;
         data[50] = 0x0000000005000500ULL;
@@ -6368,8 +6368,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[495] = 0x4020100805000500ULL;
         data[509] = 0x0000000005000508ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_21_mixin<0x3ff>, [](std::vector<uint64_t>& data) {
-        data.resize(1020);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_21_mixin<0x3ff>, [](uint64_t *& data) {
+        data = new uint64_t [1020];
         data[0] = 0x804020110a000a11ULL;
         data[6] = 0x000000010a000a00ULL;
         data[7] = 0x804020100a000a01ULL;
@@ -6499,8 +6499,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[1018] = 0x000000000a000a10ULL;
         data[1019] = 0x000000010a000a01ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x0080412214001422ULL;
         data[3] = 0x0000002014001422ULL;
         data[12] = 0x0080402014001402ULL;
@@ -6630,8 +6630,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[503] = 0x0000002214001402ULL;
         data[506] = 0x0080402014001400ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x3ff>, [](std::vector<uint64_t>& data) {
-        data.resize(1021);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x3ff>, [](uint64_t *& data) {
+        data = new uint64_t [1021];
         data[0] = 0x0001824428002844ULL;
         data[1] = 0x0000804028002804ULL;
         data[15] = 0x0000824428002840ULL;
@@ -6761,8 +6761,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[1018] = 0x0000804428002844ULL;
         data[1020] = 0x0000804028002804ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_17_mixin<0x3ff>, [](std::vector<uint64_t>& data) {
-        data.resize(1017);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_17_mixin<0x3ff>, [](uint64_t *& data) {
+        data = new uint64_t [1017];
         data[0] = 0x0102048850005088ULL;
         data[3] = 0x0000008050005000ULL;
         data[6] = 0x0000000050005080ULL;
@@ -6892,8 +6892,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[1003] = 0x0000008850005088ULL;
         data[1016] = 0x0000000850005088ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(512);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [512];
         data[0] = 0x02040810a000a010ULL;
         data[8] = 0x00000000a000a010ULL;
         data[20] = 0x00000000a000a000ULL;
@@ -6927,8 +6927,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[503] = 0x00000010a000a000ULL;
         data[511] = 0x00000000a000a000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x0408102040004020ULL;
         data[7] = 0x0000102040004000ULL;
         data[12] = 0x0000000040004000ULL;
@@ -6962,8 +6962,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[478] = 0x0000002040004000ULL;
         data[509] = 0x0000002040004020ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(506);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [506];
         data[0] = 0x1008040200020408ULL;
         data[66] = 0x0000000200020400ULL;
         data[72] = 0x0000000200020000ULL;
@@ -6997,8 +6997,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[495] = 0x1008040200020400ULL;
         data[505] = 0x0000000200020000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(508);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [508];
         data[0] = 0x2010080500050810ULL;
         data[7] = 0x0000000500050000ULL;
         data[29] = 0x0000000500050810ULL;
@@ -7032,8 +7032,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[498] = 0x0000000500050000ULL;
         data[507] = 0x0000000500050800ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_17_mixin<0x3ff>, [](std::vector<uint64_t>& data) {
-        data.resize(1024);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_17_mixin<0x3ff>, [](uint64_t *& data) {
+        data = new uint64_t [1024];
         data[0] = 0x4020110a000a1120ULL;
         data[13] = 0x0000000a000a1020ULL;
         data[21] = 0x0000100a000a0000ULL;
@@ -7163,8 +7163,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[1020] = 0x0000000a000a1020ULL;
         data[1023] = 0x0000000a000a0100ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_9_mixin<0x1fff>, [](std::vector<uint64_t>& data) {
-        data.resize(8189);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_9_mixin<0x1fff>, [](uint64_t *& data) {
+        data = new uint64_t [8189];
         data[0] = 0x8041221400142241ULL;
         data[73] = 0x0000001400142040ULL;
         data[152] = 0x0000021400142000ULL;
@@ -7678,8 +7678,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[8175] = 0x0000021400140201ULL;
         data[8188] = 0x8040221400140200ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_7_mixin<0x1fff>, [](std::vector<uint64_t>& data) {
-        data.resize(8170);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_7_mixin<0x1fff>, [](uint64_t *& data) {
+        data = new uint64_t [8170];
         data[0] = 0x0182442800284482ULL;
         data[4] = 0x0000002800284402ULL;
         data[12] = 0x0000442800280402ULL;
@@ -8193,8 +8193,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[8164] = 0x0000002800280400ULL;
         data[8169] = 0x0080402800284400ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x0204885000508804ULL;
         data[4] = 0x0000805000500000ULL;
         data[7] = 0x0004085000500804ULL;
@@ -8324,8 +8324,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[504] = 0x0204085000500000ULL;
         data[509] = 0x0000805000500800ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x040810a000a01008ULL;
         data[24] = 0x000000a000a00000ULL;
         data[27] = 0x040810a000a00000ULL;
@@ -8359,8 +8359,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[509] = 0x000000a000a01008ULL;
         data[510] = 0x000810a000a00000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(509);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [509];
         data[0] = 0x0810204000402010ULL;
         data[10] = 0x0000004000400000ULL;
         data[34] = 0x0000204000400000ULL;
@@ -8394,8 +8394,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[506] = 0x0000004000402010ULL;
         data[508] = 0x0010204000400000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x0804020002040810ULL;
         data[27] = 0x0004020002040000ULL;
         data[98] = 0x0000020002000000ULL;
@@ -8429,8 +8429,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[506] = 0x0004020002040000ULL;
         data[509] = 0x0004020002000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x1008050005081020ULL;
         data[23] = 0x1008050005000000ULL;
         data[55] = 0x0008050005080000ULL;
@@ -8464,8 +8464,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[500] = 0x0008050005080000ULL;
         data[506] = 0x0008050005000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_19_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_19_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x20110a000a112040ULL;
         data[2] = 0x00110a000a000000ULL;
         data[5] = 0x00010a000a100000ULL;
@@ -8595,8 +8595,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[503] = 0x00000a000a100000ULL;
         data[510] = 0x00110a000a110000ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_9_mixin<0x1fff>, [](std::vector<uint64_t>& data) {
-        data.resize(8185);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_9_mixin<0x1fff>, [](uint64_t *& data) {
+        data = new uint64_t [8185];
         data[0] = 0x4122140014224180ULL;
         data[1] = 0x4020140014204080ULL;
         data[10] = 0x4022140014000000ULL;
@@ -9110,8 +9110,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[8163] = 0x0020140014204000ULL;
         data[8184] = 0x0000140014220000ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_15_mixin<0x1fff>, [](std::vector<uint64_t>& data) {
-        data.resize(8189);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_15_mixin<0x1fff>, [](uint64_t *& data) {
+        data = new uint64_t [8189];
         data[0] = 0x8244280028448201ULL;
         data[4] = 0x0000280028440201ULL;
         data[12] = 0x0044280028040201ULL;
@@ -9625,8 +9625,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[8164] = 0x0000280028040000ULL;
         data[8188] = 0x0040280028000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x3ff>, [](std::vector<uint64_t>& data) {
-        data.resize(1013);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x3ff>, [](uint64_t *& data) {
+        data = new uint64_t [1013];
         data[0] = 0x0488500050880402ULL;
         data[1] = 0x0488500050000000ULL;
         data[4] = 0x0000500050880402ULL;
@@ -9756,8 +9756,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[1003] = 0x0080500050800000ULL;
         data[1012] = 0x0008500050800000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(472);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [472];
         data[0] = 0x0810a000a0100804ULL;
         data[15] = 0x0000a000a0000000ULL;
         data[27] = 0x0010a000a0100000ULL;
@@ -9791,8 +9791,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[469] = 0x0000a000a0100000ULL;
         data[471] = 0x0000a000a0000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(492);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [492];
         data[0] = 0x1020400040201008ULL;
         data[10] = 0x0000400040201000ULL;
         data[27] = 0x1020400040200000ULL;
@@ -9826,8 +9826,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[445] = 0x1020400040201000ULL;
         data[491] = 0x1020400040000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x0402000204081020ULL;
         data[6] = 0x0402000200000000ULL;
         data[23] = 0x0402000204000000ULL;
@@ -9861,8 +9861,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[488] = 0x0002000204000000ULL;
         data[494] = 0x0002000200000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(499);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [499];
         data[0] = 0x0805000508102040ULL;
         data[1] = 0x0805000508000000ULL;
         data[32] = 0x0005000500000000ULL;
@@ -9896,8 +9896,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[496] = 0x0005000508100000ULL;
         data[498] = 0x0005000508000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_19_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_19_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x110a000a11204080ULL;
         data[1] = 0x110a000a01000000ULL;
         data[6] = 0x110a000a10204000ULL;
@@ -10027,8 +10027,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[508] = 0x000a000a01000000ULL;
         data[509] = 0x010a000a00000000ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(506);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [506];
         data[0] = 0x2214001422418000ULL;
         data[4] = 0x0214001420400000ULL;
         data[10] = 0x2014001420408000ULL;
@@ -10158,8 +10158,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[502] = 0x2014001400000000ULL;
         data[505] = 0x2014001402010000ULL;
     }),
-    AttackTable(mul_shift_33_e36aa5c613612997_rshift_15_mixin<0x7ff>, [](std::vector<uint64_t>& data) {
-        data.resize(2047);
+    AttackTable(mul_shift_33_e36aa5c613612997_rshift_15_mixin<0x7ff>, [](uint64_t *& data) {
+        data = new uint64_t [2047];
         data[0] = 0x4428002844820100ULL;
         data[5] = 0x0428002844000000ULL;
         data[14] = 0x4028002840800000ULL;
@@ -10289,8 +10289,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[2044] = 0x0028002844020000ULL;
         data[2046] = 0x4428002804000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x3ff>, [](std::vector<uint64_t>& data) {
-        data.resize(1019);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x3ff>, [](uint64_t *& data) {
+        data = new uint64_t [1019];
         data[0] = 0x8850005088040201ULL;
         data[6] = 0x0050005000000000ULL;
         data[11] = 0x8050005008040200ULL;
@@ -10420,8 +10420,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[1015] = 0x0850005088040200ULL;
         data[1018] = 0x0850005080000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(502);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [502];
         data[0] = 0x10a000a010080402ULL;
         data[1] = 0x00a000a000000000ULL;
         data[18] = 0x00a000a010000000ULL;
@@ -10455,8 +10455,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[496] = 0x00a000a000000000ULL;
         data[501] = 0x10a000a000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(505);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [505];
         data[0] = 0x2040004020100804ULL;
         data[3] = 0x0040004000000000ULL;
         data[13] = 0x0040004020100000ULL;
@@ -10490,8 +10490,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[501] = 0x2040004020000000ULL;
         data[504] = 0x0040004000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(502);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [502];
         data[0] = 0x0200020408102040ULL;
         data[10] = 0x0200020000000000ULL;
         data[40] = 0x0200020000000000ULL;
@@ -10525,8 +10525,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[481] = 0x0200020408102000ULL;
         data[501] = 0x0200020400000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(492);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_3_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [492];
         data[0] = 0x0500050810204080ULL;
         data[8] = 0x0500050800000000ULL;
         data[20] = 0x0500050000000000ULL;
@@ -10560,8 +10560,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[459] = 0x0500050800000000ULL;
         data[491] = 0x0500050800000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_5_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(512);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_5_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [512];
         data[0] = 0x0a000a1120408000ULL;
         data[21] = 0x0a000a0000000000ULL;
         data[32] = 0x0a000a0000000000ULL;
@@ -10595,8 +10595,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[501] = 0x0a000a1100000000ULL;
         data[511] = 0x0a000a1020000000ULL;
     }),
-    AttackTable(RightShift<30>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(20618);
+    AttackTable(RightShift<30>::hash, [](uint64_t *& data) {
+        data = new uint64_t [20618];
         data[0] = 0x1400142241800000ULL;
         data[1] = 0x1400142241000000ULL;
         data[8] = 0x1400142240800000ULL;
@@ -10630,8 +10630,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[20616] = 0x1400140000000000ULL;
         data[20617] = 0x1400140000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x2800284482010000ULL;
         data[17] = 0x2800280400000000ULL;
         data[32] = 0x2800280000000000ULL;
@@ -10665,8 +10665,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[493] = 0x2800284000000000ULL;
         data[494] = 0x2800280402000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x5000508804020100ULL;
         data[29] = 0x5000508000000000ULL;
         data[33] = 0x5000500000000000ULL;
@@ -10700,8 +10700,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[481] = 0x5000508804020000ULL;
         data[510] = 0x5000508000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0xa000a01008040201ULL;
         data[37] = 0xa000a00000000000ULL;
         data[54] = 0xa000a01000000000ULL;
@@ -10735,8 +10735,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[488] = 0xa000a00000000000ULL;
         data[509] = 0xa000a00000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_7_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x4000402010080402ULL;
         data[33] = 0x4000400000000000ULL;
         data[38] = 0x4000402000000000ULL;
@@ -10770,8 +10770,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[503] = 0x4000400000000000ULL;
         data[506] = 0x4000400000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(507);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [507];
         data[0] = 0x0002040810204080ULL;
         data[3] = 0x0002040810000000ULL;
         data[10] = 0x0002000000000000ULL;
@@ -10837,8 +10837,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[504] = 0x0002040000000000ULL;
         data[506] = 0x0002000000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(492);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_11_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [492];
         data[0] = 0x0005081020408000ULL;
         data[8] = 0x0005080000000000ULL;
         data[20] = 0x0005000000000000ULL;
@@ -10872,8 +10872,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[459] = 0x0005080000000000ULL;
         data[491] = 0x0005080000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x000a112040800000ULL;
         data[5] = 0x000a000000000000ULL;
         data[8] = 0x000a000000000000ULL;
@@ -10907,8 +10907,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[461] = 0x000a010000000000ULL;
         data[509] = 0x000a110000000000ULL;
     }),
-    AttackTable(RightShift<38>::hash, [](std::vector<uint64_t>& data) {
-        data.resize(20618);
+    AttackTable(RightShift<38>::hash, [](uint64_t *& data) {
+        data = new uint64_t [20618];
         data[0] = 0x0014224180000000ULL;
         data[1] = 0x0014224100000000ULL;
         data[8] = 0x0014224080000000ULL;
@@ -10942,8 +10942,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[20616] = 0x0014000000000000ULL;
         data[20617] = 0x0014000000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(495);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [495];
         data[0] = 0x0028448201000000ULL;
         data[17] = 0x0028040000000000ULL;
         data[32] = 0x0028000000000000ULL;
@@ -10977,8 +10977,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[493] = 0x0028400000000000ULL;
         data[494] = 0x0028040200000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x0050880402010000ULL;
         data[29] = 0x0050800000000000ULL;
         data[33] = 0x0050000000000000ULL;
@@ -11012,8 +11012,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[481] = 0x0050880402000000ULL;
         data[510] = 0x0050800000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(510);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_15_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [510];
         data[0] = 0x00a0100804020100ULL;
         data[37] = 0x00a0000000000000ULL;
         data[54] = 0x00a0100000000000ULL;
@@ -11047,8 +11047,8 @@ static const AttackTable BB_DIAG_ATTACKS[64] = {
         data[488] = 0x00a0000000000000ULL;
         data[509] = 0x00a0000000000000ULL;
     }),
-    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](std::vector<uint64_t>& data) {
-        data.resize(511);
+    AttackTable(mul_shift_31_81dadef4bc2dd44d_rshift_17_mixin<0x1ff>, [](uint64_t *& data) {
+        data = new uint64_t [511];
         data[0] = 0x0040201008040201ULL;
         data[25] = 0x0040000000000000ULL;
         data[26] = 0x0040200000000000ULL;

@@ -46,21 +46,6 @@ using namespace chess;
 using namespace search;
 
 
-
-static void print_move(std::ostream& out, const Move& move)
-{
-    out << move.uci() << " score=" << move._score << "\n";
-}
-
-
-void TT_Entry::print(std::ostream& out) const
-{
-    print_move(out << "hash_move=", _hash_move);
-    out << "(" << _alpha << ", " << _value << ", " << _beta << ") depth=" << _depth;
-    out << " capt=" << _capt << " eval=" << _eval << "\n";
-}
-
-
 const score_t* TT_Entry::lookup_score(Context& ctxt) const
 {
     if (_depth >= ctxt.depth() && is_valid())
@@ -373,6 +358,7 @@ void TranspositionTable::store_killer_move(const Context& ctxt)
         killers[1] = killers[0];
         killers[0] = move;
         killers[0]._score = ctxt._score;
+        killers[0]._state = nullptr; /* prevent accidental use */
     }
 
 #endif /* KILLER_MOVE_HEURISTIC */
@@ -582,7 +568,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
 {
     if (ctxt._ply == 0
         || !ctxt._multicut_allowed
-        || ctxt.depth() <= MULTICUT_REDUCTION + 1
+        || ctxt.depth() <= 5
         || ctxt.is_singleton()
         || ctxt.is_pv_node()
         || ctxt._excluded
@@ -600,9 +586,8 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
     if (state.just_king_and_pawns())
         return false;
 
-    ASSERT(!ctxt._excluded);
-
     int move_count = 0, cutoffs = 0;
+    const auto reduction = (ctxt.depth() - 1) / 2;
 
     ContextPtr best_move;
 
@@ -618,7 +603,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
     while (auto next_ctxt = ctxt.next())
     {
         next_ctxt->_multicut_allowed = false;
-        next_ctxt->_max_depth -= MULTICUT_REDUCTION;
+        next_ctxt->_max_depth -= reduction;
 
         auto score = -negamax(*next_ctxt, table);
 
@@ -637,11 +622,13 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
                 /* Store it in the TT as a cutoff move. */
                 ctxt._alpha = ctxt._score;
 
-                /* Fix-up best move just in case this becomes the new PV. */
+                /* Fix-up best move */
             #if LAZY_STATE_COPY
                 best_move->copy_move_state();
             #endif
                 ctxt.set_best(best_move);
+                ctxt._cutoff_move = best_move->_move;
+
                 return true;
             }
         }
@@ -707,7 +694,13 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         ASSERT(ctxt._score > SCORE_MIN);
         ASSERT(ctxt._score < SCORE_MAX);
     }
-    else if (!multicut(ctxt, table) && !ctxt.is_cancelled())
+    else if (multicut(ctxt, table))
+    {
+#if !CACHE_HEURISTIC_CUTOFFS
+        return ctxt._score;
+#endif /* !CACHE_HEURISTIC_CUTOFFS */
+    }
+    else if (!ctxt.is_cancelled())
     {
         ASSERT(ctxt._alpha < ctxt._beta);
 
@@ -743,7 +736,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         bool null_move = ctxt.is_null_move_ok();
         table._null_move_not_ok += !null_move;
 
-        auto moves_count = 0;
+        auto move_count = 0;
 
         const bool prune_ok = ctxt.can_forward_prune();
         const auto futility = prune_ok ? ctxt.futility_margin() : 0;
@@ -757,14 +750,14 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             if (!next_ctxt->is_null_move())
             {
                 /* Futility pruning */
-                if (futility && moves_count)
+                if (futility && move_count)
                 {
                     ASSERT(prune_ok);
-                    ASSERT(moves_count > 0);
+                    ASSERT(move_count > 0);
 
                     const auto val = futility - next_ctxt->evaluate_material();
 
-                    if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune(moves_count))
+                    if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune(move_count))
                     {
                         update_pruned(table, ctxt, *next_ctxt, table._futility_prune_count);
                         continue;
@@ -822,6 +815,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                      */
                     else if (s_beta >= ctxt._beta)
                     {
+                #if CACHE_HEURISTIC_CUTOFFS
                         /* Store it in the TT as a cutoff move. */
                         ctxt._alpha = ctxt._score = s_beta;
                         /*
@@ -830,6 +824,9 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                          */
                         ctxt._cutoff_move = next_ctxt->_move;
                         break;
+                #else
+                        return s_beta;
+                #endif /* CACHE_HEURISTIC_CUTOFFS */
                     }
                     else if (ctxt._tt_entry._value >= ctxt._beta && next_ctxt->can_reduce())
                     {
@@ -841,14 +838,14 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 next_ctxt->extend();
 
                 /* Late-move reduction and pruning */
-                if (moves_count && next_ctxt->late_move_reduce(prune_ok) == LMR::Prune)
+                if (move_count && next_ctxt->late_move_reduce(prune_ok, move_count) == LMR::Prune)
                 {
                     update_pruned(table, ctxt, *next_ctxt, table._late_move_prune_count);
                     continue;
                 }
 
                 if (!next_ctxt->is_retry())
-                    ++moves_count;
+                    ++move_count;
             }
 
             /*
@@ -878,6 +875,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     if (ctxt._score > MATE_HIGH)
                         ctxt._score = ctxt._beta;
 
+                #if CACHE_HEURISTIC_CUTOFFS
                     /*
                      * Put the hash move (if available) back in the TT when
                      * storing this result; could skip storing and just return
@@ -888,12 +886,13 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                      */
                     if (ctxt._tt_entry.is_lower() && ctxt._tt_entry._hash_move)
                         ctxt._cutoff_move = ctxt._tt_entry._hash_move;
+                #else
+                    return ctxt._score;
+                #endif /* CACHE_HEURISTIC_CUTOFFS */
                 }
                 else
                 {
-                    table.store_countermove(ctxt);
-
-                    /* update non-capturing killer moves */
+                    /* store data for move reordering heuristics */
                     if (!next_ctxt->is_capture())
                     {
                         /* sanity checks */
@@ -903,9 +902,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
                         /* zero-score moves may mean draw (path-dependent) */
                         if (move_score && !next_ctxt->is_qsearch())
+                        {
+                            table.store_countermove(ctxt);
                             table.store_killer_move(ctxt);
-
-                        table.history_update_cutoffs(next_ctxt->_move);
+                            table.history_update_cutoffs(next_ctxt->_move);
+                        }
                     }
                 }
 
@@ -926,7 +927,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
              * that the upper bound gets more accurate.
              * https://www.chessprogramming.org/PVS_and_Aspiration
              */
-            if (ctxt._ply == 0 && moves_count == 1 && move_score < table._w_alpha)
+            if (ctxt._ply == 0 && move_count == 1 && move_score <= table._w_alpha)
             {
                 ASSERT(!next_ctxt->is_null_move());
                 table._reset_window = true;
@@ -960,7 +961,12 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
      * which are path-dependent; and the general wisdom is to not store root
      * nodes either (https://www.stmintz.com/ccc/index.php?id=93686)
      */
-    if (ctxt._score && ctxt._ply && !ctxt._excluded && !ctxt.is_cancelled())
+    if (ctxt._score
+        && ctxt._ply
+        && !ctxt._excluded
+        && !ctxt.is_qsearch()
+        && !ctxt.is_cancelled()
+       )
         table.store(ctxt, alpha);
 
     return ctxt._score;

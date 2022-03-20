@@ -219,22 +219,6 @@ namespace chess
     }
 
 
-    /*
-     * https://www.chessprogramming.org/Traversing_Subsets_of_a_Set
-     */
-    template<typename F> void for_each_subset(Bitboard mask, F f)
-    {
-        auto subset = BB_EMPTY;
-        while (true)
-        {
-            f(subset);
-            subset = (subset - mask) & mask;
-            if (subset == 0)
-                break;
-        }
-    }
-
-
     static void
     init_attack_masks(AttackMasks& mask_table, const AttackTable (&tables)[64], const std::vector<int>& deltas)
     {

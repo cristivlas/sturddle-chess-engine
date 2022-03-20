@@ -127,17 +127,17 @@ DECLARE_PARAM(  FIFTY_MOVES_RULE,                     1,    0,       1)
 DECLARE_PARAM(  FUTILITY_PRUNING,                     1,    0,       1)
 DECLARE_PARAM(  LATE_MOVE_REDUCTION_COUNT,            4,    0,     100)
 DECLARE_PARAM(  MANAGE_TIME,                          1,    0,       1)
-DECLARE_PARAM(  MULTICUT,                             0,    0,       1)
+DECLARE_PARAM(  MULTICUT,                             1,    0,       1)
 
 #if ADAPTIVE_NULL_MOVE
 DECLARE_PARAM(  NULL_MOVE_FACTOR,                   200,   10,    1000)
 #endif /* ADAPTIVE_NULL_MOVE */
 
 DECLARE_PARAM(  NULL_MOVE_REDUCTION,                  4,    0,       4)
-DECLARE_PARAM(  NULL_MOVE_MARGIN,                     0,    0,    1000)
+DECLARE_PARAM(  NULL_MOVE_MARGIN,                   293,    0,    1000)
 DECLARE_PARAM(  NULL_MOVE_MIN_VERIFICATION_DEPTH,    14,    0,     100)
 
-DECLARE_PARAM(  SINGULAR_MARGIN,                      6,    0,     250)
+DECLARE_PARAM(  SINGULAR_MARGIN,                      6,    0,     100)
 DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
 
 /* Move ordering */
@@ -146,14 +146,14 @@ DECLARE_PARAM(  COUNTER_MOVE_BONUS,                  20,    0,     100)
 DECLARE_PARAM(  HISTORY_HIGH,                        95,    0,     100)
 
 /* Tactical evaluation */
-DECLARE_PARAM(  BISHOP_PAIR,                         67,    0,     100)
+DECLARE_PARAM(  BISHOP_PAIR,                         65,    0,     100)
 DECLARE_PARAM(  BISHOPS_STRENGTH,                    13,    0,     100)
 DECLARE_PARAM(  CHECK_BONUS,                         50,    0,     100)
 DECLARE_PARAM(  CENTER_ATTACKS,                      16,    0,     100)
 DECLARE_PARAM(  CENTER_OCCUPANCY,                     3,    0,     100)
-DECLARE_PARAM(  REDUNDANT_ROOK,                     -33, -500,       0)
+DECLARE_PARAM(  REDUNDANT_ROOK,                    -125, -500,       0)
 
-DECLARE_PARAM(  ENDGAME_CONNECTED_ROOKS,              6,    0,     100)
+DECLARE_PARAM(  ENDGAME_CONNECTED_ROOKS,             13,    0,     100)
 DECLARE_PARAM(  ENDGAME_KING_QUADRANT,                4,    0,     100)
 DECLARE_PARAM(  ENDGAME_DOUBLED_PAWNS,              -24, -100,       0)
 DECLARE_PARAM(  ENDGAME_ISOLATED_PAWNS,             -15, -100,       0)
@@ -162,19 +162,18 @@ DECLARE_PARAM(  ENDGAME_PAWN_MAJORITY,               73,    0,     300)
 DECLARE_PARAM(  ENDGAME_UNBLOCKED_PASSED_6,         140,    0,     300)
 DECLARE_PARAM(  ENDGAME_UNBLOCKED_PASSED_7,         160,    0,     300)
 
-DECLARE_PARAM(  MIDGAME_CONNECTED_ROOKS,             41,    0,     100)
+DECLARE_PARAM(  MIDGAME_CONNECTED_ROOKS,             25,    0,     100)
 DECLARE_PARAM(  MIDGAME_KING_QUADRANT,               71,    0,     100)
 DECLARE_PARAM(  MIDGAME_KING_OUT_PENALTY,           -62, -500,       0)
 DECLARE_PARAM(  MIDGAME_DOUBLED_PAWNS,              -20, -100,       0)
 DECLARE_PARAM(  MIDGAME_ISOLATED_PAWNS,             -17, -100,       0)
-DECLARE_PARAM(  MIDGAME_HALF_OPEN_FILE,              57,    0,     100)
-DECLARE_PARAM(  MIDGAME_OPEN_FILE,                   57,    0,     100)
+DECLARE_PARAM(  MIDGAME_HALF_OPEN_FILE,              57,    0,     300)
+DECLARE_PARAM(  MIDGAME_OPEN_FILE,                   57,    0,     300)
 DECLARE_PARAM(  MIDGAME_PASSED_FORMATION,            75,    0,     300)
 DECLARE_PARAM(  MIDGAME_PAWN_MAJORITY,               53,    0,     300)
 DECLARE_PARAM(  MIDGAME_UNBLOCKED_PASSED_6,         130,    0,     300)
 DECLARE_PARAM(  MIDGAME_UNBLOCKED_PASSED_7,         145,    0,     300)
 
-DECLARE_PARAM(  LAZY_EVAL_MARGIN,                   650,    0, SCORE_MAX)
 
 #if TUNING_ENABLED
 
@@ -313,33 +312,29 @@ namespace search
     }
 
 
-    static inline constexpr int promo_value(const State& state)
+    static bool inline is_quiet(const State& state, const Context* ctxt = nullptr)
     {
-        return state.promotion ? state.weight(state.promotion) - state.weight(PAWN) : 0;
-    }
-
-
-    /* No promotions, checks or moving out of check. Captures are OK. */
-    static bool is_pseudo_quiet(const State& s, const Context* ctxt = nullptr)
-    {
-        if (s.promotion)
-            return false;
-
-        if (ctxt && ctxt->is_evasion())
-            return false;
-
-        if (s.is_check())
-            return false;
-
-        return true;
-    }
-
-
-    static bool is_quiet(const State& state, const Context* ctxt = nullptr)
-    {
-        return is_pseudo_quiet(state, ctxt)
+        return state.promotion != PieceType::QUEEN /* ignore under-promotions */
             && state.capture_value == 0
-            && state.pushed_pawns_score <= 1;
+            && state.pushed_pawns_score <= 1
+            && (!ctxt || !ctxt->is_evasion())
+            && !state.is_check();
+    }
+
+
+    /*
+     * Standing pat: other side made a capture, after which side-to-move's
+     * material evaluation still beats beta, or can't possibly beat alpha?
+     */
+    static bool inline is_standing_pat(Context& ctxt)
+    {
+        if (ctxt.state().capture_value)
+        {
+            const auto score = ctxt.evaluate_material();
+            return score >= ctxt._beta || score + WEIGHT[QUEEN] < ctxt._alpha;
+        }
+
+        return false;
     }
 
 
@@ -464,42 +459,6 @@ namespace search
         ctxt->_move_maker.set_ply(ply);
 
         return ctxt;
-    }
-
-
-    score_t Context::material_gain(bool same_square) const
-    {
-        score_t gain = 0;
-        int sign = 1;
-
-        auto square = Square::UNDEFINED;
-
-        for (const Context* current = this; current; current = current->_parent)
-        {
-            if (current->state().capture_value == 0)
-            {
-                break;
-            }
-
-            if (same_square)
-            {
-                if (square == Square::UNDEFINED)
-                {
-                    square = current->_move.to_square();
-                }
-                else if (current->_move.to_square() != square)
-                {
-                    break;
-                }
-            }
-
-            gain += sign * current->state().capture_value;
-            gain += sign * promo_value(current->state());
-
-            sign = -sign;
-        }
-
-        return gain;
     }
 
 
@@ -1371,9 +1330,9 @@ namespace search
                     }
                     _tt_entry._eval = eval;
                 }
-                /* 2. Tactical (skip in midgame if above LAZY_EVAL_MARGIN or very low depth) */
-                else if (state().is_endgame() || (abs(eval) < LAZY_EVAL_MARGIN && depth() > 3))
-	            {
+                /* 2. Tactical (skip in midgame at very low depth) */
+                else if (state().is_endgame() || depth() > 3)
+                {
                     eval += SIGN[turn] * eval_tactical(*this);
                     eval -= CHECK_BONUS * is_check();
 
@@ -1428,7 +1387,7 @@ namespace search
             _extension += is_singleton() * (is_pv_node() + 1) * ONE_PLY / 2;
 
             /*
-             * extend if move has high historically high cutoffs percentages and counts
+             * extend if move has historically high cutoffs percentages and counts
              */
             _extension += ONE_PLY * (
                    _move == _parent->_tt_entry._hash_move
@@ -1567,7 +1526,7 @@ namespace search
         ctxt->_futility_pruning = _futility_pruning && FUTILITY_PRUNING;
         ctxt->_multicut_allowed = _multicut_allowed && MULTICUT;
 
-        for (auto side : { BLACK, WHITE})
+        for (auto side : { BLACK, WHITE })
             ctxt->_null_move_allowed[side] = _null_move_allowed[side] && (NULL_MOVE_REDUCTION > 0);
 
         ctxt->_tt = _tt;
@@ -1795,28 +1754,18 @@ namespace search
     }
 
 
-    /*
-     * Can the current move be searched with reduced depth?
-     */
-    bool Context::can_reduce() const
+    bool Context::can_reduce()
     {
-        if (_ply == 0 || is_retry() || is_singleton() || is_null_move())
-            return false;
+        ASSERT(!is_null_move());
 
-        if (_move._group == LOSING_CAPTURES || _move._group == KILLER_MOVES)
-            return false;
-
-        if (state().pushed_pawns_score > 1)
-            return false;
-
-        if (is_extended())
-            return false;
-
-        /* evades capture by the null-move refutation */
-        if (_move.from_square() == _parent->_capture_square)
-            return false;
-
-        return is_pseudo_quiet(state(), this);
+        return _ply != 0
+            && !is_retry()
+            && !is_singleton()
+            && !is_extended()
+            && _move._group >= MoveOrder::LOSING_CAPTURES
+            && state().pushed_pawns_score <= 1
+            && _move.from_square() != _parent->_capture_square
+            && is_quiet(state(), this);
     }
 
 
@@ -1834,12 +1783,6 @@ namespace search
     bool Context::is_evasion() const
     {
         return _parent && _parent->is_check();
-    }
-
-
-    bool Context::is_quiet() const
-    {
-        return ::search::is_quiet(state(), this);
     }
 
 
@@ -1889,42 +1832,41 @@ namespace search
      * Late move reduction and pruning.
      * https://www.chessprogramming.org/Late_Move_Reductions
      */
-    LMR Context::late_move_reduce(bool prune)
+    LMR Context::late_move_reduce(bool prune, int count)
     {
         ASSERT(!is_null_move());
         ASSERT(_parent);
 
-        const int to_horizon = depth();
+        const int depth = this->depth();
 
         /* no reduction / pruning in qsearch */
-        if (to_horizon < 0)
+        if (depth < 0)
             return LMR::None;
 
         ASSERT(depth() >= 0);
 
-        const auto count = _parent->next_move_index();
-
         prune = prune && count > 1;
 
         /* counter-based late move pruning */
-        if (prune && to_horizon < int(LMP._size) && count >= LMP._counters[to_horizon])
+        if (prune && depth < int(LMP._size) && count >= LMP._counters[depth])
         {
             prune = prune && can_prune(count);
             if (prune)
                 return LMR::Prune;
         }
 
-        if (to_horizon < 2)
+        if (depth < 3 || count < _parent->_full_depth_count || !can_reduce())
             return LMR::None;
 
-        if (count < _parent->_full_depth_count || !can_reduce())
-            return LMR::None;
-
-        const auto reduction =
-            std::max(LATE_MOVE_REDUCTION, int(sqrt(3.0 * count) / to_horizon));
+    #if 0
+        const auto reduction = std::max(1, int(sqrt(3.0 * count) / depth));
+    #else
+        const auto reduction = std::max(1,
+            int(sqrt(3.0 * count) / depth) + SIGN[is_improving()] - is_capture());
+    #endif
 
         /* reduction drops to qsearch? prune it. */
-        if (prune && to_horizon < reduction)
+        if (prune && depth < reduction)
         {
             prune = prune && can_prune(count);
             if (prune)
@@ -1972,17 +1914,15 @@ namespace search
         if (_fifty >= 100 || is_repeated())
             return true;
 
-        if (_ply < _max_depth || is_null_move())
-            return false;
-
-        if (is_extended() || is_retry() || is_promotion() || is_check())
-            return false;
-
-        /*
-         * last move to search from current node, with score close to mate?
-         * extend the search as to not miss a possible mate in the next move
-         */
-        if (_parent->_score < MATE_LOW && _parent->_score > SCORE_MIN && is_last_move())
+        if (depth() > 0
+            || is_null_move()
+            || is_retry()
+            || state().promotion == PieceType::QUEEN /* ignore under-promotions */
+            || is_check()
+            /* last move to search from current node, with score close to mate?
+               extend the search as to not miss a possible mate in the next move */
+            || (_parent->_score < MATE_LOW && _parent->_score > SCORE_MIN && is_last_move())
+           )
             return false;
 
         /* treat as leaf for now but retry and extend if it beats alpha */
@@ -2124,19 +2064,6 @@ namespace search
     }
 
 
-    bool Context::is_capture() const
-    {
-        if (!_move)
-            return false;
-
-        ASSERT(!is_null_move());
-        ASSERT((!_parent && state().capture_value == 0)
-            || _parent->state().is_capture(_move) == (state().capture_value != 0));
-
-        return state().capture_value != 0;
-    }
-
-
     /*
      * Allow for apps to implement strength levels by slowing down the engine.
      */
@@ -2261,9 +2188,9 @@ namespace search
     }
 
 
-    void MoveMaker::make_capture(Context& ctxt, Move& move, score_t opponent_gain)
+    void MoveMaker::make_capture(Context& ctxt, Move& move)
     {
-        if (make_move(ctxt, move))
+        if (make_move(ctxt, move) && move._score == 0)
         {
             ASSERT(move._state->capture_value);
 
@@ -2275,27 +2202,20 @@ namespace search
              */
             auto capture_gain = move._state->capture_value;
 
-            /* Subtract gain from captures made by the opponent. */
-            capture_gain -= opponent_gain;
+            const auto other = eval_exchanges(move, true /* SEE */);
 
-            if (capture_gain >= 0)
+            if (other < MATE_LOW)
             {
-                /* Subtract re-captures by other side. */
-                const auto other = eval_exchanges(move, true /* SEE */);
+                move._score = -other;
+                move._group = WINNING_CAPTURES;
 
-                if (other < MATE_LOW)
-                {
-                    move._score = -other;
-                    move._group = WINNING_CAPTURES;
-
-                    if (DEBUG_CAPTURES)
-                        ctxt.log_message(
-                            LogLevel::DEBUG,
-                            move.uci() + ": " + std::to_string(move._score) + " " + ctxt.epd());
-                    return;
-                }
-                capture_gain -= other;
+                if (DEBUG_CAPTURES)
+                    ctxt.log_message(
+                        LogLevel::DEBUG,
+                        move.uci() + ": " + std::to_string(move._score) + " " + ctxt.epd());
+                return;
             }
+            capture_gain -= other;
 
             if (capture_gain < 0)
             {
@@ -2303,19 +2223,7 @@ namespace search
             }
             else
             {
-            #if 0
                 move._group = capture_gain > 0 ? WINNING_CAPTURES : EQUAL_CAPTURES;
-            #else
-                if (move._group > 0)
-                {
-                    move._group = MoveOrder::WINNING_CAPTURES;
-                    move._score = capture_gain;
-                }
-                else
-                {
-                    move._group = MoveOrder::EQUAL_CAPTURES;
-                }
-            #endif
 
                 /*
                  * Add sorting score bonus for capturing
@@ -2378,7 +2286,7 @@ namespace search
             return false;
         }
 
-        if (_group_quiet_moves && is_quiet(*move._state))
+        if (_group_quiet_moves && (is_quiet(*move._state) || is_standing_pat(ctxt)))
         {
             _have_quiet_moves = true;
             move._group = MoveOrder::QUIET_MOVES;
@@ -2437,7 +2345,7 @@ namespace search
         ASSERT(start_at < moves().size());
 
         auto& moves_list = moves();
-
+#if 0
         /*
          * Walk backwards skipping over quiet, pruned, and illegal moves.
          */
@@ -2449,8 +2357,11 @@ namespace search
         }
         ASSERT(n == moves_list.size() || moves_list[n]._group >= MoveOrder::QUIET_MOVES);
         _count = n;
-        auto last = moves_list.begin() + n;
-        auto first = moves_list.begin() + start_at;
+        const auto last = moves_list.begin() + n;
+#else
+        const auto last = moves_list.end();
+#endif
+        const auto first = moves_list.begin() + start_at;
 
         insertion_sort(first, last, [&](const Move& lhs, const Move& rhs)
             {
@@ -2519,8 +2430,12 @@ namespace search
                     _count = i;
                     break;
                 }
+
+                if (move._group < MoveOrder::WINNING_CAPTURES
+                 || move._group > MoveOrder::LOSING_CAPTURES)
+                    move._score = 0;
+
                 move._group = MoveOrder::UNORDERED_MOVES;
-                move._score = 0;
             }
         }
 
@@ -2708,7 +2623,6 @@ namespace search
         ASSERT(ctxt._tt);
         ASSERT(moves()[start_at]._group == MoveOrder::UNORDERED_MOVES);
 
-        score_t same_square_gain = 0;
         const KillerMoves* killer_moves = nullptr;
 
         /* "confidence bar" for historical scores */
@@ -2720,7 +2634,6 @@ namespace search
         {
             if (++_phase == 2)
             {
-                same_square_gain = ctxt.material_gain(true);
                 killer_moves = ctxt._tt->get_killer_moves(ctxt._ply);
             }
 
@@ -2764,7 +2677,7 @@ namespace search
                 case 2: /* Captures and killer moves. */
                     if (move._state ? move._state->capture_value : ctxt.state().is_capture(move))
                     {
-                        make_capture(ctxt, move, same_square_gain);
+                        make_capture(ctxt, move);
                         break;
                     }
 

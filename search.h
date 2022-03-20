@@ -138,7 +138,6 @@ namespace search
         }
 
         const score_t* lookup_score(Context&) const;
-        void print(std::ostream&) const;
     };
 
 

@@ -322,7 +322,17 @@ namespace chess
     /*
      * https://www.chessprogramming.org/Traversing_Subsets_of_a_Set
      */
-    void for_each_subset(Bitboard mask, std::function<void(Bitboard)>);
+    template<typename F> void for_each_subset(Bitboard mask, F f)
+    {
+        auto subset = BB_EMPTY;
+        while (true)
+        {
+            f(subset);
+            subset = (subset - mask) & mask;
+            if (subset == 0)
+                break;
+        }
+    }
 
 
     struct State;

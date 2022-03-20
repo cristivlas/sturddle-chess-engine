@@ -33,7 +33,7 @@
 
 #include "perfect_hash.h"
 
-#define USE_VECTOR true
+#define USE_VECTOR false
 
 namespace
 {
