@@ -8,7 +8,7 @@ convoluted or over-engineered, as I tried to separate and encapsulate heuristics
 to turn them on and off (or tweak) at either compile-time or run-time (for experimental and self-teaching purposes).
 
 For the *most part* I have not looked at other engines, which may explain the somewhat "unusual" code structure and file naming.
-(I did however peek at Stockfish in later development, to better understand the Singular Extension idea.)
+(In later development I did peek at Stockfish to better understand the Singular Extension idea, and tweaked LMP and LMR based on a couple of ideas from Crafty and Berserk.)
 
 The engine started as a prototype written in Python, with functionality gradually moved over to C++, hence
 the name Sturddle (as in the hybrid Sturddlefish). 
