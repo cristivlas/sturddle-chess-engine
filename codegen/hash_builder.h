@@ -33,7 +33,6 @@
 
 #include "perfect_hash.h"
 
-#define USE_VECTOR false
 
 namespace
 {
@@ -72,11 +71,8 @@ namespace
             os << "#pragma once\n\n";
             os << "#include <cstdint>\n";
             os << "#include <cstdlib>\n";
-            os << "#include <functional>\n";
-            os << "#include <vector>\n\n";
 
-            os << "namespace chess {\n";
-            write_table_class(os);
+            os << "\nnamespace chess\n{\n";
 
             for (const auto& c : _templates)
             {
@@ -90,7 +86,7 @@ namespace
 
                 ASSERT (group._hash_funcs.size()==64);
 
-                os << "static const AttackTable " << elem.first;
+                os << "const ::chess::AttackTable " << elem.first;
                 os << "[" << group._hash_funcs.size() << "] = {\n";
 
                 write(group, os);
@@ -101,40 +97,11 @@ namespace
         }
 
     private:
-        void write_table_class(std::ostream& os) const
-        {
-        #if USE_VECTOR
-            os << "class AttackTable {\n";
-            os << "    size_t (* const _hash)(uint64_t);\n";
-            os << "    std::vector<uint64_t> _data;\n\n";
-            os << "public:\n";
-            os << "    AttackTable(size_t (*hash)(uint64_t), std::function<void(std::vector<uint64_t>&)> init)\n";
-            os << "        : _hash(hash) { init(_data);\n";
-            os << "    }\n";
-            os << "    inline uint64_t operator[] (uint64_t k) const {\n";
-            os << "        return _data[_hash(k)];\n";
-            os << "    }\n";
-            os << "};\n\n";
-        #else
-            os << "class AttackTable {\n";
-            os << "    size_t (* const _hash)(uint64_t);\n";
-            os << "    uint64_t* _data = nullptr;\n\n";
-            os << "public:\n";
-            os << "    AttackTable(size_t (*hash)(uint64_t), std::function<void(uint64_t*&)> init)\n";
-            os << "        : _hash(hash) { init(_data);\n";
-            os << "    }\n";
-            os << "    inline uint64_t operator[] (uint64_t k) const {\n";
-            os << "        return _data[_hash(k)];\n";
-            os << "    }\n";
-            os << "};\n\n";
-        #endif
-        }
-
         void write(const Group& g, std::ostream& os) const
         {
             for (size_t i = 0; i != g._hash_funcs.size(); ++i)
             {
-                os << "    AttackTable(" << g._hash_funcs[i] << ", " << g._init_funcs[i] << "),\n";
+                os << "    ::chess::AttackTable(" << g._hash_funcs[i] << ", " << g._init_funcs[i] << "),\n";
             }
         }
 
@@ -142,19 +109,15 @@ namespace
         {
             std::ostringstream os;
 
-        #if USE_VECTOR
-            os << "[](std::vector<uint64_t>& data) {\n";
-            os << "        data.resize(" << data.size() << ");\n";
-        #else
             os << "[](uint64_t *& data) {\n";
-            os << "        data = new uint64_t [" << data.size() << "];\n";
-        #endif
+            os << "        data = new uint64_t [" << data.size() + 1 << "]();\n";
+
             for (size_t i = 0; i != data.size(); ++i)
             {
                 if (data[i] == 0)
                     continue;
 
-                os << "        data[" << i << "] = " << "0x" << std::hex;
+                os << "        data[" << i + 1 << "] = " << "0x" << std::hex;
                 os << std::setw(16) << std::setfill<char>('0') << data[i];
                 os << std::dec << "ULL;\n";
             }

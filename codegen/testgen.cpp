@@ -19,7 +19,7 @@ static AttackMasks BB_DIAG_MASKS, BB_FILE_MASKS, BB_RANK_MASKS;
 static void
 test_attack_tables(
     const std::vector<int>& deltas,
-    const test::chess::AttackTable (&tables)[64])
+    const chess::AttackTable (&tables)[64])
 {
     for (int square = 0; square < 64; ++square)
     {
@@ -41,7 +41,7 @@ test_attack_tables(
 
 static void
 perf_test(
-    const test::chess::AttackTable (&tables)[64],
+    const chess::AttackTable (&tables)[64],
     int iterations,
     const std::vector<int>& deltas)
 {
@@ -82,7 +82,7 @@ perf_test(
 static void
 init_attack_masks(
     AttackMasks& mask_table,
-    const test::chess::AttackTable (&tables)[64],
+    const chess::AttackTable (&tables)[64],
     const std::vector<int>& deltas)
 {
     for (int square = 0; square < 64; ++square)
@@ -108,9 +108,9 @@ int main()
 
     chess::_init();
 
-    init_attack_masks(BB_DIAG_MASKS, test::chess::BB_DIAG_ATTACKS, diag_attacks);
-    init_attack_masks(BB_FILE_MASKS, test::chess::BB_FILE_ATTACKS, file_attacks);
-    init_attack_masks(BB_RANK_MASKS, test::chess::BB_RANK_ATTACKS, rank_attacks);
+    init_attack_masks(chess::BB_DIAG_MASKS, test::chess::BB_DIAG_ATTACKS, diag_attacks);
+    init_attack_masks(chess::BB_FILE_MASKS, test::chess::BB_FILE_ATTACKS, file_attacks);
+    init_attack_masks(chess::BB_RANK_MASKS, test::chess::BB_RANK_ATTACKS, rank_attacks);
 
     test_attack_tables(diag_attacks, test::chess::BB_DIAG_ATTACKS);
     test_attack_tables(file_attacks, test::chess::BB_FILE_ATTACKS);

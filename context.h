@@ -27,8 +27,10 @@
 #include <string>
 #include <unordered_set> /* unordered_multiset */
 #include "Python.h"
+#include "config.h"
 #include "intrusive.h"
 #include "search.h"
+#include "utility.h"
 
 /* Configuration API */
 struct Param { int val = 0; int min_val; int max_val; };
@@ -95,13 +97,16 @@ namespace search
 
         void set_ply(int ply) { _ply = ply; }
 
-        void print_moves(std::ostream&) const;
         int rewind(Context&, int where, bool reorder);
 
         /* SMP: copy the root moves from the main thread to the other workers. */
         void set_initial_moves(const MovesList& moves);
 
-        const MovesList& get_moves() const;
+        const MovesList& get_moves() const
+        {
+            ASSERT(_count >= 0);
+            return moves();
+        }
 
     private:
         void ensure_moves(Context&);
@@ -147,7 +152,16 @@ namespace search
     };
 
 
-    enum class LMR : int
+    inline void MoveMaker::mark_as_illegal(Move& move)
+    {
+        move._group = MoveOrder::ILLEGAL_MOVES;
+
+        ASSERT(_count > 0);
+        --_count;
+    }
+
+
+    enum class LMRAction : int
     {
         None = 0,
         Ok,
@@ -207,7 +221,7 @@ namespace search
         bool        _null_move_allowed[2] = { true, true };
         RETRY       _retry_above_alpha = RETRY::None;
         bool        _retry_next = false;
-
+        int         _double_ext = 0;
         int         _extension = 0; /* count pending fractional extensions */
         int         _fifty = 0;
         int         _full_depth_count = late_move_reduction_count();
@@ -242,20 +256,25 @@ namespace search
 
         int         depth() const { return _max_depth - _ply; }
 
+        static int  double_ext_margin();
         std::string epd() const;
 
         /* Static evaluation */
         score_t     _evaluate();    /* no repetitions, no fifty-moves rule */
         score_t     evaluate();     /* call _evaluate and do the above */
         score_t     evaluate_end();
-        score_t     evaluate_material(bool with_piece_squares = true);
+        score_t     evaluate_material(bool with_piece_squares = true) const;
+        int         eval_king_safety();
 
         void        extend();       /* fractional extensions */
         ContextPtr  first_move();
         score_t     futility_margin();
+
+        bool        has_improved(score_t margin = 0) { return improvement() > margin; }
         bool        has_moves() { return _move_maker.has_moves(*this); }
         bool        has_passed_pawns() const;
 
+        score_t     improvement();
         static void init();
 
         bool        is_beta_cutoff(const ContextPtr&, score_t);
@@ -264,7 +283,6 @@ namespace search
         bool        is_check() const { return state().is_check(); }
         bool        is_evasion() const;
         bool        is_extended() const;
-        bool        is_improving();
         bool        is_last_move();
         bool        is_leftmost() const { return _ply == 0 || _leftmost; }
         bool        is_leaf(); /* treat as terminal node ? */
@@ -282,7 +300,7 @@ namespace search
         bool        is_singleton() const { return _is_singleton; }
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
 
-        LMR         late_move_reduce(bool prune, int move_count);
+        LMRAction   late_move_reduce(bool prune, int move_count);
         static int  late_move_reduction_count();
 
         static void log_message(LogLevel, const std::string&, bool force = true);
@@ -303,7 +321,7 @@ namespace search
         void        set_tt(TranspositionTable* tt) { _tt = tt; }
 
         bool        should_verify_null_move() const;
-        score_t     singular_margin() const;
+        int         singular_margin() const;
 
         Color       turn() const { return state().turn; }
 
@@ -363,16 +381,98 @@ namespace search
     };
 
 
+    inline bool Context::can_forward_prune() const
+    {
+        return _parent
+            && (_parent->_mate_detected == 0 || _parent->_mate_detected % 2)
+            && !is_pv_node()
+            && (_max_depth >= 6 || !is_qsearch())
+            && !_excluded
+            && state().pushed_pawns_score <= 1
+            && !state().just_king_and_pawns()
+
+            && (_tt_entry._king_safety == SCORE_MIN
+                || depth() >= 5
+                || SIGN[!state().turn] * _tt_entry._king_safety >= KING_SAFETY_MARGIN)
+
+            && !is_check();
+    }
+
+
+    inline bool Context::can_prune(int count) const
+    {
+        ASSERT(_ply > 0);
+        ASSERT(!is_null_move());
+        ASSERT(_move);
+
+        if (is_singleton() || is_extended() || is_pv_node() || is_repeated())
+            return false;
+
+        return _parent->can_prune_move(_move, count);
+    }
+
+
+    inline bool Context::can_prune_move(const Move& move, int count) const
+    {
+        ASSERT(move && move._state && move != _move);
+        ASSERT(repeated_count(*move._state) == 0);
+        ASSERT(can_forward_prune()); /* pre-req */
+
+        if (move.promotion() == chess::PieceType::QUEEN
+            || (move._state->capture_value != 0)
+            || (move._group <= MoveOrder::HISTORY_COUNTERS)
+            || (move.from_square() == _capture_square)
+            || (move == _counter_move)
+            || (move == _tt_entry._hash_move)
+            || (move._state->is_check())
+            || (move._group == MoveOrder::TACTICAL_MOVES && count < 13)
+           )
+            return false;
+
+        ASSERT(!is_check());
+
+        return true;
+    }
+
+
+    inline bool Context::can_reduce()
+    {
+        ASSERT(!is_null_move());
+
+        return _ply != 0
+            && !is_retry()
+        #if 0
+            && !is_singleton()
+        #endif
+            && !is_extended()
+            && _move._group >= MoveOrder::WINNING_CAPTURES
+            && state().pushed_pawns_score <= 1
+            && _move.from_square() != _parent->_capture_square
+            && !state().is_check();
+    }
+
+
+    inline int Context::double_ext_margin()
+    {
+        return DOUBLE_EXT_MARGIN;
+    }
+
+
+    inline float Context::history_score(const Move& move) const
+    {
+        ASSERT(_tt);
+        ASSERT(move);
+        ASSERT(move != _move);
+
+        return _tt->history_score(state(), turn(), move)
+            + COUNTER_MOVE_BONUS * (move == _counter_move);
+    }
+
+
     inline bool Context::is_extended() const
     {
         ASSERT(_parent);
         return _max_depth > _parent->_max_depth;
-    }
-
-
-    inline bool Context::is_improving()
-    {
-        return _ply >= 2 && evaluate_material() > _parent->_parent->evaluate_material();
     }
 
 
@@ -399,6 +499,40 @@ namespace search
     inline bool Context::is_pvs_ok() const
     {
         return (_algorithm == NEGASCOUT) && !is_retry() && !is_leftmost();
+    }
+
+
+    /*
+     * Check how much time is left, update NPS, call optional Python callback.
+     */
+    inline bool Context::on_next()
+    {
+        if (_tid == 0 && ++_callback_count >= CALLBACK_PERIOD)
+        {
+            _callback_count = 0; /* reset */
+
+            auto millisec = check_time_and_update_nps();
+
+            if (is_cancelled()) /* time is up? */
+                return false;
+
+            if (_on_next)
+                cython_wrapper::call(_on_next, _engine, millisec);
+        }
+
+        return !is_cancelled();
+    }
+
+
+    inline bool Context::should_verify_null_move() const
+    {
+        return depth() >= NULL_MOVE_MIN_VERIFICATION_DEPTH;
+    }
+
+
+    inline int Context::singular_margin() const
+    {
+        return depth() * SINGULAR_MARGIN;
     }
 
 } /* namespace */

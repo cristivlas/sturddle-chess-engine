@@ -46,7 +46,7 @@ using score_t = int32_t;
 
 #define ADAPTIVE_NULL_MOVE                  true
 
-#define CACHE_HEURISTIC_CUTOFFS             false
+#define CACHE_HEURISTIC_CUTOFFS             true
 
 /*
  * Count valid moves made as nodes if true, otherwise use effectively
@@ -55,15 +55,6 @@ using score_t = int32_t;
 #define COUNT_VALID_MOVES_AS_NODES          true
 
 #define EVAL_MOBILITY                       true
-
-/*
- * Experiment with giving pawns a higher value towards endgame.
- * This is an unfinished idea, needs a smarter approach to incremental
- * updates of material and piece-square evaluations.
- */
-/*
-#define ENDGAME_INCREASED_PAWN_VALUE        150
-*/
 
 #define EXCHANGES_DETECT_CHECKMATE          false
 
@@ -108,7 +99,7 @@ using score_t = int32_t;
 
 
 /*
- * The hash table size in MB can be changed via set_param()
+ * NOTE: the hash table size (in MB) can be changed at runtime with set_param()
  */
 #if LOW_MEMORY_PROFILE
   /* https://planetmath.org/goodhashtableprimes */
@@ -117,15 +108,16 @@ using score_t = int32_t;
   constexpr size_t TRANSPOSITION_TABLE_SLOTS = 16 * 1024 * 1024;
 #endif /* LOW_MEMORY_PROFILE */
 
-
-#define TUNING_ENABLED                      true
+/* Export parameters to Python scripts? */
+#define TUNING_ENABLED                      false
 
 /* if false, use piece-type/to-square tables */
 #define USE_BUTTERFLY_TABLES                false
 
-
 /* Check time and call user-defined callback every N nodes */
-constexpr int CALLBACK_COUNT                = 8192;
+#ifndef CALLBACK_PERIOD
+  #define CALLBACK_PERIOD                   4096
+#endif
 
 constexpr int ENDGAME_PIECE_COUNT           = 12;
 
@@ -133,7 +125,6 @@ constexpr int ENDGAME_PIECE_COUNT           = 12;
 constexpr int MULTICUT_M                    = 6;
 constexpr int MULTICUT_C                    = 3;
 
-constexpr int KILLER_MOVE_ENTRIES           = 2;
 
 namespace search
 {
@@ -187,7 +178,7 @@ template<typename T> struct Hasher
 #define _TOSTR(x) _STR(x)
 
 #define ASSERT_ALWAYS(e) assert_expr((e), __FILE__ ":" _TOSTR(__LINE__) " " _STR(e))
-#define ASSERT_MESSAGE(e, m) assert_expr((e), __FILE__ ":" _TOSTR(__LINE__) " " m)
+#define ASSERT_MESSAGE(e, m) assert_expr((e), __FILE__ ":" _TOSTR(__LINE__) " " + m)
 
 #if NO_ASSERT
  #define ASSERT(e)
@@ -195,11 +186,11 @@ template<typename T> struct Hasher
  #define ASSERT(e) ASSERT_ALWAYS(e)
 #endif
 
-template <typename T> static inline constexpr void assert_expr(T&& expr, const char* what)
+template <typename T, typename S> static inline constexpr void assert_expr(T&& expr, S what)
 {
     while (!expr)
     {
-    #if !defined(NDEBUG)
+    #if !defined(NDEBUG) || defined(_DEBUG)
         abort();
     #else
         throw std::logic_error(what);

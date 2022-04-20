@@ -17,8 +17,11 @@ Compiler args.
 """
 inc_dirs = ['-I./libpopcnt', '-I./thread-pool']
 
-# Debug build
+# Assert-enabled build
 # args = []
+
+# Debug build
+# args = [ '-O0', '-D_DEBUG' ]
 
 # Release build
 args = ['-DNO_ASSERT', '-DLAZY_STATE_COPY' ]
@@ -26,7 +29,7 @@ args = ['-DNO_ASSERT', '-DLAZY_STATE_COPY' ]
 if sysconfig.get_platform().startswith('win'):
     args.append('/std:c++17')
 else:
-    if args:
+    if '-O0' not in args:
         args.append('-O3')
     args.append('-std=c++17')
     args.append('-Wall')

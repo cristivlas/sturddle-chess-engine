@@ -28,56 +28,16 @@
 #include <map>
 #include <random>
 #include <sstream>
-#include <thread>
-#include "context.h"
-#include "search.h"
-#include "utility.h"
+
+#define CONFIG_IMPL
+  #include "context.h"
+#undef CONFIG_IMPL
 
 using namespace chess;
 using search::TranspositionTable;
 
-/*---------------------------------------------------------------------------
- *
- * Configuration API, for tweaking parameters via Python scripts.
- *
- *--------------------------------------------------------------------------*/
-struct Config
-{
-    struct Param
-    {
-        int* const _val = nullptr;
-        const int  _min = 0;
-        const int  _max = 0;
-        const int  _idx = 0;
-    };
 
-    using Namespace = std::map<std::string, Param>;
-    static Namespace _namespace;
-
-    /* Register parameter names with Config::_namespace */
-    Config(const char* name, int* val, int min_val, int max_val)
-    {
-        _namespace.emplace(name, Config::Param{ val, min_val, max_val });
-    }
-};
-
-#if TUNING_ENABLED
-  #define DECLARE_PARAM(name, val, min_val, max_val) \
-    static int name(val); \
-    Config param_##name(_TOSTR(name), &name, min_val, max_val);
-#else
- /*
-  * tuning disabled: params become compile-time constants
-  */
-  #define DECLARE_PARAM(name, val, min_val, max_val) static constexpr int name = val;
-#endif /* TUNING_ENABLED */
-
-#define DECLARE_ALIAS(name, alias, val, min_val, max_val) \
-    static int name(val); \
-    Config param_##name(_TOSTR(alias), &name, min_val, max_val);
-
-
-/* Late-move pruning counts (idea borrowed from Crafty) */
+/* Late-move pruning counts (initialization idea borrowed from Crafty) */
 struct LMP
 {
     const size_t _size;
@@ -92,105 +52,25 @@ struct LMP
     }
 } LMP;
 
+/* Late-move reduction tables (adapted from berserk) */
+struct LMR
+{
+    int _table[PLY_MAX][64] = { { 0 }, { 0 } };
 
-Config::Namespace Config::_namespace = {
-#if TUNING_ENABLED && EVAL_MOBILITY
-    /* Piece mobility coefficients */
-    { "MOBILITY_PAWN", Config::Param{ &MOBILITY[PieceType::PAWN], 0, 50 } },
-    { "MOBILITY_KNIGHT", Config::Param{ &MOBILITY[PieceType::KNIGHT], 0, 50 } },
-    { "MOBILITY_BISHOP", Config::Param{ &MOBILITY[PieceType::BISHOP], 0, 50 } },
-    { "MOBILITY_ROOK", Config::Param{ &MOBILITY[PieceType::ROOK], 0, 50 } },
-    { "MOBILITY_QUEEN", Config::Param{ &MOBILITY[PieceType::QUEEN], 0, 50 } },
-    { "MOBILITY_KING", Config::Param{ &MOBILITY[PieceType::KING], 0, 50 } },
-#endif /* TUNING_ENABLED && EVAL_MOBILITY */
-};
+    LMR()
+    {
+        for (int depth = 1; depth < PLY_MAX; ++depth)
+            for (int moves = 1; moves < 64; ++moves)
+                _table[depth][moves] = 0.1 + log(depth) * log(moves) / 2;
+    }
+} LMR;
 
-#if SMP
-    static auto THREAD_MAX = std::thread::hardware_concurrency();
-#else
-    static constexpr int THREAD_MAX = 1;
-#endif
-static constexpr int HASH_MIN = 16; /* MB */
-
-/****************************************************************************
- *              NAME                                VALUE  MIN      MAX
- ****************************************************************************/
-/* General */
-DECLARE_ALIAS(  STATIC_EXCHANGES, SEE,                0,    0,       1)
-DECLARE_PARAM(  ASPIRATION_WINDOW,                    1,    0,       1)
-DECLARE_PARAM(  DEBUG_CAPTURES,                       0,    0,       1)
-DECLARE_PARAM(  DEBUG_HISTORY,                        0,    0,       1)
-DECLARE_PARAM(  DEBUG_MATERIAL,                       0,    0,       1)
-DECLARE_PARAM(  DEBUG_PRUNING,                        0,    0,       1)
-DECLARE_PARAM(  EVAL_FUZZ,                            0,    0,     100)
-DECLARE_PARAM(  FIFTY_MOVES_RULE,                     1,    0,       1)
-DECLARE_PARAM(  FUTILITY_PRUNING,                     1,    0,       1)
-DECLARE_PARAM(  LATE_MOVE_REDUCTION_COUNT,            4,    0,     100)
-DECLARE_PARAM(  MANAGE_TIME,                          1,    0,       1)
-DECLARE_PARAM(  MULTICUT,                             1,    0,       1)
-
-#if ADAPTIVE_NULL_MOVE
-DECLARE_PARAM(  NULL_MOVE_FACTOR,                   200,   10,    1000)
-#endif /* ADAPTIVE_NULL_MOVE */
-
-DECLARE_PARAM(  NULL_MOVE_REDUCTION,                  4,    0,       4)
-DECLARE_PARAM(  NULL_MOVE_MARGIN,                   293,    0,    1000)
-DECLARE_PARAM(  NULL_MOVE_MIN_VERIFICATION_DEPTH,    14,    0,     100)
-
-DECLARE_PARAM(  SINGULAR_MARGIN,                      6,    0,     100)
-DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
-
-/* Move ordering */
-DECLARE_PARAM(  CAPTURE_LAST_MOVED_BONUS,            21,    0,     100)
-DECLARE_PARAM(  COUNTER_MOVE_BONUS,                  20,    0,     100)
-DECLARE_PARAM(  HISTORY_HIGH,                        95,    0,     100)
-
-/* Tactical evaluation */
-DECLARE_PARAM(  BISHOP_PAIR,                         65,    0,     100)
-DECLARE_PARAM(  BISHOPS_STRENGTH,                    13,    0,     100)
-DECLARE_PARAM(  CHECK_BONUS,                         50,    0,     100)
-DECLARE_PARAM(  CENTER_ATTACKS,                      16,    0,     100)
-DECLARE_PARAM(  CENTER_OCCUPANCY,                     3,    0,     100)
-DECLARE_PARAM(  REDUNDANT_ROOK,                    -125, -500,       0)
-
-DECLARE_PARAM(  ENDGAME_CONNECTED_ROOKS,             13,    0,     100)
-DECLARE_PARAM(  ENDGAME_KING_QUADRANT,                4,    0,     100)
-DECLARE_PARAM(  ENDGAME_DOUBLED_PAWNS,              -24, -100,       0)
-DECLARE_PARAM(  ENDGAME_ISOLATED_PAWNS,             -15, -100,       0)
-DECLARE_PARAM(  ENDGAME_PASSED_FORMATION,           100,    0,     300)
-DECLARE_PARAM(  ENDGAME_PAWN_MAJORITY,               73,    0,     300)
-DECLARE_PARAM(  ENDGAME_UNBLOCKED_PASSED_6,         140,    0,     300)
-DECLARE_PARAM(  ENDGAME_UNBLOCKED_PASSED_7,         160,    0,     300)
-
-DECLARE_PARAM(  MIDGAME_CONNECTED_ROOKS,             25,    0,     100)
-DECLARE_PARAM(  MIDGAME_KING_QUADRANT,               71,    0,     100)
-DECLARE_PARAM(  MIDGAME_KING_OUT_PENALTY,           -62, -500,       0)
-DECLARE_PARAM(  MIDGAME_DOUBLED_PAWNS,              -20, -100,       0)
-DECLARE_PARAM(  MIDGAME_ISOLATED_PAWNS,             -17, -100,       0)
-DECLARE_PARAM(  MIDGAME_HALF_OPEN_FILE,              57,    0,     300)
-DECLARE_PARAM(  MIDGAME_OPEN_FILE,                   57,    0,     300)
-DECLARE_PARAM(  MIDGAME_PASSED_FORMATION,            75,    0,     300)
-DECLARE_PARAM(  MIDGAME_PAWN_MAJORITY,               53,    0,     300)
-DECLARE_PARAM(  MIDGAME_UNBLOCKED_PASSED_6,         130,    0,     300)
-DECLARE_PARAM(  MIDGAME_UNBLOCKED_PASSED_7,         145,    0,     300)
-
-
-#if TUNING_ENABLED
-
-extern int ENDGAME_PAWN_SQUARE_TABLE[64];
-
-/* endgame pawns table */
-DECLARE_PARAM(  ENDGAME_PAWNS_2, ENDGAME_PAWN_SQUARE_TABLE[48], -100, 100)
-DECLARE_PARAM(  ENDGAME_PAWNS_3, ENDGAME_PAWN_SQUARE_TABLE[40], -100, 100)
-DECLARE_PARAM(  ENDGAME_PAWNS_4, ENDGAME_PAWN_SQUARE_TABLE[32], -100, 100)
-DECLARE_PARAM(  ENDGAME_PAWNS_5, ENDGAME_PAWN_SQUARE_TABLE[24], -100, 200)
-DECLARE_PARAM(  ENDGAME_PAWNS_6, ENDGAME_PAWN_SQUARE_TABLE[16], -100, 300)
-DECLARE_PARAM(  ENDGAME_PAWNS_7, ENDGAME_PAWN_SQUARE_TABLE[8],  -100, 400)
-#endif /* TUNING_ENABLED */
-
-#undef DECLARE_PARAM
-
-
+/*---------------------------------------------------------------------------
+ *
+ * Configuration API, for tweaking parameters via Python scripts
+ * (such as https://chess-tuning-tools.readthedocs.io/en/latest/)
+ *
+ *--------------------------------------------------------------------------*/
 std::map<std::string, Param> _get_param_info()
 {
     std::map<std::string, Param> info;
@@ -234,11 +114,13 @@ void _set_param(const std::string& name, int value, bool echo)
     else
     {
         ASSERT_ALWAYS(iter->second._val);
-        *iter->second._val = value;
 
-        if (echo) /* debug */
+        if (*iter->second._val != value)
         {
-            std::clog << name << " = " << *iter->second._val << "\n";
+            *iter->second._val = value;
+
+            if (echo)
+                std::clog << name << " = " << *iter->second._val << "\n";
         }
     }
 }
@@ -256,46 +138,6 @@ std::map<std::string, int> _get_params()
 }
 
 
-#if TUNING_ENABLED
-
-static void set_row(int (&table)[64], int row, int value)
-{
-    for (int i = 0; i != 8; ++i)
-        table[(8 - row) * 8 + i] = value;
-}
-
-
-static void init_endgame_pawns_table()
-{
-    set_row(ENDGAME_PAWN_SQUARE_TABLE, 2, ENDGAME_PAWNS_2);
-    set_row(ENDGAME_PAWN_SQUARE_TABLE, 3, ENDGAME_PAWNS_3);
-    set_row(ENDGAME_PAWN_SQUARE_TABLE, 4, ENDGAME_PAWNS_4);
-    set_row(ENDGAME_PAWN_SQUARE_TABLE, 5, ENDGAME_PAWNS_5);
-    set_row(ENDGAME_PAWN_SQUARE_TABLE, 6, ENDGAME_PAWNS_6);
-    set_row(ENDGAME_PAWN_SQUARE_TABLE, 7, ENDGAME_PAWNS_7);
-
-#if !defined(NDEBUG)
-    if (search::Context::_log_message)
-    {
-        std::ostringstream out;
-        const auto& table = ENDGAME_PAWN_SQUARE_TABLE;
-        for (auto i = 0; i < 64; ++i)
-        {
-            if (i % 8 == 0)
-                out << "\n";
-            out << std::setw(3) << table[i] << ", ";
-        }
-        search::Context::log_message(LogLevel::DEBUG, out.str());
-    }
-#endif /* !NDEBUG */
-}
-#else
-static void init_endgame_pawns_table()
-{
-}
-#endif /* TUNING_ENABLED */
-
-
 namespace search
 {
     /* Evaluate material plus piece-squares from the point of view
@@ -303,7 +145,7 @@ namespace search
      * evaluate methods which apply the perspective of the side-to-move.
      * Side-effect: caches simple score inside the State object.
      */
-    static inline score_t eval_material_and_piece_squares(State& state)
+    static inline int eval_material_and_piece_squares(State& state)
     {
         if (state.simple_score == 0)
             state.simple_score = state.eval_simple();
@@ -326,7 +168,7 @@ namespace search
      * Standing pat: other side made a capture, after which side-to-move's
      * material evaluation still beats beta, or can't possibly beat alpha?
      */
-    static bool inline is_standing_pat(Context& ctxt)
+    static bool inline is_standing_pat(const Context& ctxt)
     {
         if (ctxt.state().capture_value)
         {
@@ -344,7 +186,7 @@ namespace search
     std::atomic_bool Context::_cancel(false);
     std::mutex Context::_mutex;
 
-    int     Context::_time_limit = 0; /* milliseconds */
+    int     Context::_time_limit = -1; /* milliseconds */
     time    Context::_time_start;
     asize_t Context::_callback_count(0);
 
@@ -404,7 +246,6 @@ namespace search
     /* static */ void Context::init()
     {
         _init();
-        init_endgame_pawns_table();
     }
 
 
@@ -462,16 +303,6 @@ namespace search
     }
 
 
-    float Context::history_score(const Move& move) const
-    {
-        ASSERT(_tt);
-        ASSERT(move);
-        ASSERT(move != _move);
-
-        return _tt->history_score(*this, move) + COUNTER_MOVE_BONUS * (move == _counter_move);
-    }
-
-
     /*
      * Track the best score and move so far, return true if beta cutoff.
      */
@@ -481,7 +312,7 @@ namespace search
 
         if (!is_cancelled())
         {
-            ASSERT(score >= SCORE_MIN && score <= SCORE_MAX);
+            ASSERT(score > SCORE_MIN && score < SCORE_MAX);
             ASSERT(_alpha >= _score); /* invariant */
 
             if (score > _score)
@@ -528,10 +359,15 @@ namespace search
                             if (is_null_move())
                             {
                                 ASSERT(_parent);
+
                                 if (next_ctxt->is_capture()) /* null move refuted by capture */
                                     _parent->_capture_square = next_ctxt->_move.to_square();
 
+                            #if 1
                                 if (score >= MATE_HIGH)
+                            #else
+                                if (score >= CHECKMATE - next_ctxt->depth())
+                            #endif
                                     _parent->_mate_detected = CHECKMATE - score + 1;
                             }
                         }
@@ -609,7 +445,7 @@ namespace search
     }
 
 
-    score_t Context::evaluate_material(bool with_piece_squares)
+    score_t Context::evaluate_material(bool with_piece_squares) const
     {
         if (with_piece_squares)
         {
@@ -646,7 +482,7 @@ namespace search
     /*
      * NOTE: uses top half of MoveMaker's moves buffers to minimize memory allocations.
      */
-    static inline score_t do_exchanges(
+    static inline int do_exchanges(
         const State&    state,
         Bitboard        mask,
         score_t         gain = 0,
@@ -685,7 +521,7 @@ namespace search
             Context::log_message(LogLevel::DEBUG, out.str());
         }
 
-        score_t score = 0;
+        int score = 0;
         int moves_count = 0;
 
         State next_state;
@@ -795,7 +631,7 @@ namespace search
     /*
      * Evaluate same square exchanges
      */
-    static score_t eval_exchanges(const Move& move, bool approximate)
+    static inline score_t eval_exchanges(const Move& move, bool approximate)
     {
         score_t val = 0;
 
@@ -872,7 +708,7 @@ namespace search
             Context::log_message(LogLevel::DEBUG, out.str());
         }
 
-        score_t score = 0;
+        int score = 0;
         State next_state;
 
         /*
@@ -977,7 +813,7 @@ namespace search
     /*
      * Evaluate the most valuable hanging piece, then call do_captures.
      */
-    static score_t eval_captures(Context& ctxt)
+    static inline score_t eval_captures(Context& ctxt)
     {
         if (DEBUG_CAPTURES)
             ctxt.log_message(LogLevel::DEBUG, "eval_captures");
@@ -1012,32 +848,45 @@ namespace search
      * Tactical evaluations.
      * All tactical scores are computed from the white side's perspective.
      *----------------------------------------------------------------------*/
-    static inline score_t eval_center(const State& state, int pc)
+    static inline int eval_center(const State& state, int pc)
     {
-        score_t score = 0;
+        int attacks = 0;
+        int occupancy = 0;
 
-        for (auto color: {BLACK, WHITE})
+        for (auto color : { BLACK, WHITE })
         {
-            score += SIGN[color]
-                * popcount(state.occupied_co(color) & BB_CENTER)
-                * interpolate(pc, CENTER_OCCUPANCY, 0);
+            occupancy += SIGN[color] * popcount(state.occupied_co(color) & BB_CENTER);
 
             for_each_square(BB_CENTER, [&](Square square) {
-                score += SIGN[color]
-                    * popcount(state.attackers_mask(color, square))
-                    * interpolate(pc, CENTER_ATTACKS, 0);
+                attacks += SIGN[color] * popcount(state.attackers_mask(color, square));
             });
         }
-        return score;
+        return attacks * interpolate(pc, CENTER_ATTACKS, 0) +
+            occupancy * interpolate(pc, CENTER_OCCUPANCY, 0);
     }
+
+
+    static inline Bitboard king_area(const State& state, Square king)
+    {
+        const auto f = square_file(king);
+        const auto r = square_rank(king);
+
+        const auto file = BB_FILES[f + (f == 0) - (f == 7)];
+        const auto rank = BB_RANKS[r + (r == 0) - (r == 7)];
+
+        return(file | shift_left(file) | shift_right(file))
+            & (rank | shift_up(rank) | shift_down(rank))
+            & ~BB_SQUARES[king];
+    }
+
 
     /*
      * Count friendly pieces minus opponent's pieces in the king
      * quadrant, as an approximate measure of the king's safety.
      */
-    static inline score_t eval_king_quadrant(const State& state)
+    static inline int eval_king_quadrant(const State& state, int pcs)
     {
-        score_t score[] = {0, 0};
+        int score = 0;
 
         for (auto color: {BLACK, WHITE})
         {
@@ -1051,55 +900,119 @@ namespace search
                 {
                     q &= ~king_mask;
 
-                    score[color] = popcount(q & ours) - popcount(q & theirs)
+                    score += SIGN[color] * (
+                        popcount(q & ours) - popcount(q & theirs)
                         /* count queens as 2 pieces */
                         + popcount(q & state.queens & ours)
-                        - popcount(q & state.queens & theirs);
+                        - popcount(q & state.queens & theirs));
 
                     break;
                 }
             }
         }
 
-        return score[WHITE] - score[BLACK];
+        return score * interpolate(pcs, MIDGAME_KING_QUADRANT, ENDGAME_KING_QUADRANT);
     }
 
 
-    /*
-     * Add per-rank penalty for "developing" the king to each rank past 2nd.
-     */
-    static inline score_t eval_midgame_king_out(const State& state, int piece_count)
+    static inline int eval_king_safety(const State& state, int pcs)
     {
-        ASSERT(!state.is_endgame());
-
-        score_t score[] = { 0, 0 };
+        int attacks = 0; /* attacks around the king */
+        int castle  = 0; /* castling rights bonuses */
+        int outside = 0; /* penalty for king out of ranks [0,1] */
+        int shield  = 0; /* pawn shield bonus */
 
         for (auto color : { BLACK, WHITE })
         {
             const auto king = state.king(color);
-            const auto kings_rank = chess::square_rank(king);
-            ASSERT(kings_rank >= 0 && kings_rank <= 7);
+            const auto ranks = color ? square_rank(king) : 7 - square_rank(king);
+            const auto area = king_area(state, king);
 
-            const auto ranks_out = color ? kings_rank : 7 - kings_rank;
+            const auto color_mask = state.occupied_co(color);
 
-            if (ranks_out > 1)
+            if (ranks > 1)
             {
-                score[color] += interpolate(piece_count, MIDGAME_KING_OUT_PENALTY, 0) * ranks_out;
+                outside += SIGN[color] * (ranks - 1);
             }
+            else
+            {
+                castle += SIGN[color]
+                    * (ranks == 0)
+                    * popcount(state.castling_rights & BB_BACKRANKS[color]);
+
+                if (const auto pawns = state.pawns & color_mask)
+                {
+                    shield += SIGN[color]
+                        * bool(BB_FILES[square_file(king)] & pawns)
+                        * popcount(area & pawns);
+                }
+            }
+
+            /*
+             * https://www.chessprogramming.org/King_Safety  Attacking King Zone
+             */
+            static constexpr int ATTACK_WEIGHT[8] = { 0, 0, 50, 75, 88, 94, 97, 99 };
+
+            for_each_square(area & ~color_mask, [&](Square square) {
+                int attacks_value = 0;
+
+                const auto attackers_mask =
+                    state.attacker_pieces_mask(!color, square);
+
+                for_each_square(attackers_mask, [&](Square attacking_square) {
+                    const auto pt = state.piece_type_at(attacking_square);
+                    ASSERT(pt > PieceType::PAWN && pt < PieceType::KING);
+
+                    attacks_value += (WEIGHT[pt] - 100) / KING_ATTACK_FACTOR;
+                });
+
+                const auto attackers = std::min(popcount(attackers_mask), 7);
+                attacks -= SIGN[color] * attacks_value * ATTACK_WEIGHT[attackers] / 100;
+            });
         }
 
-        return score[WHITE] - score[BLACK];
+        return attacks
+            + eval_king_quadrant(state, pcs)
+            + castle * CASTLING_RIGHTS_BONUS
+            + outside * interpolate(pcs, KING_OUT_PENALTY, 0)
+            + shield * interpolate(pcs, PAWN_SHIELD, 0);
     }
 
 
-    static inline score_t eval_open_files(const State& state, int piece_count)
+    static inline int eval_material_imbalance(const State& state, int pcs, score_t mat_eval)
+    {
+        int score = 0;
+
+        if (abs(mat_eval) <= WEIGHT[PAWN])
+        {
+            for (auto color : { BLACK, WHITE })
+            {
+                score += SIGN[color]
+                    * (popcount((state.bishops | state.knights) & state.occupied_co(!color)) >= 2)
+                    * (popcount(state.rooks & state.occupied_co(color)) >= 2);
+            }
+
+            if (DEBUG_MATERIAL && score)
+            {
+                std::ostringstream out;
+                out << "rook: " << Context::_epd(state) << ": " << score << ", mat: " << mat_eval;
+                Context::log_message(LogLevel::DEBUG, out.str());
+            }
+        }
+
+        return score * interpolate(pcs, 0, REDUNDANT_ROOK);
+    }
+
+
+    static inline int eval_open_files(const State& state, int piece_count)
     {
         static constexpr Bitboard opposite_backranks[] = {
             BB_RANK_2 | BB_RANK_1,
             BB_RANK_7 | BB_RANK_8,
         };
 
-        score_t score[] = { 0, 0 }; /* black, white */
+        int open_score = 0;
+        int half_open_score = 0;
 
         for (auto color : { BLACK, WHITE })
         {
@@ -1115,10 +1028,14 @@ namespace search
                 if (auto mask = file_mask & (state.rooks | state.queens) & own_color_mask)
                 {
                     if ((file_mask & state.pawns) == BB_EMPTY)
-                        score[color] += interpolate(piece_count, MIDGAME_OPEN_FILE, 0);
+                    {
+                        open_score += SIGN[color];
+                    }
                     else
                         if ((file_mask & state.pawns & own_color_mask) == BB_EMPTY)
-                            score[color] += interpolate(piece_count, MIDGAME_HALF_OPEN_FILE, 0);
+                        {
+                            half_open_score += SIGN[color];
+                        }
                     else
                         if ((file_mask & state.pawns & their_color_mask) == BB_EMPTY)
                         {
@@ -1129,57 +1046,21 @@ namespace search
                             if (for_each_square_r<bool>(mask, [&](Square square) {
                                 return bool(state.attacks_mask(square) & file_mask & opposite_backranks[color]);
                             }))
-                                score[color] += interpolate(piece_count, MIDGAME_OPEN_FILE, 0);
+                                open_score += SIGN[color];
                         }
                 }
             }
         }
 
-        return score[WHITE] - score[BLACK];
-    }
-
-
-    static score_t eval_material_imbalance(const State& state, score_t mat_eval)
-    {
-        score_t score = 0;
-
-        if (abs(mat_eval) <= WEIGHT[PAWN])
-        {
-            for (auto color : { BLACK, WHITE })
-            {
-                score +=
-                    SIGN[color] * REDUNDANT_ROOK
-                    * (popcount((state.bishops | state.knights) & state.occupied_co(!color)) >= 2)
-                    * (popcount(state.rooks & state.occupied_co(color)) >= 2);
-            }
-
-            if (DEBUG_MATERIAL && score)
-            {
-                std::ostringstream out;
-                out << "rook: " << Context::_epd(state) << ": " << score << ", mat: " << mat_eval;
-                Context::log_message(LogLevel::DEBUG, out.str());
-            }
-        }
-
-        return score;
-    }
-
-
-    static score_t eval_pawn_majority(const State& state, int piece_count)
-    {
-        auto score =
-            popcount(state.pawns & state.occupied_co(WHITE))
-          - popcount(state.pawns & state.occupied_co(BLACK));
-
-        score = (score != 0) * SIGN[score > 0];
-        return score * interpolate(piece_count, MIDGAME_PAWN_MAJORITY, ENDGAME_PAWN_MAJORITY);
+        return half_open_score * interpolate(piece_count, MIDGAME_HALF_OPEN_FILE, 0)
+            + open_score * interpolate(piece_count, MIDGAME_OPEN_FILE, 0);
     }
 
 
     /*
      * Allow apps on top of the engine to implement strength levels by "fuzzing" the evaluation.
      */
-    static inline score_t eval_fuzz()
+    static inline int eval_fuzz()
     {
         static std::random_device rd;  // Will be used to obtain a seed for the random number engine
         static std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
@@ -1188,7 +1069,7 @@ namespace search
     }
 
 
-    inline score_t eval_passed_formation(const State& state, int piece_count)
+    static inline int eval_passed_formation(const State& state, int piece_count)
     {
         const auto diff =
             state.longest_pawn_sequence(state.occupied_co(WHITE) & (BB_RANK_6 | BB_RANK_7)) -
@@ -1198,12 +1079,22 @@ namespace search
     }
 
 
-    inline score_t eval_passed_pawns(const State& state, int piece_count)
+    template<int i>
+    static inline int eval_passed_pawns(const State& state, int piece_count)
     {
-        struct {
-            Bitboard mask[2];
-            score_t  bonus[2];
-        } static const ranks[] = {
+        struct PassedPawnRank
+        {
+            Bitboard mask[2]; /* midgame, endgame */
+            int bonus[2]; /* ditto */
+        };
+
+        static
+    #if TUNING_ENABLED
+            const
+    #else
+            constexpr
+    #endif
+        PassedPawnRank ranks[2] = {
             {   /* 6th rank */
                 { BB_RANK_3, BB_RANK_6 },
                 { MIDGAME_UNBLOCKED_PASSED_6, ENDGAME_UNBLOCKED_PASSED_6 }
@@ -1214,87 +1105,139 @@ namespace search
             },
         };
 
-        score_t score[] = { 0, 0 }; /* black, white */
-        const auto occupied_mask = state.occupied();
+        int score = 0;
+        const auto occupied = state.occupied();
 
         for (auto color : { BLACK, WHITE })
         {
             const auto own_mask = state.occupied_co(color);
             const auto others_mask = state.occupied_co(!color);
 
-            for (const auto& rank : ranks)
-            {
-                const auto pawns = state.pawns & own_mask & rank.mask[color];
+            const auto pawns = state.pawns & own_mask & ranks[i].mask[color];
 
-                for_each_square(pawns, [&](Square pawn) {
-                    const auto pawn_mask = BB_SQUARES[pawn];
-                    const auto advance_mask = color ? shift_up(pawn_mask) : shift_down(pawn_mask);
+            for_each_square(pawns, [&](Square pawn) {
+                const auto pawn_mask = BB_SQUARES[pawn];
+                const auto advance_mask = color ? shift_up(pawn_mask) : shift_down(pawn_mask);
 
-                    if ((advance_mask & occupied_mask) == 0 || (state.attacks_mask(pawn) & others_mask))
-                        score[color] += interpolate(piece_count, rank.bonus[0], rank.bonus[1]);
-                });
-            }
+                if ((advance_mask & occupied) == 0 || (state.attacks_mask(pawn) & others_mask))
+                    score += SIGN[color] * interpolate(piece_count, ranks[i].bonus[0], ranks[i].bonus[1]);
+
+                /* extra bonus for defended pawns */
+                score += SIGN[color]
+                #if 0
+                    * bool(state.attackers_mask(color, pawn))
+                #else
+                    * bool(state.occupied_co(color) & state.pawns & BB_PAWN_ATTACKS[!color][pawn])
+                #endif
+                    * interpolate(piece_count, MIDGAME_DEFENDED_PASSED, ENDGAME_DEFENDED_PASSED);
+            });
         }
 
-        return score[WHITE] - score[BLACK] + eval_passed_formation(state, piece_count);
+        return score + eval_passed_formation(state, piece_count);
     }
 
 
-    static score_t eval_tactical(const State& state, score_t mat_eval)
+    /*
+     * https://www.chessprogramming.org/images/7/70/LittleChessEvaluationCompendium.pdf
+     * Grading of Pieces, page 4
+     */
+    static inline int eval_piece_grading(const State& state, int pcs)
+    {
+        static constexpr int percents[4][4] = {
+            /*  n,  b,   r,  q */
+            {   2,  0, -3,  -2, }, /* closed */
+            {   2,  1, -2,  -1, }, /* semi-closed */
+            {  -2,  3,  2,   4, }, /* semi-open */
+            {  -3,  4,  2,   6, }, /* open */
+        };
+
+        const int p = popcount(state.pawns);
+        const auto& grading = percents[int(p > 4) + int(p > 8) + int(p > 12)];
+
+        int score = 0;
+
+        for (const auto color : { BLACK, WHITE })
+        {
+            const auto color_mask = state.occupied_co(color);
+
+            score += SIGN[color] * (
+                + popcount(state.knights & color_mask) * WEIGHT[KNIGHT] * grading[0]
+                + popcount(state.bishops & color_mask) * WEIGHT[BISHOP] * grading[1]
+                + popcount(state.rooks & color_mask) * WEIGHT[ROOK] * grading[2]
+                + popcount(state.queens & color_mask) * WEIGHT[QUEEN] * grading[3]
+            ) / 100;
+
+            score += SIGN[color] * popcount(state.pawns * color_mask) * interpolate(pcs, 0, 3);
+        }
+
+        return score;
+    }
+
+
+    static inline int eval_pawn_structure(const State& state, int pc)
+    {
+        int doubled = 0;
+        int isolated = 0;
+        int diff = 0;
+
+        for (auto color : { BLACK, WHITE })
+        {
+            if (const auto own_pawns = state.pawns & state.occupied_co(color))
+            {
+                for (const auto& bb_file : BB_FILES)
+                {
+                    auto n = popcount(own_pawns & bb_file);
+                    doubled += SIGN[color] * (n > 1) * (n - 1);
+                }
+                diff += SIGN[color] * popcount(own_pawns);
+                isolated += SIGN[color] * state.count_isolated_pawns(color);
+            }
+        }
+
+        return doubled * interpolate(pc, MIDGAME_DOUBLED_PAWNS, ENDGAME_DOUBLED_PAWNS)
+            + isolated * interpolate(pc, MIDGAME_ISOLATED_PAWNS, ENDGAME_ISOLATED_PAWNS)
+            + (diff != 0) * SIGN[diff > 0]
+                * interpolate(pc, MIDGAME_PAWN_MAJORITY, ENDGAME_PAWN_MAJORITY);
+    }
+
+
+    static inline int eval_tactical(const State& state, score_t mat_eval)
     {
         const auto piece_count = popcount(state.occupied());
-        score_t eval = eval_passed_pawns(state, piece_count);
+
+        score_t eval = 0;
 
         eval += eval_center(state, piece_count);
-        eval += eval_material_imbalance(state, mat_eval);
-        eval += eval_pawn_majority(state, piece_count);
 
-        eval += BISHOP_PAIR * state.diff_bishop_pairs();
-        eval += BISHOPS_STRENGTH * state.diff_bishops_strength();
+        eval += eval_material_imbalance(state, piece_count, mat_eval);
+        eval += eval_open_files(state, piece_count);
+        eval += eval_passed_pawns<0>(state, piece_count);
+        eval += eval_passed_pawns<1>(state, piece_count);
+        eval += eval_pawn_structure(state, piece_count);
+        eval += eval_piece_grading(state, piece_count);
 
         eval += state.diff_connected_rooks() *
             interpolate(piece_count, MIDGAME_CONNECTED_ROOKS, ENDGAME_CONNECTED_ROOKS);
 
-        eval += eval_king_quadrant(state) *
-            interpolate(piece_count, MIDGAME_KING_QUADRANT, ENDGAME_KING_QUADRANT);
+        eval += BISHOP_PAIR * state.diff_bishop_pairs();
 
-        eval += state.diff_doubled_pawns() *
-            interpolate(piece_count, MIDGAME_DOUBLED_PAWNS, ENDGAME_DOUBLED_PAWNS);
-
-        if (state.is_endgame())
-        {
-            /*
-             * Don't penalize isolated pawns if passed, as they
-             * may be advantageous in king and pawns endgames.
-             * https://en.wikipedia.org/wiki/Passed_pawn
-             */
-            eval += ENDGAME_ISOLATED_PAWNS * (
-                state.count_isolated_pawns(WHITE, ~BB_PASSED[WHITE]) -
-                state.count_isolated_pawns(BLACK, ~BB_PASSED[BLACK]));
-        }
-        else
-        {
-            eval += eval_midgame_king_out(state, piece_count);
-            eval += eval_open_files(state, piece_count);
-
-            eval += state.diff_isolated_pawns() *
-                interpolate(piece_count, MIDGAME_ISOLATED_PAWNS, ENDGAME_ISOLATED_PAWNS);
-        }
-
+    #if 0
+        eval += BISHOPS_STRENGTH * state.diff_bishops_strength();
+    #endif
         return eval;
     }
 
 
-    static inline score_t eval_tactical(Context& ctxt)
+    static inline int eval_tactical(Context& ctxt)
     {
-        return eval_tactical(ctxt.state(), ctxt.evaluate_material());
+        return eval_tactical(ctxt.state(), ctxt.evaluate_material()) + ctxt.eval_king_safety();
     }
 
 
     /*
      * Static evaluation has three components:
      * 1. base = material + pst + mobility
-     * 2. tactical
+     * 2. tactical (positional)
      * 3. capture estimates.
      */
     score_t Context::_evaluate()
@@ -1333,8 +1276,9 @@ namespace search
                 /* 2. Tactical (skip in midgame at very low depth) */
                 else if (state().is_endgame() || depth() > 3)
                 {
-                    eval += SIGN[turn] * eval_tactical(*this);
                     eval -= CHECK_BONUS * is_check();
+                    eval += SIGN[turn] * eval_tactical(*this);
+                    ASSERT(eval < SCORE_MAX);
 
                     _tt_entry._eval = eval;
                 }
@@ -1364,6 +1308,15 @@ namespace search
     }
 
 
+    int Context::eval_king_safety()
+    {
+        if (_tt_entry._king_safety == SCORE_MIN)
+            _tt_entry._king_safety = search::eval_king_safety(state(), popcount(state().occupied()));
+
+        return _tt_entry._king_safety;
+    }
+
+
     /*
      * Fractional extensions: https://www.chessprogramming.org/Extensions
      * "[...] extension can be added that does not yet extend the search,
@@ -1372,35 +1325,35 @@ namespace search
      */
     void Context::extend()
     {
-        ASSERT(!is_extended());
-
         if (_extension || (_ply && depth() > 6))
         {
             /*
-             * things that could add up interestingness along the search path
+             * things that could add interestingness along the search path
+             * "what is ultimately to be reduced must first be expanded" Lao Tzu
              */
             _extension += state().pushed_pawns_score;
             _extension += _move.from_square() == _parent->_capture_square;
-            _extension += _move._group == MoveOrder::LOSING_CAPTURES;
-
             _extension += is_recapture() * (is_pv_node() * (ONE_PLY - 1) + 1);
             _extension += is_singleton() * (is_pv_node() + 1) * ONE_PLY / 2;
 
             /*
-             * extend if move has historically high cutoffs percentages and counts
+             * extend if move has historically high cutoff percentages and counts
              */
             _extension += ONE_PLY * (
                    _move == _parent->_tt_entry._hash_move
                 && abs(_parent->_tt_entry._value) < MATE_HIGH
                 && _parent->history_score(_move) > HISTORY_HIGH
-                && get_tt()->historical_counters(*_parent, _move).first > 10000);
+                && get_tt()->historical_counters(
+                    _parent->state(), _parent->turn(), _move).first > 10000);
 
-            const auto extend = std::min(1, _extension / ONE_PLY);
+            const auto double_extension_ok = _double_ext <= 6;
+            const auto extend = std::min(1 + double_extension_ok, _extension / ONE_PLY);
 
             ASSERT(extend >= 0);
 
             _max_depth += extend;
             _extension %= ONE_PLY;
+            _double_ext += extend > 1;
         }
     }
 
@@ -1425,9 +1378,16 @@ namespace search
         if (evaluate_material() > std::max(_alpha, _score) + WEIGHT[PAWN])
             return 0;
 
+    #if 0
+        if (depth() < 3 && SIGN[!state().turn] * eval_king_safety() < KING_SAFETY_MARGIN)
+            return 0;
+    #endif
+
         // return 50 * d + M_PI_2 * pow(depth, M_E);
         // return 50 * d + pow(depth + M_PI_2, M_E);
-        return 50 * d + pow(d + 1.61803, M_E);
+
+        static constexpr double PHI = 1.61803398875;
+        return 50 * d + pow(d + PHI, M_E);
     }
 
 
@@ -1471,7 +1431,7 @@ namespace search
         const bool retry = _retry_next;
         _retry_next = false;
 
-        if (!first_move && !_excluded && !on_next())
+        if (!first_move && !_excluded && !on_next() && !is_check())
             return nullptr;
 
         /* null move must be tried before actual moves */
@@ -1518,6 +1478,7 @@ namespace search
         ctxt->_parent = this;
         ctxt->_max_depth = _max_depth;
         ctxt->_ply = _ply + 1;
+        ctxt->_double_ext = _double_ext;
         ctxt->_extension = _extension;
         ctxt->_move_maker.set_ply(ctxt->_ply);
         ctxt->_is_retry = retry;
@@ -1688,87 +1649,6 @@ namespace search
     }
 
 
-    bool Context::should_verify_null_move() const
-    {
-        return depth() >= NULL_MOVE_MIN_VERIFICATION_DEPTH;
-    }
-
-
-    score_t Context::singular_margin() const
-    {
-        return depth() * SINGULAR_MARGIN;
-    }
-
-
-    bool Context::can_forward_prune() const
-    {
-        return _parent
-            && !_parent->_mate_detected
-            && !is_pv_node()
-            && (_max_depth >= 6 || !is_qsearch())
-            && !_excluded
-            && state().pushed_pawns_score <= 1
-            && !state().just_king_and_pawns()
-            && !is_check();
-    }
-
-
-    bool Context::can_prune(int count) const
-    {
-        ASSERT(_ply > 0);
-        ASSERT(!is_null_move());
-        ASSERT(_move);
-
-        if (is_singleton() || is_extended() || is_pv_node() || is_repeated())
-            return false;
-
-        return _parent->can_prune_move(_move, count);
-    }
-
-
-    bool Context::can_prune_move(const Move& move, int /* count */) const
-    {
-        ASSERT(move);
-        ASSERT(move._state);
-        ASSERT(move != _move);
-
-        ASSERT(repeated_count(*move._state) == 0);
-        ASSERT(can_forward_prune());
-
-        if (move.promotion()
-            || (move._state->capture_value != 0)
-            || (move._group <= MoveOrder::HISTORY_COUNTERS)
-            || (move._group == MoveOrder::TACTICAL_MOVES)
-            || (move.from_square() == _capture_square)
-            || (move == _counter_move)
-            || (move == _tt_entry._hash_move)
-            || (move._state->is_check())
-           )
-            return false;
-
-        ASSERT(!is_check());
-        ASSERT(move.from_square() != _capture_square);
-        ASSERT(move != _counter_move);
-
-        return true;
-    }
-
-
-    bool Context::can_reduce()
-    {
-        ASSERT(!is_null_move());
-
-        return _ply != 0
-            && !is_retry()
-            && !is_singleton()
-            && !is_extended()
-            && _move._group >= MoveOrder::LOSING_CAPTURES
-            && state().pushed_pawns_score <= 1
-            && _move.from_square() != _parent->_capture_square
-            && is_quiet(state(), this);
-    }
-
-
     void Context::copy_move_state()
     {
         ASSERT(_move);
@@ -1777,6 +1657,25 @@ namespace search
         _statebuf = *_move._state;
         _state = &_statebuf;
         _move._state = _state;
+    }
+
+
+    /*
+     * Improvement for the side that just moved.
+     */
+    score_t Context::improvement()
+    {
+        if (_ply < 2)
+            return 0;
+
+        if (abs(_tt_entry._eval) < MATE_HIGH &&
+            abs(_parent->_parent->_tt_entry._eval) < MATE_HIGH
+           )
+            return std::max(0, _parent->_parent->_tt_entry._eval - _tt_entry._eval);
+
+        return std::max(0,
+              eval_material_and_piece_squares(*_state)
+            - eval_material_and_piece_squares(*_parent->_parent->_state));
     }
 
 
@@ -1832,7 +1731,7 @@ namespace search
      * Late move reduction and pruning.
      * https://www.chessprogramming.org/Late_Move_Reductions
      */
-    LMR Context::late_move_reduce(bool prune, int count)
+    LMRAction Context::late_move_reduce(bool prune, int count)
     {
         ASSERT(!is_null_move());
         ASSERT(_parent);
@@ -1841,39 +1740,43 @@ namespace search
 
         /* no reduction / pruning in qsearch */
         if (depth < 0)
-            return LMR::None;
-
-        ASSERT(depth() >= 0);
+            return LMRAction::None;
 
         prune = prune && count > 1;
 
         /* counter-based late move pruning */
-        if (prune && depth < int(LMP._size) && count >= LMP._counters[depth])
-        {
-            prune = prune && can_prune(count);
-            if (prune)
-                return LMR::Prune;
-        }
+        if (prune
+            && depth < int(LMP._size)
+            && count >= LMP._counters[depth]
+            && can_prune(count)
+           )
+            return LMRAction::Prune;
 
         if (depth < 3 || count < _parent->_full_depth_count || !can_reduce())
-            return LMR::None;
+            return LMRAction::None;
 
-    #if 0
-        const auto reduction = std::max(1, int(sqrt(3.0 * count) / depth));
-    #else
-        const auto reduction = std::max(1,
-            int(sqrt(3.0 * count) / depth) + SIGN[is_improving()] - is_capture());
-    #endif
+        auto reduction = LMR._table[std::min(depth, PLY_MAX-1)][std::min(count, 63)];
 
-        /* reduction drops to qsearch? prune it. */
-        if (prune && depth < reduction)
+        if (_move._group != MoveOrder::TACTICAL_MOVES)
         {
-            prune = prune && can_prune(count);
-            if (prune)
-                return LMR::Prune;
+            reduction += !has_improved();
+            reduction -= 2 * (_move == _parent->_counter_move);
+
+            if (get_tt()->_w_beta <= get_tt()->_w_alpha + 2 * HALF_WINDOW && iteration() >= 13)
+                ++reduction;
+
+            reduction -= get_tt()->historical_counters(
+                _parent->state(), _parent->turn(), _move).first / 20063;
         }
 
+        reduction = std::max(1, reduction);
+
+        if (reduction > depth && prune && can_prune(count))
+            return LMRAction::Prune;
+
+        ASSERT(reduction > 0);
         _max_depth -= reduction;
+
         /*
          * https://www.chessprogramming.org/Late_Move_Reductions
          * "Classical implementation assumes a re-search at full depth
@@ -1883,7 +1786,7 @@ namespace search
 
         ++_tt->_reductions;
 
-        return LMR::Ok;
+        return LMRAction::Ok;
     }
 
 
@@ -1969,32 +1872,10 @@ namespace search
         else
             _tt->set_nps(_tt->nodes());
 
-        if (_time_limit > 0 && millisec >= _time_limit)
+        if (_time_limit >= 0 && millisec >= _time_limit)
             _cancel = true;
 
         return millisec;
-    }
-
-
-    /*
-     * Check how much time is left, update NPS, call optional Python callback.
-     */
-    bool Context::on_next()
-    {
-        if (_tid == 0 && ++_callback_count >= CALLBACK_COUNT)
-        {
-            _callback_count = 0; /* reset */
-
-            auto millisec = check_time_and_update_nps();
-
-            if (is_cancelled()) /* time is up? */
-                return false;
-
-            if (_on_next)
-                cython_wrapper::call(_on_next, _engine, millisec);
-        }
-
-        return !is_cancelled();
     }
 
 
@@ -2026,15 +1907,15 @@ namespace search
 
             if (val < -100)
             {
-                _time_limit = millisec / 15;
+                _time_limit = millisec / 10;
             }
             else if (val < 0)
             {
-                _time_limit = millisec / 25;
+                _time_limit = millisec / 15;
             }
             else
             {
-                auto estimated_moves_left = (state().is_endgame() || is_check()) ? 25 : 35;
+                auto estimated_moves_left = (state().is_endgame() || is_check()) ? 15 : 20;
 
                 _time_limit = millisec / std::max(moves, estimated_moves_left);
             }
@@ -2097,8 +1978,6 @@ namespace search
 
     static void incremental_update(Move& move, const Context& ctxt)
     {
-    #if !defined(ENDGAME_INCREASED_PAWN_VALUE)
-
         ASSERT(move._state);
 
         if (move._state->simple_score == 0)
@@ -2121,7 +2000,6 @@ namespace search
         {
             ASSERT(move._state->simple_score == move._state->eval_simple());
         }
-    #endif /* ENDGAME_INCREASED_PAWN_VALUE */
     }
 
 
@@ -2130,21 +2008,6 @@ namespace search
      *---------------------------------------------------------------------*/
     THREAD_LOCAL std::vector<State> MoveMaker::_states[MAX_MOVE];
     THREAD_LOCAL MovesList MoveMaker::_moves[MAX_MOVE];
-
-
-    void MoveMaker::print_moves(std::ostream& out) const
-    {
-        out << "ply=" << _ply << ", cnt=" << _count << ", cur=" << _current << "\n";
-
-        for (size_t i = 0; i != moves().size(); ++i)
-        {
-            const auto& move = moves()[i];
-
-            out << "[" << i << "]=" << move.uci()
-                << "(" << move._score
-                << "/" << int(move._group) << ") ";
-        }
-    }
 
 
     bool MoveMaker::has_moves(Context& ctxt)
@@ -2239,15 +2102,6 @@ namespace search
     }
 
 
-    void MoveMaker::mark_as_illegal(Move& move)
-    {
-        move._group = MoveOrder::ILLEGAL_MOVES;
-
-        ASSERT(_count > 0);
-        --_count;
-    }
-
-
     /*
      * Return false if the move is not legal, or pruned.
      */
@@ -2265,7 +2119,9 @@ namespace search
             move._state = &states()[_state_index++];
         }
         else
+        {
             return (_have_move = true);
+        }
 
         ctxt.state().clone_into(*move._state);
 
@@ -2280,7 +2136,9 @@ namespace search
 
         move._state->apply_move(move);
 
-        if (move._state->is_check(ctxt.turn()))
+        const bool is_known_legal = (move == ctxt._prev);
+
+        if (!is_known_legal && move._state->is_check(ctxt.turn()))
         {
             mark_as_illegal(move); /* can't leave the king in check */
             return false;
@@ -2558,13 +2416,6 @@ namespace search
     }
 
 
-    const MovesList& MoveMaker::get_moves() const
-    {
-        ASSERT(_count >= 0);
-        return moves();
-    }
-
-
     const Move* MoveMaker::get_move_at(Context& ctxt, int index, score_t futility)
     {
         ensure_moves(ctxt);
@@ -2610,6 +2461,14 @@ namespace search
     }
 
 
+    template<typename T, T... is> constexpr std::array<double, sizeof ...(is)>
+    history_thresholds(std::integer_sequence<T, is...>)
+    {
+        auto logistic = [](int i) { return HISTORY_HIGH / (1 + exp(6 - i)); };
+        return { logistic(is) ... };
+    }
+
+
     /*
      * Order moves in multiple phases (passes). The idea is to minimize make_move() calls,
      * which validate the legality of the move. The granularity (number of phases) should
@@ -2617,6 +2476,7 @@ namespace search
      */
     void MoveMaker::order_moves(Context& ctxt, size_t start_at, score_t futility)
     {
+        static const auto hist_thresholds = history_thresholds(std::make_index_sequence<PLY_MAX>{});
         static constexpr int MAX_PHASE = 4;
 
         ASSERT(_phase <= MAX_PHASE);
@@ -2626,7 +2486,7 @@ namespace search
         const KillerMoves* killer_moves = nullptr;
 
         /* "confidence bar" for historical scores */
-        const auto hist_threshold = HISTORY_HIGH / (1 + exp(6 - ctxt.iteration()));
+        const auto hist_threshold = hist_thresholds[ctxt.iteration()];
 
         _have_move = false;
 
@@ -2655,7 +2515,6 @@ namespace search
                 }
 
                 ASSERT(move._group == MoveOrder::UNORDERED_MOVES);
-                ASSERT(move._score == 0);
 
                 switch (_phase)
                 {
@@ -2720,8 +2579,7 @@ namespace search
                     break;
 
                 default:
-                    std::cerr << "order_moves(): phase=" << _phase << "\n";
-                    ASSERT_MESSAGE(false, "unexpected move ordering phase");
+                    ASSERT_MESSAGE(false, ("unexpected move ordering phase: " + std::to_string(_phase)));
                     break;
                 }
             }

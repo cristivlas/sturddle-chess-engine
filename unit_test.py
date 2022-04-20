@@ -183,10 +183,10 @@ def test_static_exchanges():
         ('capt.10', 'r1bqk2r/pp1p1pbp/6p1/4p3/2PnP3/2N1B3/PP3PPP/R2QKB1R w KQkq - 0 10', 'd4', chess.WHITE, 0),
         ('capt.11', '1r1q1rk1/p3bBpp/2Q5/8/3Pb3/2n1BN2/P4PPP/R4RK1 b - - 0 18', 'c6', chess.BLACK, 0),
         # ('capt.12', '2rq1rk1/1p2b1pp/p1b1Np2/2n1P1B1/3p1PPP/4Q3/PPP5/1K1R1B1R w - - 0 21', 'e3', chess.BLACK, 0),
-        ('capt.13', 'r4rk1/ppp2ppp/5n2/2bPn3/4K3/2NP4/PPPBB1PP/R6R w - - 3 3', 'e5', chess.WHITE, 350),
-        ('capt.14', '2r3k1/p5p1/4p3/1p1bP3/2pb2Q1/5N2/1q3P1P/3R1RK1 b - - 3 32', 'd4', chess.WHITE, 350),
-        ('capt.15', 'rqr3k1/p4p1p/5Qp1/2b5/2N5/2Pn2NP/P2B1PP1/2R2RK1 w - - 0 24', 'g3', chess.BLACK, 350),
-        ('capt.16', '5r1k/pp4pp/2p5/2b1q3/4P3/1PB1p3/P3Q1PP/3N2K1 w - -', 'e5', chess.WHITE, 1000),
+        ('capt.13', 'r4rk1/ppp2ppp/5n2/2bPn3/4K3/2NP4/PPPBB1PP/R6R w - - 3 3', 'e5', chess.WHITE, 325),
+        ('capt.14', '2r3k1/p5p1/4p3/1p1bP3/2pb2Q1/5N2/1q3P1P/3R1RK1 b - - 3 32', 'd4', chess.WHITE, 325),
+        ('capt.15', 'rqr3k1/p4p1p/5Qp1/2b5/2N5/2Pn2NP/P2B1PP1/2R2RK1 w - - 0 24', 'g3', chess.BLACK, 325),
+        ('capt.16', '5r1k/pp4pp/2p5/2b1q3/4P3/1PB1p3/P3Q1PP/3N2K1 w - -', 'e5', chess.WHITE, 975),
         ('capt.17', '5r1k/pp4pp/2p5/2b1P3/4P3/1PB1p3/P3Q1PP/3N1qK1 w - -', 'f1', chess.WHITE, 0),
     ]
 
@@ -210,6 +210,7 @@ def test_zobrist():
         ('z.06', 'r4rk1/1ppnbppp/p2q4/3pNb2/3P4/PP5P/2PNBPP1/R2QK2R w K -'),
         ('z.07', 'r4rk1/1ppnbppp/p2q4/3pNb2/3P4/PP5P/2PNBPP1/R2QK2R w KQ -'),
         ('z.08', 'r4rk1/1ppnbppp/p2q4/3pNb2/3P4/PP5P/2PNBPP1/R2QK2R b kq -'),
+        ('z.ep', '8/8/4R3/2r3pk/6Pp/7P/1PPB1P2/1K1R4 b - g3'),
     ]
     for id, fen in tests:
         board = chess.Board(fen=fen)
@@ -321,7 +322,9 @@ test_pins()
 test_static_exchanges()
 test_zobrist()
 test_forks()
-test_mobility()
+
+#This test requires compiling with MOBILITY_TUNING_ENABLED and TUNING_ENABLED
+#test_mobility()
 
 test_connected_pawns()
 test_isolated_pawns()

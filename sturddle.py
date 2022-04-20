@@ -92,7 +92,7 @@ class UCI:
         self.book = None
         self.use_opening_book = False
         try:
-            self.book = chess.polyglot.MemoryMappedReader(args.book)
+            self.book = chess.polyglot.MemoryMappedReader(self.args.book)
             self.use_opening_book = True
         except FileNotFoundError as e:
             logging.warning(e)
@@ -177,7 +177,7 @@ class UCI:
         # Support 'go infinite' commands (analysis mode):
         # run in background if no time limit, and expect
         # the GUI to send a 'stop' command later.
-        if movetime == 0:
+        if movetime == 0 and self.args.analysis:
             logging.debug('starting infinite search')
             self.pondering = True
             self.worker.send_message(self.search_async, max_count = 1)
@@ -475,6 +475,7 @@ def configure_logging(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--algorithm', choices=ALGORITHM.keys(), default='mtdf')
+    parser.add_argument('--analysis', action='store_true')
     parser.add_argument('-b', '--book', default='book.bin')
     parser.add_argument('-c', '--config')
     parser.add_argument('-d', '--debug', action='store_true') # enable verbose logging

@@ -26,8 +26,8 @@ C++ / python-chess hybrid chess engine.
 
 https://en.wikipedia.org/wiki/Sturddlefish
 
-The sturddlefish is a hybrid of the American paddlefish (Polyodon spathula)
-and the Russian sturgeon (Acipenser gueldenstaedtii), accidentally created
+The sturddlefish is a hybrid of the paddlefish (Polyodon spathula)
+and the sturgeon (Acipenser gueldenstaedtii), accidentally created
 by researchers in 2019 and announced in 2020.
 """
 
@@ -178,7 +178,6 @@ cdef extern from 'chess.h' namespace 'chess':
         bint    is_endgame() const
         bint    is_pinned(Color, bint threat) const
 
-        Square  king(Color) const
         int     longest_pawn_sequence(Bitboard) const
 
         Bitboard checkers_mask(Color) const
@@ -187,7 +186,6 @@ cdef extern from 'chess.h' namespace 'chess':
 
 
     cdef score_t estimate_static_exchanges(const State&, Color, int, PieceType)
-    cdef double interpolate(double pc, score_t midgame, score_t endgame)
 
 
 cdef extern from 'zobrist.h' namespace 'chess':
@@ -330,11 +328,6 @@ cdef class BoardState:
 
     cpdef has_fork(self, Color color):
         return self._state.has_fork(color)
-
-
-    cpdef king(self, color):
-        cdef int king_square = self._state.king(color)
-        return king_square if king_square >= chess.A1 else None
 
 
     cpdef int longest_pawn_sequence(self, Bitboard mask):
@@ -1025,9 +1018,6 @@ cpdef eval_static_exchanges(board, Color color, Square square):
         state._state, color, square, state._state.piece_type_at(square))
 
 
-cpdef double interpolate_coefficients(double pc, score_t mg, score_t eg):
-    return interpolate(pc, mg, eg)
-
 
 # ---------------------------------------------------------------------
 # Configuration
@@ -1074,15 +1064,15 @@ def read_config(fname='sturddle.cfg', echo=False):
 
 
 # ---------------------------------------------------------------------
-# initialize chess.cpp global data structures
+# initialize c++ global data structures
 # ---------------------------------------------------------------------
-
 Context.init()
+
 NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0
-__minor__   = 79
+__minor__   = 82
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
 

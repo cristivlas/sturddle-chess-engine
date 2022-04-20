@@ -36,7 +36,7 @@ constexpr score_t MATE_HIGH = SCORE_MAX - PLY_MAX;
 constexpr score_t MATE_LOW  = -MATE_HIGH;
 
 /* Aspiration window */
-constexpr score_t HALF_WINDOW = chess::WEIGHT[chess::PAWN] / 4;
+constexpr score_t HALF_WINDOW = chess::WEIGHT[chess::PieceType::PAWN] / 4;
 
 
 namespace search
@@ -54,6 +54,7 @@ namespace search
 
     using BaseMove = chess::BaseMove;
     using BaseMovesList = std::vector<BaseMove>;
+    using Color = chess::Color;
     using Move = chess::Move;
     using MovesList = chess::MovesList;
     using State = chess::State;
@@ -121,6 +122,7 @@ namespace search
         score_t     _beta = SCORE_MAX;
         score_t     _value = SCORE_MIN;
         score_t     _eval = SCORE_MIN;
+        score_t     _king_safety = SCORE_MIN;
         BaseMove    _hash_move;
         bool        _singleton = false;
         uint32_t    _version = 0;
@@ -217,8 +219,8 @@ namespace search
 
         void store_pv(Context&, bool = false);
 
-        const std::pair<int, int>& historical_counters(const Context&, const Move&) const;
-        float history_score(const Context&, const Move&) const;
+        const std::pair<int, int>& historical_counters(const State&, Color, const Move&) const;
+        float history_score(const State&, Color, const Move&) const;
 
         size_t hits() const { return _hits; }
         size_t nodes() const { return _nodes; }
@@ -234,7 +236,7 @@ namespace search
         void set_nps(size_t nps) { _nps = nps; }
 
         void history_update_cutoffs(const Move&);
-        void history_update_non_cutoffs(const Move&);
+        void history_update_non_cutoffs(const Move&, bool failed_low);
 
         void update_stats(const Context&);
 
@@ -249,5 +251,79 @@ namespace search
     private:
         static TablePtr _table; /* shared hashtable */
     };
+
+
+    /*
+     * https://www.chessprogramming.org/History_Heuristic
+     * https://www.chessprogramming.org/Relative_History_Heuristic
+     */
+    inline const std::pair<int, int>&
+    TranspositionTable::historical_counters(
+        const State& state,
+        Color turn,
+        const Move& move) const
+    {
+        ASSERT(move);
+
+    #if USE_BUTTERFLY_TABLES
+        return _hcounters[turn].lookup(move);
+    #else
+        const auto pt = state.piece_type_at(move.from_square());
+        return _hcounters[turn].lookup(pt, move);
+    #endif /* USE_BUTTERFLY_TABLES */
+    }
+
+
+    inline float
+    TranspositionTable::history_score(
+        const State& state,
+        Color turn,
+        const Move& move) const
+    {
+        const auto& counters = historical_counters(state, turn, move);
+        return counters.second < 1 ? 0 : (100.0 * counters.first) / counters.second;
+    }
+
+
+    inline void TranspositionTable::history_update_non_cutoffs(const Move& move, bool low)
+    {
+        if (move)
+        {
+            ASSERT(move._state);
+            ASSERT(move._state->capture_value == 0);
+
+            const auto turn = !move._state->turn; /* side that moved */
+    #if USE_BUTTERFLY_TABLES
+            auto& counters = _hcounters[turn][move];
+    #else
+            const auto pt = move._state->piece_type_at(move.to_square());
+            auto& counters = _hcounters[turn].lookup(pt, move);
+    #endif /* USE_BUTTERFLY_TABLES */
+
+            ++counters.second;
+
+            counters.first = std::max(0, counters.first - low * HISTORY_FAIL_LOW_PENALTY);
+        }
+    }
+
+
+    inline void TranspositionTable::history_update_cutoffs(const Move& move)
+    {
+        ASSERT(move);
+        ASSERT(move._state);
+        ASSERT(move._state->capture_value == 0);
+
+        const auto turn = !move._state->turn; /* side that moved */
+
+    #if USE_BUTTERFLY_TABLES
+        auto& counts = _hcounters[turn][move];
+    #else
+        const auto pt = move._state->piece_type_at(move.to_square());
+        ASSERT(pt != chess::PieceType::NONE);
+        auto& counts = _hcounters[turn].lookup(pt, move);
+    #endif /* USE_BUTTERFLY_TABLES */
+        ++counts.first;
+        ++counts.second;
+    }
 
 }

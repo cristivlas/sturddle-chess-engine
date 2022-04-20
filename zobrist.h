@@ -228,14 +228,11 @@ namespace chess
 
         inline std::uint64_t en_passant_key(const State& board)
         {
+            static constexpr Bitboard (*shift[2])(Bitboard) = { shift_up, shift_down };
+
             if (board.en_passant_square >= 0)
             {
-                Bitboard ep_mask = 0;
-
-                if (board.turn == WHITE)
-                    ep_mask = shift_down(BB_SQUARES[board.en_passant_square]);
-                else
-                    ep_mask = shift_up(BB_SQUARES[board.en_passant_square]);
+                Bitboard ep_mask = shift[board.turn](BB_SQUARES[board.en_passant_square]);
 
                 ep_mask = shift_left(ep_mask) | shift_right(ep_mask);
 
@@ -260,21 +257,20 @@ namespace chess
 
         for (auto color: {BLACK, WHITE})
         {
-            for_each_square_r<int>(state.occupied_co(color), [&](Square square)
+            for_each_square(state.occupied_co(color), [&](Square square)
             {
-                auto piece_type = state.piece_type_at(square);
+                const auto piece_type = state.piece_type_at(square);
                 ASSERT (piece_type);
 
-                auto piece_index = (static_cast<int>(piece_type) - 1) * 2 + color;
+                const auto piece_index = (static_cast<int>(piece_type) - 1) * 2 + color;
                 hash_value ^= random_u64[64 * piece_index + square];
-
-                return 0;
             });
         }
 
         hash_value ^= en_passant_key(state);
 
         /* castling rights */
+    #if 0
         if (state.castling_rights & BB_SQUARES[H1]) /* white kingside */
             hash_value ^= random_u64[768 + 0];
 
@@ -286,6 +282,24 @@ namespace chess
 
         if (state.castling_rights & BB_SQUARES[A8]) /* black queenside */
             hash_value ^= random_u64[768 + 3];
+    #else
+        if (state.castling_rights)
+        {
+            static constexpr Bitboard mask[] = { BB_EMPTY, BB_ALL };
+
+            /* white kingside */
+            hash_value ^= mask[bool(state.castling_rights & BB_SQUARES[H1])] & random_u64[768 + 0];
+
+            /* white queenside */
+            hash_value ^= mask[bool(state.castling_rights & BB_SQUARES[A1])] & random_u64[768 + 1];
+
+            /* black kingside */
+            hash_value ^= mask[bool(state.castling_rights & BB_SQUARES[H8])] & random_u64[768 + 2];
+
+            /* black queenside */
+            hash_value ^= mask[bool(state.castling_rights & BB_SQUARES[A8])] & random_u64[768 + 3];
+        }
+    #endif
 
         hash_value ^= side_to_move_key(state.turn);
         return hash_value;

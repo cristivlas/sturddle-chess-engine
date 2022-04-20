@@ -68,7 +68,7 @@ namespace search
             inline void release()
             {
                 ASSERT(_locked);
-                ASSERT_ALWAYS(entry()->_lock == this);
+                ASSERT(entry()->_lock == this);
 
                 std::atomic_store_explicit(lock_p(), false, RELEASE);
                 _locked = false;
@@ -149,9 +149,13 @@ namespace search
         {
             if (_used > 0)
             {
+            #if 0
                 const auto size = _data.size();
                 _data.clear();
                 _data.resize(size);
+            #else
+                std::fill_n(&_data[0], _data.size(), entry_t());
+            #endif
                 _used = 0;
             }
         }
@@ -170,7 +174,7 @@ namespace search
             const auto h = state.hash();
             size_t index = h % _data.size();
 
-            for (size_t i = index, j = 0; j < BUCKET_SIZE; ++j)
+            for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
             {
                 Proxy p(*this, i, true);
 
@@ -195,31 +199,25 @@ namespace search
                     if (age != _clock)
                         return p;
 
-                    if (depth > p->_depth)
+                    if (depth >= p->_depth)
                     {
                         index = i;
                         depth = p->_depth;
                     }
                 }
 
-                i = (h + (j + 1) * (j + 1)) % _data.size();
+            #if 1
+                i = (h + j * j) % _data.size();
+            #else
+                i = (h + j) % _data.size();
+            #endif
             }
 
-        #if 0
             /*
              * acquire_for_writing == true: lock and return the entry at index;
              * otherwise: return unlocked Proxy, which means nullptr (no match).
              */
             return Proxy(*this, index, acquire_for_writing);
-        #else
-            /* alternative policy: overwrite entries of lower depths only */
-            Proxy p(*this, index, acquire_for_writing);
-
-            if (p && p->_depth <= depth)
-                return p;
-
-            return Proxy();
-        #endif
         }
 
         inline size_t capacity() const { return _data.size(); }
