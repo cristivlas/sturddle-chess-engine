@@ -115,8 +115,8 @@ static size_t mem_avail()
 {
     ASSERT_ALWAYS(_table);
 
-    size_t cur_size = SharedHashTable::size_in_bytes(_table->capacity());
-    size_t max_mem = mem_avail() > 2 * cur_size ? mem_avail() : cur_size;
+    const size_t cur_size = SharedHashTable::size_in_bytes(_table->capacity());
+    const size_t max_mem = mem_avail() + cur_size;
 
     return max_mem / ONE_MEGABYTE;
 }
