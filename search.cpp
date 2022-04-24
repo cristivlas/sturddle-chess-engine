@@ -115,8 +115,8 @@ static size_t mem_avail()
 {
     ASSERT_ALWAYS(_table);
 
-    size_t cur_size = SharedHashTable::size_in_bytes(_table->capacity());
-    size_t max_mem = mem_avail() > 2 * cur_size ? mem_avail() : cur_size;
+    const size_t cur_size = SharedHashTable::size_in_bytes(_table->capacity());
+    const size_t max_mem = mem_avail() + cur_size;
 
     return max_mem / ONE_MEGABYTE;
 }
@@ -507,6 +507,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
         || ctxt.is_pv_node()
         || ctxt._excluded
         || ctxt.is_mate_bound()
+        || !ctxt.is_king_safe()
         || ctxt.is_evasion()
         || ctxt.is_check()
        )
@@ -1058,8 +1059,8 @@ public:
         for (size_t i = 0; i < thread_count; ++i)
         {
             _tables[i]._tt._iteration = table._iteration;
-            _tables[i]._tt._w_alpha = std::max(SCORE_MIN, table._w_alpha - int(i + 1) * 2);
-            _tables[i]._tt._w_beta = std::min(SCORE_MAX, table._w_beta + int(i + 1) * 2);
+            _tables[i]._tt._w_alpha = std::max(SCORE_MIN, table._w_alpha - int((i + 1) * 2.5));
+            _tables[i]._tt._w_beta = std::min(SCORE_MAX, table._w_beta + int((i + 1) * 2.5));
 
             /* copy principal variation from main thread */
             if (_tables[i]._tt._pv.empty())

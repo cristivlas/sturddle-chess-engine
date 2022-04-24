@@ -206,7 +206,7 @@ namespace search
                     }
                 }
 
-            #if 1
+            #if 0
                 i = (h + j * j) % _data.size();
             #else
                 i = (h + j) % _data.size();

@@ -659,7 +659,7 @@ namespace chess
     /*
      * https://www.chessprogramming.org/Tapered_Eval
      */
-    inline constexpr double _interpolate(double pc, int midgame, int endgame = 0)
+    inline constexpr double _interpolate(double pc, int midgame, int endgame)
     {
         ASSERT(pc >= 2);
         ASSERT(pc <= 32);
@@ -696,7 +696,7 @@ namespace chess
             return { _interpolate(is, MG, EG)... };
         }
 
-        static constexpr auto value = make_values( std::make_index_sequence<33>{});
+        static constexpr auto value = make_values(std::make_index_sequence<33>{});
     };
 
     #define interpolate(pc, mg, eg) Interpolate<mg, eg>::value[pc]
@@ -730,9 +730,6 @@ namespace chess
         {
             return has_connected_rooks(WHITE) - has_connected_rooks(BLACK);
         }
-
-        /* diff relative bishop strenghts */
-        int diff_bishops_strength() const;
 
         int diff_bishop_pairs() const;
 

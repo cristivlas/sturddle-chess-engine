@@ -254,8 +254,7 @@ namespace search
     }
 
 
-    /* static */
-    void Context::log_message(LogLevel level, const std::string& message, bool force)
+    /* static */ void Context::log_message(LogLevel level, const std::string& message, bool force)
     {
         cython_wrapper::call(_log_message, int(level), message, force);
     }
@@ -363,7 +362,7 @@ namespace search
                                 if (next_ctxt->is_capture()) /* null move refuted by capture */
                                     _parent->_capture_square = next_ctxt->_move.to_square();
 
-                            #if 1
+                            #if 0
                                 if (score >= MATE_HIGH)
                             #else
                                 if (score >= CHECKMATE - next_ctxt->depth())
@@ -1079,8 +1078,34 @@ namespace search
     }
 
 
+    static inline Bitboard pawn_defenders(const State& state, Color defender_color, Square square)
+    {
+        return state.occupied_co(defender_color) & state.pawns & BB_PAWN_ATTACKS[!defender_color][square];
+    }
+
+
+    static inline int eval_pawn_chain(const State& state, Color color, Square pawn, int (&pawn_chain_evals)[64])
+    {
+        int& score = pawn_chain_evals[pawn];
+
+        if (score == 0)
+        {
+            if (const auto defenders = pawn_defenders(state, color, pawn))
+            {
+                for_each_square(defenders, [&](Square square) {
+                    score += 1 + eval_pawn_chain(state, color, square, pawn_chain_evals);
+                });
+            }
+            else
+                score += popcount(state.attacker_pieces_mask(color, pawn));
+        }
+
+        return score;
+    }
+
+
     template<int i>
-    static inline int eval_passed_pawns(const State& state, int piece_count)
+    static inline int eval_passed_pawns(const State& state, int piece_count, int (&pawn_chain_evals)[2][64])
     {
         struct PassedPawnRank
         {
@@ -1122,18 +1147,20 @@ namespace search
                 if ((advance_mask & occupied) == 0 || (state.attacks_mask(pawn) & others_mask))
                     score += SIGN[color] * interpolate(piece_count, ranks[i].bonus[0], ranks[i].bonus[1]);
 
+            #if 0
                 /* extra bonus for defended pawns */
                 score += SIGN[color]
-                #if 0
-                    * bool(state.attackers_mask(color, pawn))
-                #else
                     * bool(state.occupied_co(color) & state.pawns & BB_PAWN_ATTACKS[!color][pawn])
-                #endif
                     * interpolate(piece_count, MIDGAME_DEFENDED_PASSED, ENDGAME_DEFENDED_PASSED);
+            #else
+                score += SIGN[color]
+                    * eval_pawn_chain(state, color, pawn, pawn_chain_evals[color])
+                    * interpolate(piece_count, MIDGAME_DEFENDED_PASSED, ENDGAME_DEFENDED_PASSED);
+            #endif
             });
         }
 
-        return score + eval_passed_formation(state, piece_count);
+        return score;
     }
 
 
@@ -1176,6 +1203,13 @@ namespace search
 
     static inline int eval_pawn_structure(const State& state, int pc)
     {
+        int eval = eval_passed_formation(state, pc);
+
+        int pawn_chain_evals[2][64] = { { 0 }, { 0 } };
+
+        eval += eval_passed_pawns<0>(state, pc, pawn_chain_evals);
+        eval += eval_passed_pawns<1>(state, pc, pawn_chain_evals);
+
         int doubled = 0;
         int isolated = 0;
         int diff = 0;
@@ -1194,10 +1228,10 @@ namespace search
             }
         }
 
-        return doubled * interpolate(pc, MIDGAME_DOUBLED_PAWNS, ENDGAME_DOUBLED_PAWNS)
+        return eval
+            + doubled * interpolate(pc, MIDGAME_DOUBLED_PAWNS, ENDGAME_DOUBLED_PAWNS)
             + isolated * interpolate(pc, MIDGAME_ISOLATED_PAWNS, ENDGAME_ISOLATED_PAWNS)
-            + (diff != 0) * SIGN[diff > 0]
-                * interpolate(pc, MIDGAME_PAWN_MAJORITY, ENDGAME_PAWN_MAJORITY);
+            + (diff != 0) * SIGN[diff > 0] * interpolate(pc, MIDGAME_PAWN_MAJORITY, ENDGAME_PAWN_MAJORITY);
     }
 
 
@@ -1211,19 +1245,14 @@ namespace search
 
         eval += eval_material_imbalance(state, piece_count, mat_eval);
         eval += eval_open_files(state, piece_count);
-        eval += eval_passed_pawns<0>(state, piece_count);
-        eval += eval_passed_pawns<1>(state, piece_count);
         eval += eval_pawn_structure(state, piece_count);
         eval += eval_piece_grading(state, piece_count);
 
-        eval += state.diff_connected_rooks() *
-            interpolate(piece_count, MIDGAME_CONNECTED_ROOKS, ENDGAME_CONNECTED_ROOKS);
+        eval += state.diff_connected_rooks()
+             * interpolate(piece_count, MIDGAME_CONNECTED_ROOKS, ENDGAME_CONNECTED_ROOKS);
 
         eval += BISHOP_PAIR * state.diff_bishop_pairs();
 
-    #if 0
-        eval += BISHOPS_STRENGTH * state.diff_bishops_strength();
-    #endif
         return eval;
     }
 
@@ -1377,11 +1406,6 @@ namespace search
          */
         if (evaluate_material() > std::max(_alpha, _score) + WEIGHT[PAWN])
             return 0;
-
-    #if 0
-        if (depth() < 3 && SIGN[!state().turn] * eval_king_safety() < KING_SAFETY_MARGIN)
-            return 0;
-    #endif
 
         // return 50 * d + M_PI_2 * pow(depth, M_E);
         // return 50 * d + pow(depth + M_PI_2, M_E);
@@ -1760,7 +1784,7 @@ namespace search
         if (_move._group != MoveOrder::TACTICAL_MOVES)
         {
             reduction += !has_improved();
-            reduction -= 2 * (_move == _parent->_counter_move);
+            reduction -= 2 * _parent->is_counter_move(_move);
 
             if (get_tt()->_w_beta <= get_tt()->_w_alpha + 2 * HALF_WINDOW && iteration() >= 13)
                 ++reduction;
@@ -1935,13 +1959,6 @@ namespace search
             }
         }
         return false;
-    }
-
-
-    bool Context::has_passed_pawns() const
-    {
-        return state().passed_pawns(WHITE, ~(BB_RANK_4 | BB_RANK_5)) != 0
-            || state().passed_pawns(BLACK, ~(BB_RANK_4 | BB_RANK_5)) != 0;
     }
 
 
@@ -2557,7 +2574,7 @@ namespace search
                         }
                     }
                     /* tactical */
-                    if ((move == ctxt._counter_move
+                    if ((ctxt.is_counter_move(move)
                         || move.from_square() == ctxt._capture_square
                         || (ctxt.state().pawns & BB_PASSED[ctxt.turn()] & BB_SQUARES[move.from_square()])
                         ) && make_move(ctxt, move, MoveOrder::TACTICAL_MOVES)

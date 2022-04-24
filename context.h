@@ -272,7 +272,14 @@ namespace search
 
         bool        has_improved(score_t margin = 0) { return improvement() > margin; }
         bool        has_moves() { return _move_maker.has_moves(*this); }
-        bool        has_passed_pawns() const;
+
+    #if 0
+        bool has_passed_pawns() const
+        {
+            return state().passed_pawns(WHITE, ~(BB_RANK_4 | BB_RANK_5)) != 0
+                || state().passed_pawns(BLACK, ~(BB_RANK_4 | BB_RANK_5)) != 0;
+        }
+    #endif
 
         score_t     improvement();
         static void init();
@@ -281,8 +288,10 @@ namespace search
         static bool is_cancelled() { return _cancel; }
         bool        is_capture() const { return state().capture_value != 0; }
         bool        is_check() const { return state().is_check(); }
+        bool        is_counter_move(const Move&) const;
         bool        is_evasion() const;
         bool        is_extended() const;
+        bool        is_king_safe() const;
         bool        is_last_move();
         bool        is_leftmost() const { return _ply == 0 || _leftmost; }
         bool        is_leaf(); /* treat as terminal node ? */
@@ -390,11 +399,7 @@ namespace search
             && !_excluded
             && state().pushed_pawns_score <= 1
             && !state().just_king_and_pawns()
-
-            && (_tt_entry._king_safety == SCORE_MIN
-                || depth() >= 5
-                || SIGN[!state().turn] * _tt_entry._king_safety >= KING_SAFETY_MARGIN)
-
+            && (depth() >= 6 || is_king_safe())
             && !is_check();
     }
 
@@ -422,7 +427,7 @@ namespace search
             || (move._state->capture_value != 0)
             || (move._group <= MoveOrder::HISTORY_COUNTERS)
             || (move.from_square() == _capture_square)
-            || (move == _counter_move)
+            || is_counter_move(move)
             || (move == _tt_entry._hash_move)
             || (move._state->is_check())
             || (move._group == MoveOrder::TACTICAL_MOVES && count < 13)
@@ -465,7 +470,13 @@ namespace search
         ASSERT(move != _move);
 
         return _tt->history_score(state(), turn(), move)
-            + COUNTER_MOVE_BONUS * (move == _counter_move);
+            + COUNTER_MOVE_BONUS * is_counter_move(move);
+    }
+
+
+    inline bool Context::is_counter_move(const Move& move) const
+    {
+        return _counter_move == move && depth() >= COUNTER_MOVE_MIN_DEPTH;
     }
 
 
@@ -473,6 +484,13 @@ namespace search
     {
         ASSERT(_parent);
         return _max_depth > _parent->_max_depth;
+    }
+
+
+    inline bool Context::is_king_safe() const
+    {
+        return _tt_entry._king_safety == SCORE_MIN
+            || SIGN[!state().turn] * _tt_entry._king_safety >= KING_SAFETY_MARGIN;
     }
 
 

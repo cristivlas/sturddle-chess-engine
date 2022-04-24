@@ -869,34 +869,6 @@ namespace chess
     }
 
 
-    /*
-     * Use the number of potential "targets" to gauge the relative strengths of bishops.
-     *
-     * The difference is calculated only for bishops of colors that both sides have,
-     * to maximize orthogonality with material and mobility evaluation terms.
-     */
-    int State::diff_bishops_strength() const
-    {
-        int score = 0;
-
-        for (auto mask : { BB_LIGHT_SQUARES, BB_DARK_SQUARES })
-        {
-            if (bool(bishops & mask & white) == bool(bishops & mask & black))
-            {
-                for_each_square(bishops & mask, [&](Square square)
-                {
-                    const auto square_mask = BB_SQUARES[square];
-                    const auto color = (white & square_mask) ? WHITE : BLACK;
-
-                    score += SIGN[color] * popcount(occupied_co(!color) & mask);
-                });
-            }
-        }
-
-        return score;
-    }
-
-
     int State::diff_bishop_pairs() const
     {
         int count[] = { 0, 0 };
