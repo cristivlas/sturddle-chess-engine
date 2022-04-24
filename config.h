@@ -115,17 +115,15 @@ DECLARE_VALUE(  SINGULAR_MARGIN,                     22,    0,     100)
 DECLARE_PARAM(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
 
 /* Move ordering */
-DECLARE_VALUE(  CAPTURE_LAST_MOVED_BONUS,            21,    0,     100)
-DECLARE_VALUE(  COUNTER_MOVE_BONUS,                  20,    0,     100)
+DECLARE_VALUE(  CAPTURE_LAST_MOVED_BONUS,            37,    0,     100)
+DECLARE_VALUE(  COUNTER_MOVE_BONUS,                  70,    0,     100)
+DECLARE_VALUE(  COUNTER_MOVE_MIN_DEPTH,               6,    0,     100)
 DECLARE_VALUE(  HISTORY_FAIL_LOW_PENALTY,            30,    0,     100)
 DECLARE_VALUE(  HISTORY_HIGH,                        95,    0,     100)
 DECLARE_VALUE(  HISTORY_MIN_DEPTH,                    3,    0,     100)
 
 /* Tactical evaluation */
 DECLARE_VALUE(  BISHOP_PAIR,                         68,    0,     100)
-#if 0
-DECLARE_VALUE(  BISHOPS_STRENGTH,                     1,    0,     100)
-#endif
 DECLARE_VALUE(  CASTLING_RIGHTS_BONUS,              108,    0,     300)
 DECLARE_VALUE(  CHECK_BONUS,                         50,    0,     100)
 DECLARE_VALUE(  CENTER_ATTACKS,                      32,    0,     100)
@@ -147,17 +145,17 @@ DECLARE_VALUE(  ENDGAME_UNBLOCKED_PASSED_6,         140,    0,     250)
 DECLARE_VALUE(  ENDGAME_UNBLOCKED_PASSED_7,         160,    0,     250)
 
 DECLARE_VALUE(  MIDGAME_CONNECTED_ROOKS,             25,    0,     100)
-DECLARE_VALUE(  MIDGAME_DEFENDED_PASSED,             31,    0,     100)
+DECLARE_VALUE(  MIDGAME_DEFENDED_PASSED,             43,    0,     100)
 DECLARE_VALUE(  MIDGAME_KING_QUADRANT,               69,    0,     100)
 DECLARE_VALUE(  MIDGAME_KING_OUT_PENALTY,           -65, -500,       0)
 DECLARE_VALUE(  MIDGAME_DOUBLED_PAWNS,              -20, -100,       0)
 DECLARE_VALUE(  MIDGAME_ISOLATED_PAWNS,             -17, -100,       0)
 DECLARE_VALUE(  MIDGAME_HALF_OPEN_FILE,              93,    0,     100)
 DECLARE_VALUE(  MIDGAME_OPEN_FILE,                   47,    0,     100)
-DECLARE_VALUE(  MIDGAME_PASSED_FORMATION,            78,    0,     250)
+DECLARE_VALUE(  MIDGAME_PASSED_FORMATION,            83,    0,     250)
 DECLARE_VALUE(  MIDGAME_PAWN_MAJORITY,               53,    0,     250)
-DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_6,         132,    0,     250)
-DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_7,         155,    0,     250)
+DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_6,         211,    0,     250)
+DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_7,         237,    0,     250)
 
 #undef DECLARE_PARAM
 #undef DECLARE_VALUE

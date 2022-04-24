@@ -1245,11 +1245,6 @@ namespace search
 
         eval += eval_material_imbalance(state, piece_count, mat_eval);
         eval += eval_open_files(state, piece_count);
-
-        eval += eval_passed_pawns<0>(state, piece_count);
-        eval += eval_passed_pawns<1>(state, piece_count);
-        eval += eval_passed_formation(state, piece_count);
-
         eval += eval_pawn_structure(state, piece_count);
         eval += eval_piece_grading(state, piece_count);
 
