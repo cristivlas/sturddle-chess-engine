@@ -28,7 +28,7 @@
 #include <map>
 #include <random>
 #include <sstream>
-
+#include "chess.h"
 #define CONFIG_IMPL
   #include "context.h"
 #undef CONFIG_IMPL
@@ -47,7 +47,7 @@ struct LMP
     {
         std::generate_n(_counters.begin(), size, [] {
             static int i = 0;
-            return 15 + int(pow(i++ + .5, 1.99));
+            return 13 + int(pow(i++ + .5, 1.9));
         });
     }
 } LMP;
@@ -77,11 +77,20 @@ std::map<std::string, Param> _get_param_info()
 
     for (const auto& elem : Config::_namespace)
     {
-        info.emplace(elem.first, Param{ *elem.second._val, elem.second._min, elem.second._max });
+        info.emplace(elem.first,
+            Param {
+                *elem.second._val,
+                elem.second._min,
+                elem.second._max,
+                elem.second._group
+            });
     }
 
     info.emplace("Hash", Param {
-        int(TranspositionTable::get_hash_size()), HASH_MIN, int(TranspositionTable::max_hash_size())
+        int(TranspositionTable::get_hash_size()),
+        HASH_MIN,
+        int(TranspositionTable::max_hash_size()),
+        "Settings",
     });
 
     return info;
@@ -308,87 +317,83 @@ namespace search
     bool Context::is_beta_cutoff(const ContextPtr& next_ctxt, score_t score)
     {
         ASSERT(next_ctxt->_ply != 0);
+        ASSERT(score > SCORE_MIN && score < SCORE_MAX);
+        ASSERT(_alpha >= _score); /* invariant */
 
-        if (!is_cancelled())
+        if (score > _score)
         {
-            ASSERT(score > SCORE_MIN && score < SCORE_MAX);
-            ASSERT(_alpha >= _score); /* invariant */
-
-            if (score > _score)
+            if (next_ctxt->is_null_move())
             {
-                if (next_ctxt->is_null_move())
-                {
-                    /* consecutive null moves not allowed by design */
-                    ASSERT(!is_null_move());
+                /* consecutive null moves not allowed by design */
+                ASSERT(!is_null_move());
 
-                    /* ignore if not fail-high */
-                    if (score < _beta)
-                        return false;
-                }
-
-                if (score > _alpha)
-                {
-                    if (!next_ctxt->is_null_move())
-                    {
-                        if (next_ctxt->_retry_above_alpha == RETRY::Reduced)
-                        {
-                            _retry_next = true;
-                            ++_tt->_retry_reductions;
-
-                            /* increment, so that late_move_reduce() skips it */
-                            _full_depth_count = next_move_index() + 1;
-                        }
-                        else if (next_ctxt->_retry_above_alpha == RETRY::PVS && score < _beta)
-                        {
-                            _retry_next = true;
-                            _retry_beta = -score;
-                        }
-
-                        if (_retry_next)
-                        {
-                            /* rewind and search again at full depth */
-                            rewind(-1);
-                            return false;
-                        }
-
-                        if (score >= _beta)
-                        {
-                            _cutoff_move = next_ctxt->_move;
-
-                            if (is_null_move())
-                            {
-                                ASSERT(_parent);
-
-                                if (next_ctxt->is_capture()) /* null move refuted by capture */
-                                    _parent->_capture_square = next_ctxt->_move.to_square();
-
-                            #if 0
-                                if (score >= MATE_HIGH)
-                            #else
-                                if (score >= CHECKMATE - next_ctxt->depth())
-                            #endif
-                                    _parent->_mate_detected = CHECKMATE - score + 1;
-                            }
-                        }
-                    }
-
-                    _alpha = score;
-                }
-
-                _score = score;
-
-                if (!next_ctxt->is_null_move())
-                {
-                    ASSERT(next_ctxt->_move._state == next_ctxt->_state);
-                #if LAZY_STATE_COPY
-                    next_ctxt->copy_move_state();
-                #endif
-                    _best = next_ctxt;
-                }
+                /* ignore if not fail-high */
+                if (score < _beta)
+                    return false;
             }
 
-            ASSERT(_alpha >= _score); /* invariant */
+            if (score > _alpha)
+            {
+                if (!next_ctxt->is_null_move())
+                {
+                    if (next_ctxt->_retry_above_alpha == RETRY::Reduced)
+                    {
+                        _retry_next = true;
+                        ++_tt->_retry_reductions;
+
+                        /* increment, so that late_move_reduce() skips it */
+                        _full_depth_count = next_move_index() + 1;
+                    }
+                    else if (next_ctxt->_retry_above_alpha == RETRY::PVS && score < _beta)
+                    {
+                        _retry_next = true;
+                        _retry_beta = -score;
+                    }
+
+                    if (_retry_next)
+                    {
+                        /* rewind and search again at full depth */
+                        rewind(-1);
+                        return false;
+                    }
+
+                    if (score >= _beta)
+                    {
+                        _cutoff_move = next_ctxt->_move;
+
+                        if (is_null_move())
+                        {
+                            ASSERT(_parent);
+
+                            if (next_ctxt->is_capture()) /* null move refuted by capture */
+                                _parent->_capture_square = next_ctxt->_move.to_square();
+
+                        #if 0
+                            if (score >= MATE_HIGH)
+                        #else
+                            if (score >= CHECKMATE - next_ctxt->depth())
+                        #endif
+                                _parent->_mate_detected = CHECKMATE - score + 1;
+                        }
+                    }
+                }
+
+                _alpha = score;
+            }
+
+            _score = score;
+
+            if (!next_ctxt->is_null_move())
+            {
+                ASSERT(next_ctxt->_move._state == next_ctxt->_state);
+            #if LAZY_STATE_COPY
+                next_ctxt->copy_move_state();
+            #endif
+                _best = next_ctxt;
+            }
         }
+
+        ASSERT(_alpha >= _score); /* invariant */
 
         return _alpha >= _beta;
     }
@@ -1088,16 +1093,18 @@ namespace search
     {
         int& score = pawn_chain_evals[pawn];
 
-        if (score == 0)
+        if (score == SCORE_MIN)
         {
+            score = 0;
+
             if (const auto defenders = pawn_defenders(state, color, pawn))
             {
                 for_each_square(defenders, [&](Square square) {
                     score += 1 + eval_pawn_chain(state, color, square, pawn_chain_evals);
                 });
             }
-            else
-                score += popcount(state.attacker_pieces_mask(color, pawn));
+
+            score += popcount(state.attacker_pieces_mask(color, pawn));
         }
 
         return score;
@@ -1140,23 +1147,28 @@ namespace search
 
             const auto pawns = state.pawns & own_mask & ranks[i].mask[color];
 
-            for_each_square(pawns, [&](Square pawn) {
-                const auto pawn_mask = BB_SQUARES[pawn];
+            for_each_square(pawns, [&](Square square) {
+                const auto pawn_mask = BB_SQUARES[square];
                 const auto advance_mask = color ? shift_up(pawn_mask) : shift_down(pawn_mask);
 
-                if ((advance_mask & occupied) == 0 || (state.attacks_mask(pawn) & others_mask))
+                if ((advance_mask & occupied) == 0)
+                {
+                    const auto pawn = Square(chess::msb(advance_mask));
+                    score += SIGN[color] * (
+                        interpolate(piece_count, ranks[i].bonus[0], ranks[i].bonus[1])
+                        + eval_pawn_chain(state, color, pawn, pawn_chain_evals[color]));
+                }
+                else if (const auto pawn_attacks = state.attacks_mask(square) & others_mask)
+                {
                     score += SIGN[color] * interpolate(piece_count, ranks[i].bonus[0], ranks[i].bonus[1]);
+                    for_each_square(pawn_attacks, [&](Square pawn) {
+                        score += SIGN[color] * eval_pawn_chain(state, color, pawn, pawn_chain_evals[color]);
+                    });
+                }
 
-            #if 0
-                /* extra bonus for defended pawns */
                 score += SIGN[color]
-                    * bool(state.occupied_co(color) & state.pawns & BB_PAWN_ATTACKS[!color][pawn])
+                    * eval_pawn_chain(state, color, square, pawn_chain_evals[color])
                     * interpolate(piece_count, MIDGAME_DEFENDED_PASSED, ENDGAME_DEFENDED_PASSED);
-            #else
-                score += SIGN[color]
-                    * eval_pawn_chain(state, color, pawn, pawn_chain_evals[color])
-                    * interpolate(piece_count, MIDGAME_DEFENDED_PASSED, ENDGAME_DEFENDED_PASSED);
-            #endif
             });
         }
 
@@ -1205,7 +1217,8 @@ namespace search
     {
         int eval = eval_passed_formation(state, pc);
 
-        int pawn_chain_evals[2][64] = { { 0 }, { 0 } };
+        int pawn_chain_evals[2][64];
+        std::fill_n(&pawn_chain_evals[0][0], 2 * 64, SCORE_MIN);
 
         eval += eval_passed_pawns<0>(state, pc, pawn_chain_evals);
         eval += eval_passed_pawns<1>(state, pc, pawn_chain_evals);
@@ -1235,10 +1248,23 @@ namespace search
     }
 
 
-    static inline int eval_tactical(const State& state, score_t mat_eval)
+    static inline int eval_threats(const State& state, int piece_count)
     {
-        const auto piece_count = popcount(state.occupied());
+        int diff = 0;
 
+        for (auto color : { BLACK, WHITE })
+        {
+            const auto sign = SIGN[color];
+            for_each_square(state.occupied_co(color) & ~(state.pawns | state.kings), [&](Square square) {
+                diff -= sign * popcount(state.attackers_mask(!color, square));
+            });
+        }
+        return diff * interpolate(piece_count, MIDGAME_THREATS, ENDGAME_THREATS);
+    }
+
+
+    static inline int eval_tactical(const State& state, score_t mat_eval, int piece_count)
+    {
         score_t eval = 0;
 
         eval += eval_center(state, piece_count);
@@ -1259,7 +1285,12 @@ namespace search
 
     static inline int eval_tactical(Context& ctxt)
     {
-        return eval_tactical(ctxt.state(), ctxt.evaluate_material()) + ctxt.eval_king_safety();
+        const auto piece_count = popcount(ctxt.state().occupied());
+        const auto mat_eval = ctxt.evaluate_material();
+
+        return eval_tactical(ctxt.state(), mat_eval, piece_count)
+            + ctxt.eval_king_safety(piece_count)
+            + ctxt.eval_threats(piece_count);
     }
 
 
@@ -1337,12 +1368,21 @@ namespace search
     }
 
 
-    int Context::eval_king_safety()
+    int Context::eval_king_safety(int piece_count)
     {
         if (_tt_entry._king_safety == SCORE_MIN)
-            _tt_entry._king_safety = search::eval_king_safety(state(), popcount(state().occupied()));
+            _tt_entry._king_safety = search::eval_king_safety(state(), piece_count);
 
         return _tt_entry._king_safety;
+    }
+
+
+    int Context::eval_threats(int piece_count)
+    {
+        if (_tt_entry._threats == SCORE_MIN)
+            _tt_entry._threats = search::eval_threats(state(), piece_count);
+
+        return _tt_entry._threats;
     }
 
 
@@ -1372,10 +1412,9 @@ namespace search
                    _move == _parent->_tt_entry._hash_move
                 && abs(_parent->_tt_entry._value) < MATE_HIGH
                 && _parent->history_score(_move) > HISTORY_HIGH
-                && get_tt()->historical_counters(
-                    _parent->state(), _parent->turn(), _move).first > 10000);
+                && _parent->history_count(_move) > 10000);
 
-            const auto double_extension_ok = _double_ext <= 6;
+            const auto double_extension_ok = (_double_ext <= DOUBLE_EXT_MAX);
             const auto extend = std::min(1 + double_extension_ok, _extension / ONE_PLY);
 
             ASSERT(extend >= 0);
@@ -1439,7 +1478,7 @@ namespace search
     static inline int null_move_reduction(Context& ctxt)
     {
         return NULL_MOVE_REDUCTION
-            + ctxt.depth() / 6
+            + ctxt.depth() / NULL_MOVE_DEPTH_FACTOR
             + std::min(3, (ctxt.evaluate_material() - ctxt._beta) / NULL_MOVE_FACTOR);
     }
 #endif /* ADAPTIVE_NULL_MOVE */
@@ -1623,12 +1662,6 @@ namespace search
     }
 
 
-    int Context::rewind(int where, bool reorder)
-    {
-        return _move_maker.rewind(*this, where, reorder);
-    }
-
-
     void Context::set_search_window(score_t score, bool reset)
     {
         if (!ASPIRATION_WINDOW || reset || iteration() == 1)
@@ -1732,8 +1765,8 @@ namespace search
      */
     bool Context::is_null_move_ok()
     {
-        if (!_null_move_allowed[turn()]
-            || _ply == 0
+        if (_ply == 0
+            || _null_move_allowed[turn()] == false
             || _excluded
             || is_null_move() /* consecutive null moves are not allowed */
             || is_singleton()
@@ -1747,7 +1780,7 @@ namespace search
             return false;
 
         ASSERT(depth() >= 0);
-        return evaluate_material() >= _beta - 20 * depth() + NULL_MOVE_MARGIN;
+        return evaluate_material() >= _beta - NULL_MOVE_DEPTH_WEIGHT * depth() + NULL_MOVE_MARGIN;
     }
 
 
@@ -1769,10 +1802,11 @@ namespace search
         prune = prune && count > 1;
 
         /* counter-based late move pruning */
-        if (prune
+        if (LATE_MOVE_PRUNING
+            && prune
             && depth < int(LMP._size)
             && count >= LMP._counters[depth]
-            && can_prune(count)
+            && can_prune()
            )
             return LMRAction::Prune;
 
@@ -1789,13 +1823,12 @@ namespace search
             if (get_tt()->_w_beta <= get_tt()->_w_alpha + 2 * HALF_WINDOW && iteration() >= 13)
                 ++reduction;
 
-            reduction -= get_tt()->historical_counters(
-                _parent->state(), _parent->turn(), _move).first / 20063;
+            reduction -= _parent->history_count(_move) / 20063;
         }
 
         reduction = std::max(1, reduction);
 
-        if (reduction > depth && prune && can_prune(count))
+        if (reduction > depth && prune && can_prune())
             return LMRAction::Prune;
 
         ASSERT(reduction > 0);
@@ -1845,6 +1878,9 @@ namespace search
             || is_null_move()
             || is_retry()
             || state().promotion == PieceType::QUEEN /* ignore under-promotions */
+        #if 0
+            || (is_capture() && (_ply % 2) && !is_standing_pat(*this))
+        #endif
             || is_check()
             /* last move to search from current node, with score close to mate?
                extend the search as to not miss a possible mate in the next move */
@@ -1885,7 +1921,7 @@ namespace search
     {
         std::unique_lock<std::mutex> lock(_mutex);
 
-        auto now = std::chrono::system_clock::now();
+        auto now = std::chrono::steady_clock::now();
         auto millisec = duration_cast<std::chrono::milliseconds>(now - _time_start).count();
 
         /*
@@ -1912,7 +1948,7 @@ namespace search
         std::unique_lock<std::mutex> lock(_mutex);
 
         _cancel = false;
-        _time_start = std::chrono::system_clock::now();
+        _time_start = std::chrono::steady_clock::now();
         _time_limit = time_limit;
         _callback_count = 0;
     }
@@ -1978,11 +2014,10 @@ namespace search
         {
             const auto now = high_resolution_clock::now();
             const auto count = duration_cast<nanoseconds>(now - start).count();
+
             if (count >= nanosec)
-            {
-                /* std::clog << count << std::endl; */
                 break;
-            }
+
             check_time_and_update_nps();
             if (is_cancelled())
                 break;
@@ -2087,7 +2122,7 @@ namespace search
             if (other < MATE_LOW)
             {
                 move._score = -other;
-                move._group = WINNING_CAPTURES;
+                move._group = MoveOrder::WINNING_CAPTURES;
 
                 if (DEBUG_CAPTURES)
                     ctxt.log_message(
@@ -2099,21 +2134,12 @@ namespace search
 
             if (capture_gain < 0)
             {
-                move._group = LOSING_CAPTURES;
+                move._group = MoveOrder::LOSING_CAPTURES;
             }
             else
             {
-                move._group = capture_gain > 0 ? WINNING_CAPTURES : EQUAL_CAPTURES;
-
-                /*
-                 * Add sorting score bonus for capturing
-                 * the last piece moved by the opponent.
-                 */
-                if (capture_gain > ctxt.state().weight(PAWN)
-                    && move.to_square() == ctxt._move.to_square())
-                {
-                    move._score += CAPTURE_LAST_MOVED_BONUS;
-                }
+                move._group = MoveOrder::LAST_MOVED_CAPTURE
+                    + (move.to_square() != ctxt._move.to_square()) * (1 + (capture_gain == 0));
             }
         }
     }
@@ -2153,6 +2179,31 @@ namespace search
 
         move._state->apply_move(move);
 
+        incremental_update(move, ctxt);
+
+        /* idea: combine futility pruning with late-move pruning */
+        /* (and do this before checking the legality of the move,
+         * as profiling shows State::is_check() to be expensive).
+         */
+        if (futility
+            && ctxt.depth() >= 0
+            && ctxt.depth() < int(LMP._size)
+            && _current >= LMP._counters[ctxt.depth()]
+            && ctxt.can_prune_move(move)
+           )
+        {
+            auto val = futility + move._state->simple_score * SIGN[!move._state->turn];
+
+            if (val < ctxt._alpha || val < ctxt._score)
+            {
+                _have_pruned_moves = true;
+                move._group = MoveOrder::PRUNED_MOVES;
+                ++ctxt.get_tt()->_futility_prune_count;
+
+                return false;
+            }
+        }
+
         const bool is_known_legal = (move == ctxt._prev);
 
         if (!is_known_legal && move._state->is_check(ctxt.turn()))
@@ -2167,29 +2218,6 @@ namespace search
             move._group = MoveOrder::QUIET_MOVES;
             return false;
         }
-
-        incremental_update(move, ctxt);
-
-        /* idea: combine futility pruning with late-move pruning */
-        if (futility
-            && move._state->capture_value == 0
-            && move._state->promotion == 0
-            && ctxt.depth() >= 0
-            && ctxt.depth() < int(LMP._size)
-            && _current >= LMP._counters[ctxt.depth()])
-        {
-            auto val = futility + move._state->simple_score * SIGN[!move._state->turn];
-
-            if (val < ctxt._alpha || val < ctxt._score)
-            {
-                _have_pruned_moves = true;
-                move._group = MoveOrder::PRUNED_MOVES;
-                ++ctxt.get_tt()->_futility_prune_count;
-
-                return false;
-            }
-        }
-
         /* consistency check */
         ASSERT((move._state->capture_value != 0) == ctxt.state().is_capture(move));
 
@@ -2212,39 +2240,6 @@ namespace search
         move._score = score;
 
         return true;
-    }
-
-
-    void MoveMaker::sort_moves(Context& /* ctxt */, size_t start_at)
-    {
-        ASSERT(start_at < moves().size());
-
-        auto& moves_list = moves();
-#if 0
-        /*
-         * Walk backwards skipping over quiet, pruned, and illegal moves.
-         */
-        auto n = moves_list.size();
-        for (; n > start_at; --n)
-        {
-            if (moves_list[n-1]._group < MoveOrder::QUIET_MOVES)
-                break;
-        }
-        ASSERT(n == moves_list.size() || moves_list[n]._group >= MoveOrder::QUIET_MOVES);
-        _count = n;
-        const auto last = moves_list.begin() + n;
-#else
-        const auto last = moves_list.end();
-#endif
-        const auto first = moves_list.begin() + start_at;
-
-        insertion_sort(first, last, [&](const Move& lhs, const Move& rhs)
-            {
-                return (lhs._group == rhs._group && lhs._score > rhs._score)
-                    || (lhs._group < rhs._group);
-            });
-
-        _need_sort = false;
     }
 
 
@@ -2478,6 +2473,19 @@ namespace search
     }
 
 
+    static inline bool is_pawn_push(Context& ctxt, const Move& move)
+    {
+        return ctxt.state().pawns & BB_PASSED[ctxt.turn()] & BB_SQUARES[move.from_square()];
+    }
+
+
+    static inline bool is_attack_on_king(const Context& ctxt, const Move& move)
+    {
+        const auto king = ctxt.state().king(!ctxt.turn());
+        return square_distance(king, move.to_square()) <= 2;
+    }
+
+
     template<typename T, T... is> constexpr std::array<double, sizeof ...(is)>
     history_thresholds(std::integer_sequence<T, is...>)
     {
@@ -2540,7 +2548,7 @@ namespace search
                     {
                         make_move(ctxt, move, ctxt._ply ? MoveOrder::HASH_MOVES : MoveOrder::PREV_ITER);
                     }
-                    else if (ctxt._tt_entry._hash_move == move)
+                    else if (move == ctxt._tt_entry._hash_move)
                     {
                         make_move(ctxt, move, MoveOrder::HASH_MOVES);
                     }
@@ -2576,8 +2584,10 @@ namespace search
                     /* tactical */
                     if ((ctxt.is_counter_move(move)
                         || move.from_square() == ctxt._capture_square
-                        || (ctxt.state().pawns & BB_PASSED[ctxt.turn()] & BB_SQUARES[move.from_square()])
-                        ) && make_move(ctxt, move, MoveOrder::TACTICAL_MOVES)
+                        || is_pawn_push(ctxt, move)
+                        || is_attack_on_king(ctxt, move)
+                        )
+                        && make_move(ctxt, move, MoveOrder::TACTICAL_MOVES)
                        )
                         move._score = ctxt.history_score(move);
                     break;
@@ -2599,6 +2609,9 @@ namespace search
                     ASSERT_MESSAGE(false, ("unexpected move ordering phase: " + std::to_string(_phase)));
                     break;
                 }
+
+                if (move._group == MoveOrder::TACTICAL_MOVES && move._score < HISTORY_LOW)
+                    move._group = MoveOrder::LATE_MOVES;
             }
         }
 

@@ -33,7 +33,7 @@
 #include "utility.h"
 
 /* Configuration API */
-struct Param { int val = 0; int min_val; int max_val; };
+struct Param { int val = 0; int min_val; int max_val; std::string group; };
 
 extern std::map<std::string, Param> _get_param_info();
 extern void _set_param(const std::string&, int value, bool echo=false);
@@ -42,7 +42,7 @@ extern std::map<std::string, int> _get_params();
 
 namespace search
 {
-    using time = std::chrono::time_point<std::chrono::system_clock>;
+    using time = std::chrono::time_point<std::chrono::steady_clock>;
 
     using Bitboard = chess::Bitboard;
     using Color = chess::Color;
@@ -161,6 +161,39 @@ namespace search
     }
 
 
+    inline void MoveMaker::sort_moves(Context& /* ctxt */, size_t start_at)
+    {
+        ASSERT(start_at < moves().size());
+
+        auto& moves_list = moves();
+#if 0
+        /*
+         * Walk backwards skipping over quiet, pruned, and illegal moves.
+         */
+        auto n = moves_list.size();
+        for (; n > start_at; --n)
+        {
+            if (moves_list[n-1]._group < MoveOrder::QUIET_MOVES)
+                break;
+        }
+        ASSERT(n == moves_list.size() || moves_list[n]._group >= MoveOrder::QUIET_MOVES);
+        _count = n;
+        const auto last = moves_list.begin() + n;
+#else
+        const auto last = moves_list.end();
+#endif
+        const auto first = moves_list.begin() + start_at;
+
+        insertion_sort(first, last, [&](const Move& lhs, const Move& rhs)
+            {
+                return (lhs._group == rhs._group && lhs._score > rhs._score)
+                    || (lhs._group < rhs._group);
+            });
+
+        _need_sort = false;
+    }
+
+
     enum class LMRAction : int
     {
         None = 0,
@@ -247,8 +280,9 @@ namespace search
         static int  cpu_cores();
 
         bool        can_forward_prune() const;
-        bool        can_prune(int) const;
-        bool        can_prune_move(const Move&i, int) const;
+        bool        can_futility_prune() const;
+        bool        can_prune() const;
+        bool        can_prune_move(const Move&) const;
         bool        can_reduce();
 
         int64_t     check_time_and_update_nps(); /* return elapsed milliseconds */
@@ -256,7 +290,6 @@ namespace search
 
         int         depth() const { return _max_depth - _ply; }
 
-        static int  double_ext_margin();
         std::string epd() const;
 
         /* Static evaluation */
@@ -264,7 +297,8 @@ namespace search
         score_t     evaluate();     /* call _evaluate and do the above */
         score_t     evaluate_end();
         score_t     evaluate_material(bool with_piece_squares = true) const;
-        int         eval_king_safety();
+        int         eval_king_safety(int piece_count);
+        int         eval_threats(int piece_count);
 
         void        extend();       /* fractional extensions */
         ContextPtr  first_move();
@@ -273,13 +307,8 @@ namespace search
         bool        has_improved(score_t margin = 0) { return improvement() > margin; }
         bool        has_moves() { return _move_maker.has_moves(*this); }
 
-    #if 0
-        bool has_passed_pawns() const
-        {
-            return state().passed_pawns(WHITE, ~(BB_RANK_4 | BB_RANK_5)) != 0
-                || state().passed_pawns(BLACK, ~(BB_RANK_4 | BB_RANK_5)) != 0;
-        }
-    #endif
+        int         history_count(const Move&) const;
+        float       history_score(const Move&) const;
 
         score_t     improvement();
         static void init();
@@ -291,7 +320,6 @@ namespace search
         bool        is_counter_move(const Move&) const;
         bool        is_evasion() const;
         bool        is_extended() const;
-        bool        is_king_safe() const;
         bool        is_last_move();
         bool        is_leftmost() const { return _ply == 0 || _leftmost; }
         bool        is_leaf(); /* treat as terminal node ? */
@@ -368,7 +396,6 @@ namespace search
         const Move* get_next_move(score_t);
         bool has_cycle(const State&) const;
 
-        float history_score(const Move&) const;
         int repeated_count(const State&) const;
 
         ContextPtr  _best; /* best search result */
@@ -399,44 +426,50 @@ namespace search
             && !_excluded
             && state().pushed_pawns_score <= 1
             && !state().just_king_and_pawns()
-            && (depth() >= 6 || is_king_safe())
             && !is_check();
     }
 
 
-    inline bool Context::can_prune(int count) const
+    inline bool Context::can_futility_prune() const
+    {
+#if 1
+        return !is_pv_node()
+            && !is_singleton()
+            && !is_capture()
+            && !is_promotion()
+            && !is_check();
+#else
+        return can_prune();
+#endif
+    }
+
+
+    inline bool Context::can_prune() const
     {
         ASSERT(_ply > 0);
         ASSERT(!is_null_move());
         ASSERT(_move);
 
-        if (is_singleton() || is_extended() || is_pv_node() || is_repeated())
-            return false;
-
-        return _parent->can_prune_move(_move, count);
+        return !(is_singleton() || is_extended() || is_pv_node() || is_repeated())
+            && _parent->can_prune_move(_move);
     }
 
 
-    inline bool Context::can_prune_move(const Move& move, int count) const
+    inline bool Context::can_prune_move(const Move& move) const
     {
         ASSERT(move && move._state && move != _move);
         ASSERT(repeated_count(*move._state) == 0);
-        ASSERT(can_forward_prune()); /* pre-req */
+        ASSERT(can_forward_prune());
 
-        if (move.promotion() == chess::PieceType::QUEEN
-            || (move._state->capture_value != 0)
-            || (move._group <= MoveOrder::HISTORY_COUNTERS)
-            || (move.from_square() == _capture_square)
+        return (move == _tt_entry._hash_move
+            || move.promotion() == chess::PieceType::QUEEN
+            || move._state->capture_value != 0
+            || move._group <= MoveOrder::HISTORY_COUNTERS
+            || move.from_square() == _capture_square
             || is_counter_move(move)
-            || (move == _tt_entry._hash_move)
-            || (move._state->is_check())
-            || (move._group == MoveOrder::TACTICAL_MOVES && count < 13)
-           )
-            return false;
-
-        ASSERT(!is_check());
-
-        return true;
+            || move._group == MoveOrder::TACTICAL_MOVES
+            || move._state->is_check()
+           ) == false;
     }
 
 
@@ -446,9 +479,7 @@ namespace search
 
         return _ply != 0
             && !is_retry()
-        #if 0
             && !is_singleton()
-        #endif
             && !is_extended()
             && _move._group >= MoveOrder::WINNING_CAPTURES
             && state().pushed_pawns_score <= 1
@@ -457,9 +488,9 @@ namespace search
     }
 
 
-    inline int Context::double_ext_margin()
+    inline int Context::history_count(const Move& move) const
     {
-        return DOUBLE_EXT_MARGIN;
+        return _tt->historical_counters(state(), turn(), move).first;
     }
 
 
@@ -469,14 +500,13 @@ namespace search
         ASSERT(move);
         ASSERT(move != _move);
 
-        return _tt->history_score(state(), turn(), move)
-            + COUNTER_MOVE_BONUS * is_counter_move(move);
+        return _tt->history_score(state(), turn(), move) + COUNTER_MOVE_BONUS * is_counter_move(move);
     }
 
 
     inline bool Context::is_counter_move(const Move& move) const
     {
-        return _counter_move == move && depth() >= COUNTER_MOVE_MIN_DEPTH;
+        return depth() >= COUNTER_MOVE_MIN_DEPTH && _counter_move == move;
     }
 
 
@@ -484,13 +514,6 @@ namespace search
     {
         ASSERT(_parent);
         return _max_depth > _parent->_max_depth;
-    }
-
-
-    inline bool Context::is_king_safe() const
-    {
-        return _tt_entry._king_safety == SCORE_MIN
-            || SIGN[!state().turn] * _tt_entry._king_safety >= KING_SAFETY_MARGIN;
     }
 
 
@@ -539,6 +562,12 @@ namespace search
         }
 
         return !is_cancelled();
+    }
+
+
+    inline int Context::rewind(int where, bool reorder)
+    {
+        return _move_maker.rewind(*this, where, reorder);
     }
 
 

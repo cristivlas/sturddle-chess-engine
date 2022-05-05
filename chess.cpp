@@ -338,33 +338,6 @@ namespace chess
     }
 
 
-    Bitboard& Position::pieces(PieceType piece_type)
-    {
-        static Bitboard none;
-
-        switch (piece_type)
-        {
-        case PAWN:
-            return pawns;
-        case KNIGHT:
-            return knights;
-        case BISHOP:
-            return bishops;
-        case ROOK:
-            return rooks;
-        case QUEEN:
-            return queens;
-        case KING:
-            return kings;
-
-        case NONE:
-            ASSERT(false && "invalid piece type");
-            break;
-        }
-        return none;
-    }
-
-
     std::vector<int> Position::piece_types(Bitboard bb) const
     {
         std::vector<int> result;
@@ -375,17 +348,6 @@ namespace chess
                 result.push_back(piece_type);
         });
         return result;
-    }
-
-
-    Bitboard Position::kings_quarter(Color color) const
-    {
-        const auto king_mask = kings & occupied_co(color);
-        for (auto quadrant : BB_QUANDRANTS)
-            if (king_mask & quadrant)
-                return quadrant;
-
-        return BB_EMPTY;
     }
 
 

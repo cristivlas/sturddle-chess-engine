@@ -108,6 +108,8 @@ using score_t = int32_t;
   constexpr size_t TRANSPOSITION_TABLE_SLOTS = 16 * 1024 * 1024;
 #endif /* LOW_MEMORY_PROFILE */
 
+#define MOBILITY_TUNING_ENABLED             false
+
 /* Export parameters to Python scripts? */
 #define TUNING_ENABLED                      false
 
@@ -137,12 +139,12 @@ namespace search
         PREV_ITER = 1,
         HASH_MOVES = 2,
         PROMOTIONS = 3,
-        WINNING_CAPTURES = 4,
-        EQUAL_CAPTURES = 5,
-        KILLER_MOVES = 6,
-        LOSING_CAPTURES = 7,
-        HISTORY_COUNTERS = 8,
-        /* REPEATEAD = 9, */
+        LAST_MOVED_CAPTURE = 4,
+        WINNING_CAPTURES = 5,
+        EQUAL_CAPTURES = 6,
+        KILLER_MOVES = 7,
+        LOSING_CAPTURES = 8,
+        HISTORY_COUNTERS = 9,
         TACTICAL_MOVES = 10, /* pushed pawns, checks, etc. */
         LATE_MOVES = 11, /* all other legal moves not covered above */
         UNORDERED_MOVES = 12,

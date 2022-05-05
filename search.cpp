@@ -45,6 +45,22 @@
 using namespace chess;
 using namespace search;
 
+using SpinLock = SharedHashTable::SpinLock;
+
+
+void log_pv(const TranspositionTable& tt, const char* info)
+{
+#if 0
+    std::ostringstream out;
+
+    out << info << ": ";
+    for (const auto& move : tt._pv)
+        out << move << " ";
+
+    Context::log_message(LogLevel::DEBUG, out.str());
+#endif
+}
+
 
 const score_t* TT_Entry::lookup_score(Context& ctxt) const
 {
@@ -104,7 +120,7 @@ static size_t mem_avail()
         mem = info.freeram;
     }
 #else
-    mem = unsigned long(cython_wrapper::call(search::Context::_vmem_avail));
+    mem = static_cast<unsigned long>(cython_wrapper::call(search::Context::_vmem_avail));
 #endif /* __linux__ */
 
     return mem;
@@ -169,6 +185,40 @@ static size_t mem_avail()
 }
 
 
+void TranspositionTable::clear()
+{
+    _iteration = 0;
+    _eval_depth = 0;
+
+    _w_alpha = SCORE_MIN;
+    _w_beta = SCORE_MAX;
+    _reset_window = false;
+
+    _check_nodes = 0;
+    _eval_count = 0;
+    _endgame_nodes = 0;
+    _futility_prune_count = 0;
+    _history_counters = 0;
+    _history_counters_hit = 0;
+    _hits = 0;
+    _late_move_prune_count = 0;
+    _nodes = 0;
+    _nps = 0; /* nodes per second */
+    _null_move_cutoffs = 0;
+    _null_move_failed = 0;
+    _null_move_not_ok = 0;
+    _qsnodes = 0;
+    _reductions = 0;
+    _retry_reductions = 0;
+
+    for (auto color : { BLACK, WHITE })
+    {
+        _countermoves[color].clear();
+        _hcounters[color].clear();
+    }
+}
+
+
 /* static */ void TranspositionTable::clear_shared_hashtable()
 {
     _table->clear();
@@ -213,7 +263,7 @@ const score_t* TranspositionTable::lookup(Context& ctxt)
     if (ctxt.is_repeated() > 0)
         return nullptr;
 
-    if (auto p = _table->lookup(ctxt.state(), false))
+    if (auto p = _table->lookup(ctxt.state(), SpinLock::Acquire::Read))
     {
         ASSERT(p->matches(ctxt.state()));
         ctxt._tt_entry = *p;
@@ -290,19 +340,11 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha)
     entry._value = ctxt._score;
     entry._hash = ctxt.state().hash();
     entry._depth = ctxt.depth();
-
-    /* cache static eval */
-    //if (ctxt._tt_entry._eval > SCORE_MIN)
-        entry._eval = ctxt._tt_entry._eval;
-
-    /* cache capture estimates */
-    //if (ctxt._tt_entry._capt > SCORE_MIN)
-        entry._capt = ctxt._tt_entry._capt;
-
-    //if (ctxt._tt_entry._king_safety > SCORE_MIN)
-        entry._king_safety = ctxt._tt_entry._king_safety;
-
+    entry._eval = ctxt._tt_entry._eval;
+    entry._capt = ctxt._tt_entry._capt;
+    entry._king_safety = ctxt._tt_entry._king_safety;
     entry._singleton = ctxt._tt_entry._singleton;
+    entry._threats = ctxt._tt_entry._threats;
 }
 
 
@@ -313,7 +355,7 @@ void TranspositionTable::store(Context& ctxt, score_t alpha)
 
     update_stats(ctxt);
 
-    if (auto p = _table->lookup(ctxt.state(), true, ctxt.depth()))
+    if (auto p = _table->lookup(ctxt.state(), SpinLock::Acquire::Write, ctxt.depth(), ctxt._score))
     {
         store(ctxt, *p, alpha);
     }
@@ -379,13 +421,13 @@ void TranspositionTable::get_pv_from_table(
 
     auto move = ctxt._tt_entry._hash_move;
     if (!move) /* try the hash table */
-        if (auto p = _table->lookup(state, false))
+        if (auto p = _table->lookup(state, SpinLock::Acquire::Read))
             move = p->_hash_move;
 
     while (move)
     {
         if (print)
-            std::cout << "[" << move.uci() << "] ";
+            std::cout << "[" << move << "] ";
 
         /* Legality check, in case of a (low probability) hash collision. */
         if (state.piece_type_at(move.to_square()) == PieceType::KING)
@@ -400,7 +442,7 @@ void TranspositionTable::get_pv_from_table(
         /* Add the move to the principal variation. */
         pv.emplace_back(move);
 
-        auto p = _table->lookup(state, false);
+        auto p = _table->lookup(state, SpinLock::Acquire::Read);
         if (!p)
             break;
 
@@ -443,6 +485,8 @@ void TranspositionTable::store_pv(Context& root, bool print)
 
     if (print)
         std::cout << "\n";
+
+    log_pv(*this, "store_pv");
 }
 
 
@@ -507,7 +551,6 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
         || ctxt.is_pv_node()
         || ctxt._excluded
         || ctxt.is_mate_bound()
-        || !ctxt.is_king_safe()
         || ctxt.is_evasion()
         || ctxt.is_check()
        )
@@ -681,11 +724,10 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         /* iterate over moves */
         while (auto next_ctxt = ctxt.next(std::exchange(null_move, false), false, futility))
         {
-            if (next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS)
-                ++table._history_counters;
-
             if (!next_ctxt->is_null_move())
             {
+                table._history_counters += next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS;
+
                 /* Futility pruning */
                 if (futility && move_count)
                 {
@@ -694,7 +736,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
                     const auto val = futility - next_ctxt->evaluate_material();
 
-                    if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune(move_count))
+                    if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune())
                     {
                         update_pruned(table, ctxt, *next_ctxt, table._futility_prune_count);
                         continue;
@@ -746,9 +788,9 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     {
                         next_ctxt->_extension += ONE_PLY;
 
-                        if (ctxt._double_ext <= 6
+                        if (ctxt._double_ext <= DOUBLE_EXT_MAX
                             && !ctxt.is_pv_node()
-                            && value + ctxt.double_ext_margin() < s_beta)
+                            && value + DOUBLE_EXT_MARGIN < s_beta)
                         {
                             ++next_ctxt->_max_depth;
                             ++next_ctxt->_double_ext;
@@ -798,6 +840,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
              */
             const auto move_score = -negamax(*next_ctxt, table);
 
+            if (ctxt.is_cancelled())
+            {
+                return ctxt._score;
+            }
+
             if (ctxt.is_beta_cutoff(next_ctxt, move_score))
             {
                 ASSERT(ctxt._score == move_score);
@@ -846,7 +893,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         ASSERT (!ctxt.state().is_capture(ctxt._cutoff_move));
 
                         /* zero-score moves may mean draw (path-dependent) */
-
                         if (move_score && !next_ctxt->is_qsearch())
                         {
                             table.store_countermove(ctxt);
@@ -865,7 +911,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             }
             else if (next_ctxt->depth() >= HISTORY_MIN_DEPTH && !next_ctxt->is_capture())
             {
-                table.history_update_non_cutoffs(next_ctxt->_move, move_score <= table._w_alpha);
+                const auto depth = std::max(1, next_ctxt->depth());
+                const auto failed_low = next_ctxt->is_pv_node()
+                    || (move_score + HISTORY_FAIL_LOW_MARGIN / depth <= table._w_alpha);
+
+                table.history_update_non_cutoffs(next_ctxt->_move, failed_low);
             }
 
             /*
@@ -875,7 +925,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
              * that the upper bound gets more accurate.
              * https://www.chessprogramming.org/PVS_and_Aspiration
              */
-            if (ctxt._ply == 0
+            if (table._iteration <= 7
+                && ctxt._ply == 0
                 && ctxt._tid == 0
                 && move_count == 1
                 && move_score <= table._w_alpha
@@ -1050,7 +1101,7 @@ public:
 
         if (table._iteration == 1)
         {
-            std::vector<TaskData>(thread_count).swap(_tables);
+            std::vector<TaskData>(thread_count, { nullptr, table }).swap(_tables);
 
             /* run 1st iteration on one thread only */
             return;
@@ -1059,6 +1110,7 @@ public:
         for (size_t i = 0; i < thread_count; ++i)
         {
             _tables[i]._tt._iteration = table._iteration;
+
             _tables[i]._tt._w_alpha = std::max(SCORE_MIN, table._w_alpha - int((i + 1) * 2.5));
             _tables[i]._tt._w_beta = std::min(SCORE_MAX, table._w_beta + int((i + 1) * 2.5));
 
@@ -1189,4 +1241,30 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
     }
 
     return score;
+}
+
+
+/*
+ * Shift PV and killer moves tables by two.
+ * Should be called at the beginning of each new search.
+ */
+void TranspositionTable::shift()
+{
+#if 0
+    std::shift_left(_pv.begin(), _pv.end(), 2);
+    std::shift_left(_killer_moves.begin(), _killer_moves().end(), 2);
+#else
+    if (_pv.size() >= 2)
+    {
+        std::rotate(_pv.begin(), _pv.begin() + 2, _pv.end());
+        _pv.resize(_pv.size() - 2);
+    }
+    if (_killer_moves.size() >= 2)
+    {
+        std::rotate(_killer_moves.begin(), _killer_moves.begin() + 2, _killer_moves.end());
+        _killer_moves.resize(_killer_moves.size() - 2);
+    }
+#endif
+
+    log_pv(*this, "shift");
 }

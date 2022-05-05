@@ -371,6 +371,7 @@ cdef extern from 'context.h':
         int val
         int min_val
         int max_val
+        string group
 
     void _set_param(string, int, bint) except+
 
@@ -700,7 +701,9 @@ cdef extern from 'search.h' namespace 'search':
         const   score_t _w_beta
         const   int _eval_depth
 
+        void    clear()
         size_t  nodes() nogil const
+        void    shift()
         const   vector[BaseMove]& get_pv() nogil const
 
         @staticmethod
@@ -894,8 +897,10 @@ cdef class SearchAlgorithm:
         if board:
             self.context.create_from(board)
 
-        self._table = TranspositionTable()
+        self._table.clear()
+        self._table.shift()
         self._table.increment_clock()
+
         self.set_context_callbacks()
 
         deref(self.context._ctxt).set_tt(address(self._table))
@@ -1026,7 +1031,12 @@ def get_param_info():
     cdef map[string, Param] info = _get_param_info()
     params = {}
     for elem in info:
-        params[elem.first.decode()] = (elem.second.val, elem.second.min_val, elem.second.max_val)
+        params[elem.first.decode()] = (
+            elem.second.val,
+            elem.second.min_val,
+            elem.second.max_val,
+            elem.second.group.decode()
+        )
     return params
 
 
@@ -1072,7 +1082,7 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0
-__minor__   = 82
+__minor__   = 83
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
 

@@ -26,7 +26,9 @@ inc_dirs = ['-I./libpopcnt', '-I./thread-pool']
 # Release build
 args = ['-DNO_ASSERT', '-DLAZY_STATE_COPY' ]
 
-if sysconfig.get_platform().startswith('win'):
+platform = sysconfig.get_platform()
+
+if platform.startswith('win'):
     args.append('/std:c++17')
 else:
     if '-O0' not in args:
@@ -40,7 +42,7 @@ else:
     args.append('-Wno-unused-variable')
     args.append('-DCYTHON_WITHOUT_ASSERTIONS')
 
-    cc = environ.get('CC', None)
+    cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
     if cc and cc.startswith('clang'):
         args.append('-Wno-deprecated-declarations')
     else:

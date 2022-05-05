@@ -63,7 +63,7 @@ class UCI:
         self.node_count = 0
         self.i_cb = self.show_thinking if args.show_thinking else None
         self.r_cb = self.update_node_count if args.show_thinking else None
-        self.init_algo(args.algorithm)
+        self.init_algo()
         self.init_opening_book()
 
         self.commands = {
@@ -80,9 +80,10 @@ class UCI:
         self.worker = WorkerThread() # pondering, 'go infinite' commands
 
 
-    def init_algo(self, name):
+    def init_algo(self):
+        name = self.args.algorithm
         self.algorithm = ALGORITHM[name](self.board, self.depth, on_iteration=self.i_cb, threads_report=self.r_cb)
-
+        logging.debug(f'algorithm set to: {self.algorithm}')
 
     # Possible improvements: support a folder of opening books rather
     # than one single Polyglot file (that's what the lichess bot does),
@@ -285,15 +286,14 @@ class UCI:
         elif name == 'Ponder':
             self.ponder_enabled = value == 'true'
         elif name == 'Algorithm':
-            args.algorithm = value
-            self.init_algo(value)
-            logging.info(f'algorithm set to: {self.algorithm}')
+            self.args.algorithm = value
+            self.init_algo()
         else:
             if value in ['true', 'false']:
                 engine.set_param(name, value == 'true')
             else:
                 engine.set_param(name, int(value))
-            logging.info(f'{name}={engine.get_param_info()[name]}')
+            logging.debug(f'{name}={engine.get_param_info()[name]}')
         return True
 
 
@@ -334,7 +334,7 @@ class UCI:
         else:
             whitelist = ['Hash', 'SEE', 'Threads']
 
-        for name, (val, val_min, val_max) in engine.get_param_info().items():
+        for name, (val, val_min, val_max, _) in engine.get_param_info().items():
             if name not in whitelist or name.startswith('DEBUG_'):
                 continue
             if val_min == 0 and val_max == 1:
@@ -349,6 +349,7 @@ class UCI:
 
     def _ucinewgame(self, *_):
         engine.clear_hashtable()
+        self.init_algo()
         return self._position(['position', chess.STARTING_FEN])
 
 

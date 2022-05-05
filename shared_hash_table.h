@@ -20,6 +20,10 @@
  */
 #pragma once
 
+#define QUADRATIC_PROBING   false
+#define TRY_LOCK_ON_READ    true
+
+
 namespace search
 {
     class SharedHashTable
@@ -40,8 +44,7 @@ namespace search
         };
     #endif /* !SMP */
 
-        template<bool> friend class SpinLock;
-
+    public:
         class SpinLock
         {
             static constexpr auto ACQUIRE = std::memory_order_acquire;
@@ -73,9 +76,21 @@ namespace search
                 std::atomic_store_explicit(lock_p(), false, RELEASE);
                 _locked = false;
             }
+
+            inline bool try_lock()
+            {
+                if (!std::atomic_exchange_explicit(lock_p(), true, ACQUIRE))
+                {
+                    _locked = true;
+                    entry()->_lock = this;
+                    return true;
+                }
+                return false;
+            }
     #else
             inline void lock(bool) { _locked = true; }
             inline void release() { _locked = false; }
+            inline bool try_lock() { return true; }
     #endif /* !SMP */
 
         protected:
@@ -85,11 +100,27 @@ namespace search
             SpinLock() = default;
 
         public:
-            SpinLock(SharedHashTable& ht, size_t ix, bool acquire = true)
+            enum class Acquire : int8_t
+            {
+                TryLock,
+                Lock,
+                Read = TryLock,
+                Write = Lock,
+            };
+
+            SpinLock(SharedHashTable& ht, size_t ix, Acquire acquire)
                 : _ht(&ht), _ix(ix)
             {
-                if (acquire)
+                switch (acquire)
+                {
+                case Acquire::Lock:
                     lock();
+                    break;
+
+                case Acquire::TryLock:
+                    try_lock();
+                    break;
+                }
             }
 
             ~SpinLock()
@@ -114,7 +145,8 @@ namespace search
             SpinLock& operator=(SpinLock&&) = delete;
             SpinLock& operator=(const SpinLock&) = delete;
 
-            explicit operator bool() const { return _locked; }
+            bool is_locked() const { return _locked; }
+            explicit operator bool() const { return is_locked(); }
         };
 
         class Proxy : public SpinLock
@@ -124,7 +156,7 @@ namespace search
         public:
             Proxy() = default;
 
-            Proxy(SharedHashTable& ht, size_t ix, bool acquire)
+            Proxy(SharedHashTable& ht, size_t ix, Acquire acquire)
                 : SpinLock(ht, ix, acquire)
                 , _entry(this->entry())
             {
@@ -149,13 +181,7 @@ namespace search
         {
             if (_used > 0)
             {
-            #if 0
-                const auto size = _data.size();
-                _data.clear();
-                _data.resize(size);
-            #else
                 std::fill_n(&_data[0], _data.size(), entry_t());
-            #endif
                 _used = 0;
             }
         }
@@ -169,44 +195,51 @@ namespace search
         /*
          * https://en.wikipedia.org/wiki/Open_addressing
          */
-        Proxy lookup(const State& state, bool acquire_for_writing, int depth = 0)
+        Proxy lookup(const State& state, SpinLock::Acquire acquire, int depth = 0, int value = 0)
         {
             const auto h = state.hash();
             size_t index = h % _data.size();
 
             for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
             {
-                Proxy p(*this, i, true);
-
-                if (!p->is_valid())
+            #if TRY_LOCK_ON_READ
+                Proxy p(*this, i, acquire);
+                if (p.is_locked())
+            #else
+                Proxy p(*this, i, SpinLock::Acquire::Lock);
+            #endif
                 {
-                    if (acquire_for_writing)
+                    if (!p->is_valid())
                     {
-                        ++_used; /* slot is unoccupied, bump up usage count */
-                        return p;
+                        if (acquire == SpinLock::Acquire::Write)
+                        {
+                            ++_used; /* slot is unoccupied, bump up usage count */
+                            return p;
+                        }
+
+                        return Proxy(); /* no match found */
                     }
 
-                    return Proxy(); /* no match found */
-                }
+                    const auto age = p->_age;
 
-                const auto age = p->_age;
-
-                if (p->matches(state) && age <= _clock)
-                    return p;
-
-                if (acquire_for_writing)
-                {
-                    if (age != _clock)
+                    if (p->matches(state) && age <= _clock)
                         return p;
 
-                    if (depth >= p->_depth)
+                    if (acquire == SpinLock::Acquire::Write)
                     {
-                        index = i;
-                        depth = p->_depth;
+                        if (age != _clock)
+                            return p;
+
+                        if (depth >= p->_depth && p->_value < value)
+                        {
+                            index = i;
+                            depth = p->_depth;
+                            value = p->_value;
+                        }
                     }
                 }
 
-            #if 0
+            #if QUADRATIC_PROBING
                 i = (h + j * j) % _data.size();
             #else
                 i = (h + j) % _data.size();
@@ -214,10 +247,10 @@ namespace search
             }
 
             /*
-             * acquire_for_writing == true: lock and return the entry at index;
-             * otherwise: return unlocked Proxy, which means nullptr (no match).
+             * acquire == SpinLock::Acquire::Write: lock and return the entry at index;
+             * otherwise: return unlocked Proxy, which means nullptr (no match found).
              */
-            return Proxy(*this, index, acquire_for_writing);
+            return acquire == SpinLock::Acquire::Write ? Proxy(*this, index, acquire) : Proxy();
         }
 
         inline size_t capacity() const { return _data.size(); }

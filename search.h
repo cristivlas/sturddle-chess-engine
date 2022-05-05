@@ -20,6 +20,7 @@
  */
 #pragma once
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <thread>
@@ -67,6 +68,11 @@ namespace search
     {
         MoveTable()
         {
+            clear();
+        }
+
+        inline void clear()
+        {
             std::fill_n(&_table[0][0], 64 * 64, T());
         }
 
@@ -89,6 +95,11 @@ namespace search
     template<typename T> struct PieceMoveTable
     {
         PieceMoveTable()
+        {
+            clear();
+        }
+
+        inline void clear()
         {
             std::fill_n(&_table[0][0], 7 * 64, T());
         }
@@ -123,6 +134,7 @@ namespace search
         score_t     _value = SCORE_MIN;
         score_t     _eval = SCORE_MIN;
         score_t     _king_safety = SCORE_MIN;
+        score_t     _threats = SCORE_MIN;
         BaseMove    _hash_move;
         bool        _singleton = false;
         uint32_t    _version = 0;
@@ -169,6 +181,7 @@ namespace search
         TranspositionTable() = default;
         ~TranspositionTable() = default;
 
+               void clear();
         static void clear_shared_hashtable();
         static void increment_clock();
 
@@ -235,6 +248,8 @@ namespace search
         size_t nps() const { return _nps; }
         void set_nps(size_t nps) { _nps = nps; }
 
+        void shift();
+
         void history_update_cutoffs(const Move&);
         void history_update_non_cutoffs(const Move&, bool failed_low);
 
@@ -281,6 +296,8 @@ namespace search
         const Move& move) const
     {
         const auto& counters = historical_counters(state, turn, move);
+        ASSERT(counters.first <= counters.second);
+
         return counters.second < 1 ? 0 : (100.0 * counters.first) / counters.second;
     }
 
@@ -293,16 +310,16 @@ namespace search
             ASSERT(move._state->capture_value == 0);
 
             const auto turn = !move._state->turn; /* side that moved */
-    #if USE_BUTTERFLY_TABLES
+        #if USE_BUTTERFLY_TABLES
             auto& counters = _hcounters[turn][move];
-    #else
+        #else
             const auto pt = move._state->piece_type_at(move.to_square());
             auto& counters = _hcounters[turn].lookup(pt, move);
-    #endif /* USE_BUTTERFLY_TABLES */
+        #endif /* USE_BUTTERFLY_TABLES */
 
             ++counters.second;
 
-            counters.first = std::max(0, counters.first - low * HISTORY_FAIL_LOW_PENALTY);
+            counters.first -= low * HISTORY_FAIL_LOW_PENALTY;
         }
     }
 

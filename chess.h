@@ -42,6 +42,10 @@
 #include "common.h"
 #include "libpopcnt.h"
 
+#if !defined (M_E)
+static constexpr auto M_E = 2.718281828459045;
+#endif
+
 constexpr int SIGN[] = { -1, 1 };
 
 namespace chess
@@ -74,8 +78,9 @@ namespace chess
     constexpr Bitboard BB_EMPTY = 0ULL;
     constexpr Bitboard BB_CENTER = (0x3ULL << 35) | (0x3ULL << 27);
 
-    extern Bitboard BB_SQUARES[64];
     extern AttackMasks BB_DIAG_MASKS, BB_FILE_MASKS, BB_RANK_MASKS;
+
+    extern Bitboard BB_SQUARES[64];
     extern Bitboard BB_KING_ATTACKS[64];
     extern Bitboard BB_KNIGHT_ATTACKS[64];
     extern Bitboard BB_PAWN_ATTACKS[2][64];
@@ -411,6 +416,12 @@ namespace chess
     };
 
 
+    inline std::ostream& operator <<(std::ostream& out, const BaseMove& move)
+    {
+        return out << move.uci();
+    }
+
+
     struct Move : public BaseMove
     {
     public:
@@ -478,12 +489,20 @@ namespace chess
             Bitboard _occupied_co[2] = {0, 0};
         };
 
-        Bitboard pawns = 0;
-        Bitboard knights = 0;
-        Bitboard bishops = 0;
-        Bitboard rooks = 0;
-        Bitboard queens = 0;
-        Bitboard kings = 0;
+        union
+        {
+            struct
+            {
+                Bitboard pawns;
+                Bitboard knights;
+                Bitboard bishops;
+                Bitboard rooks;
+                Bitboard queens;
+                Bitboard kings;
+            };
+            Bitboard _pieces[6] = { 0 };
+        };
+
         PieceType _piece_types[64] = { PieceType::NONE };
 
         /* Get the bitboard of squares attacked from a given square */
@@ -542,15 +561,22 @@ namespace chess
 
         Square king(Color color) const
         {
-            auto king_mask = occupied_co(color) & kings;
-            auto king_square = king_mask ? Square(msb(king_mask)) : Square::UNDEFINED;
-
+            const auto king_mask = occupied_co(color) & kings;
             /* there should always be a king */
-            ASSERT_ALWAYS (king_square >= 0);
-            return king_square;
+            ASSERT(king_mask);
+
+            return Square(msb(king_mask));
         }
 
-        Bitboard kings_quarter(Color) const;
+        Bitboard kings_quarter(Color color) const
+        {
+            const auto king_mask = kings & occupied_co(color);
+            for (auto quadrant : BB_QUANDRANTS)
+                if (king_mask & quadrant)
+                    return quadrant;
+
+            return BB_EMPTY;
+        }
 
         score_t eval_mobility() const;
 
@@ -565,13 +591,6 @@ namespace chess
         }
 
         std::vector<int> piece_types(Bitboard) const;
-
-        Bitboard& pieces(PieceType);
-
-        Bitboard pieces_mask(PieceType piece_type, Color color) const
-        {
-            return const_cast<Position*>(this)->pieces(piece_type) & occupied_co(color);
-        }
 
         inline PieceType _piece_type_at(Square square) const
         {
@@ -589,6 +608,41 @@ namespace chess
             if (queens & mask)
                 return PieceType::QUEEN;
             return PieceType::KING;
+        }
+
+        inline Bitboard& pieces(PieceType piece_type)
+        {
+        #if 0
+            static Bitboard none;
+
+            switch (piece_type)
+            {
+            case PAWN:
+                return pawns;
+            case KNIGHT:
+                return knights;
+            case BISHOP:
+                return bishops;
+            case ROOK:
+                return rooks;
+            case QUEEN:
+                return queens;
+            case KING:
+                return kings;
+
+            case NONE:
+                ASSERT(false && "invalid piece type");
+                break;
+            }
+            return none;
+        #else
+            return _pieces[piece_type - 1];
+        #endif
+        }
+
+        Bitboard pieces_mask(PieceType piece_type, Color color) const
+        {
+            return const_cast<Position*>(this)->pieces(piece_type) & occupied_co(color);
         }
 
         inline PieceType piece_type_at(Square square) const
@@ -656,6 +710,34 @@ namespace chess
 
     template<typename T> inline T constexpr pow2(T x) { return x * x; }
 
+    namespace
+    {
+        template<int N> struct _exp {
+            static constexpr double value = _exp<N-1>::value * M_E;
+        };
+
+        template<> struct _exp<0> {
+            static constexpr double value = 1;
+        };
+
+        template<std::size_t... I>
+        constexpr std::array<double, sizeof ... (I)> _exp_table(std::index_sequence<I...>)
+        {
+            return { _exp<I>::value ... };
+        }
+
+        inline constexpr double _e(int x)
+        {
+            auto constexpr e = _exp_table(std::make_index_sequence<33>{});
+            return x < 0 ? (1.0 / e[-x]) : e[x];
+        }
+    }
+
+    inline constexpr double logistic(int x)
+    {
+        return 1 / (1.0 + _e(-x));
+    }
+
     /*
      * https://www.chessprogramming.org/Tapered_Eval
      */
@@ -664,21 +746,14 @@ namespace chess
         ASSERT(pc >= 2);
         ASSERT(pc <= 32);
 
-        if (midgame == endgame)
-            return midgame;
     #if 0
         /* linear, hockey stick */
         return pc <= ENDGAME_PIECE_COUNT
             ? endgame
             : midgame + (endgame - midgame) * double(32 - pc) / (32 - ENDGAME_PIECE_COUNT);
     #else
-        /* quadratic with capping */
-        auto result = (pc <= ENDGAME_PIECE_COUNT)
-            ? endgame
-            : midgame + (endgame - midgame) * pow2(32 - pc) / pow2(32 - ENDGAME_PIECE_COUNT);
-
-        ASSERT(abs(result) < 1000);
-        return result;
+        /* sigmoid */
+        return (endgame - midgame) * (1 - logistic((pc - 32 + ENDGAME_PIECE_COUNT + 1) / 2)) + midgame;
     #endif
     }
 
@@ -710,7 +785,7 @@ namespace chess
         bool is_castle = false;
 
         PieceType promotion = PieceType::NONE;
-        score_t simple_score = 0;
+        mutable score_t simple_score = 0;
 
         void apply_move(const BaseMove&);
 
@@ -937,7 +1012,10 @@ namespace chess
 
     inline score_t State::eval() const
     {
-        auto value = simple_score ? simple_score : eval_simple();
+        if (!simple_score)
+            simple_score = eval_simple();
+
+        auto value = simple_score;
 
     #if EVAL_MOBILITY
         if (!is_endgame())
