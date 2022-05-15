@@ -26,8 +26,10 @@
 #include <thread>
 #include "chess.h"
 
-constexpr int ONE_PLY = 16; /* for fractional extensions */
+constexpr int ONE_PLY = 16; /* fractional extensions */
 constexpr int PLY_MAX = 100;
+
+constexpr int PLY_HISTORY_MAX = 20;
 
 constexpr score_t SCORE_MIN = -100000;
 constexpr score_t SCORE_MAX =  100000;
@@ -120,7 +122,7 @@ namespace search
     };
 
     using KillerMoves = std::array<Move, 2>;
-    using KillerMovesTable = std::vector<KillerMoves>;
+    using KillerMovesTable = std::array<KillerMoves, PLY_MAX>;
 
 
     struct TT_Entry
@@ -171,11 +173,15 @@ namespace search
         using IndexedMoves = PieceMoveTable<Move>;
     #endif /* USE_BUTTERFLY_TABLES */
 
+        using PlyHistoryCounters = std::array<MoveTable<float>, 2>;
+        using PlyHistory = std::array<PlyHistoryCounters, PLY_HISTORY_MAX>;
+
         /* https://www.chessprogramming.org/Countermove_Heuristic */
         IndexedMoves        _countermoves[2];
 
         KillerMovesTable    _killer_moves; /* killer moves at each ply */
         HistoryCounters     _hcounters[2]; /* History heuristic counters. */
+        static TablePtr     _table;        /* shared hashtable */
 
     public:
         TranspositionTable() = default;
@@ -187,7 +193,9 @@ namespace search
 
         int _iteration = 0;
         int _eval_depth = 0;
+
         BaseMovesList _pv; /* principal variation */
+        PlyHistory _plyHistory;
 
         /* search window bounds */
         score_t _w_alpha = SCORE_MIN;
@@ -216,7 +224,8 @@ namespace search
 
         const KillerMoves* get_killer_moves(int ply) const
         {
-            return size_t(ply) < _killer_moves.size() ? &_killer_moves[ply] : nullptr;
+            ASSERT(ply < PLY_MAX);
+            return &_killer_moves[ply];
         }
 
         const BaseMovesList& get_pv() const { return _pv; }
@@ -233,7 +242,7 @@ namespace search
         void store_pv(Context&, bool = false);
 
         const std::pair<int, int>& historical_counters(const State&, Color, const Move&) const;
-        float history_score(const State&, Color, const Move&) const;
+        float history_score(int ply, const State&, Color, const Move&) const;
 
         size_t hits() const { return _hits; }
         size_t nodes() const { return _nodes; }
@@ -262,9 +271,6 @@ namespace search
 
         /* set hash table size in MB */
         static void set_hash_size(size_t);
-
-    private:
-        static TablePtr _table; /* shared hashtable */
     };
 
 
@@ -291,6 +297,7 @@ namespace search
 
     inline float
     TranspositionTable::history_score(
+        int ply,
         const State& state,
         Color turn,
         const Move& move) const
@@ -298,7 +305,8 @@ namespace search
         const auto& counters = historical_counters(state, turn, move);
         ASSERT(counters.first <= counters.second);
 
-        return counters.second < 1 ? 0 : (100.0 * counters.first) / counters.second;
+        return (ply < PLY_HISTORY_MAX ? _plyHistory[ply][turn].lookup(move) : 0)
+            + (counters.second < 1 ? 0 : (100.0 * counters.first) / counters.second);
     }
 
 
@@ -319,7 +327,7 @@ namespace search
 
             ++counters.second;
 
-            counters.first -= low * HISTORY_FAIL_LOW_PENALTY;
+            counters.first = std::max(0, counters.first - low * HISTORY_FAIL_LOW_PENALTY);
         }
     }
 
@@ -342,5 +350,4 @@ namespace search
         ++counts.first;
         ++counts.second;
     }
-
 }

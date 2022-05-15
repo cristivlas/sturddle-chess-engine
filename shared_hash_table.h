@@ -234,7 +234,6 @@ namespace search
                         {
                             index = i;
                             depth = p->_depth;
-                            value = p->_value;
                         }
                     }
                 }

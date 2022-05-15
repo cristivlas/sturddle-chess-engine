@@ -280,7 +280,6 @@ namespace search
         static int  cpu_cores();
 
         bool        can_forward_prune() const;
-        bool        can_futility_prune() const;
         bool        can_prune() const;
         bool        can_prune_move(const Move&) const;
         bool        can_reduce();
@@ -337,7 +336,7 @@ namespace search
         bool        is_singleton() const { return _is_singleton; }
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
 
-        LMRAction   late_move_reduce(bool prune, int move_count);
+        LMRAction   late_move_reduce(int move_count);
         static int  late_move_reduction_count();
 
         static void log_message(LogLevel, const std::string&, bool force = true);
@@ -399,6 +398,7 @@ namespace search
         int repeated_count(const State&) const;
 
         ContextPtr  _best; /* best search result */
+        mutable int _can_prune = -1;
         State       _statebuf;
         bool        _leftmost = false;
         mutable int _repetitions = -1;
@@ -419,28 +419,19 @@ namespace search
 
     inline bool Context::can_forward_prune() const
     {
-        return _parent
-            && (_parent->_mate_detected == 0 || _parent->_mate_detected % 2)
-            && !is_pv_node()
-            && (_max_depth >= 6 || !is_qsearch())
-            && !_excluded
-            && state().pushed_pawns_score <= 1
-            && !state().just_king_and_pawns()
-            && !is_check();
-    }
-
-
-    inline bool Context::can_futility_prune() const
-    {
-#if 1
-        return !is_pv_node()
-            && !is_singleton()
-            && !is_capture()
-            && !is_promotion()
-            && !is_check();
-#else
-        return can_prune();
-#endif
+        if (_can_prune == -1)
+        {
+            _can_prune =
+                ((_parent != nullptr)
+                * !is_pv_node()
+                * (_max_depth >= 6 || !is_qsearch())
+                * !_excluded
+                * (state().pushed_pawns_score <= 1)
+                * !state().just_king_and_pawns())
+                && (_parent->_mate_detected == 0 || _parent->_mate_detected % 2)
+                && !is_check();
+        }
+        return _can_prune > 0;
     }
 
 
@@ -450,26 +441,25 @@ namespace search
         ASSERT(!is_null_move());
         ASSERT(_move);
 
-        return !(is_singleton() || is_extended() || is_pv_node() || is_repeated())
-            && _parent->can_prune_move(_move);
+        return !is_singleton()
+             * !is_extended()
+             * !is_pv_node()
+             * !is_repeated()
+             * _parent->can_prune_move(_move);
     }
 
 
     inline bool Context::can_prune_move(const Move& move) const
     {
         ASSERT(move && move._state && move != _move);
-        ASSERT(repeated_count(*move._state) == 0);
-        ASSERT(can_forward_prune());
 
-        return (move == _tt_entry._hash_move
-            || move.promotion() == chess::PieceType::QUEEN
-            || move._state->capture_value != 0
-            || move._group <= MoveOrder::HISTORY_COUNTERS
-            || move.from_square() == _capture_square
-            || is_counter_move(move)
-            || move._group == MoveOrder::TACTICAL_MOVES
-            || move._state->is_check()
-           ) == false;
+        return ((move != _tt_entry._hash_move)
+                * (move._state->capture_value == 0)
+                * (move.promotion() == chess::PieceType::NONE)
+                * (move.from_square() != _capture_square)
+                * !is_counter_move(move)
+                * can_forward_prune())
+            && !move._state->is_check();
     }
 
 
@@ -477,14 +467,42 @@ namespace search
     {
         ASSERT(!is_null_move());
 
-        return _ply != 0
-            && !is_retry()
-            && !is_singleton()
-            && !is_extended()
-            && _move._group >= MoveOrder::WINNING_CAPTURES
-            && state().pushed_pawns_score <= 1
-            && _move.from_square() != _parent->_capture_square
+        return ((_ply != 0)
+                * !is_retry()
+                * !is_singleton()
+                * !is_extended()
+                * (state().pushed_pawns_score <= 1))
+            && (_move.from_square() != _parent->_capture_square)
+            && !is_recapture()
             && !state().is_check();
+    }
+
+
+    static constexpr double PHI = 1.61803398875;
+
+    template<std::size_t... I>
+    constexpr std::array<int, sizeof ... (I)> margins(std::index_sequence<I...>)
+    {
+        return { static_cast<int>(50 * I + pow(I + PHI, M_E)) ... };
+    }
+
+
+    inline score_t Context::futility_margin()
+    {
+        if (_ply == 0 || !_futility_pruning || depth() < 1)
+            return 0;
+
+        /*
+         * No need to check for futile moves when material is above alpha,
+         * since no move can immediately result in decrease of material
+         * (margin of one PAWN for piece-square evaluation).
+         */
+        if (evaluate_material() > std::max(_alpha, _score) + chess::WEIGHT[chess::PAWN])
+            return 0;
+
+        static const auto fp_margins = margins(std::make_index_sequence<PLY_MAX>{});
+
+        return fp_margins[depth()] * can_forward_prune();
     }
 
 
@@ -500,7 +518,8 @@ namespace search
         ASSERT(move);
         ASSERT(move != _move);
 
-        return _tt->history_score(state(), turn(), move) + COUNTER_MOVE_BONUS * is_counter_move(move);
+        return COUNTER_MOVE_BONUS * is_counter_move(move)
+            + _tt->history_score(_ply, state(), turn(), move);
     }
 
 
@@ -579,7 +598,7 @@ namespace search
 
     inline int Context::singular_margin() const
     {
-        return depth() * SINGULAR_MARGIN;
+        return SINGULAR_MARGIN * depth();
     }
 
 } /* namespace */

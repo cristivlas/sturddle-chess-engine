@@ -42,6 +42,13 @@
 #include "common.h"
 #include "libpopcnt.h"
 
+#if USE_MAGIC_BITS
+#include "magic-bits/include/magic_bits.hpp"
+extern const magic_bits::Attacks attacks;
+#endif /* USE_MAGIC_BITS */
+
+#include "tables.h"
+
 #if !defined (M_E)
 static constexpr auto M_E = 2.718281828459045;
 #endif
@@ -228,7 +235,7 @@ namespace chess
 
 #define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 2, 1, 3, 2 }
 
-#if TUNING_ENABLED && MOBILITY_TUNING_ENABLED
+#if MOBILITY_TUNING_ENABLED
     extern int MOBILITY[7];
 #else
     static constexpr int MOBILITY[7] = DEFAULT_MOBILITY_WEIGHTS;
@@ -476,6 +483,21 @@ namespace chess
     using MovesList = std::vector<Move>;
 
 
+    inline constexpr int square_index(int i, chess::Color color)
+    {
+        return square_indices[color][i];
+    }
+
+
+    inline const int (&select_piece_square_table(bool endgame, PieceType pt))[64]
+    {
+        if (endgame && pt == PieceType::KING)
+            return ENDGAME_KING_SQUARE_TABLE;
+
+        return SQUARE_TABLE[pt];
+    }
+
+
     /* A position on the chessboard represented as a collection of bitboards. */
     struct Position
     {
@@ -508,35 +530,28 @@ namespace chess
         /* Get the bitboard of squares attacked from a given square */
         Bitboard attacks_mask(Square) const;
 
-        Bitboard attackers_mask(Color color, Square square, Bitboard occupied) const
+        Bitboard attackers_mask(Color color, Square square) const
         {
-            const auto rank_pieces = BB_RANK_MASKS[square] & occupied;
-            const auto file_pieces = BB_FILE_MASKS[square] & occupied;
-            const auto diag_pieces = BB_DIAG_MASKS[square] & occupied;
-
-            const auto queens_and_rooks = queens | rooks;
-            const auto queens_and_bishops = queens | bishops;
-
-            const auto attackers = (
-                (kings & BB_KING_ATTACKS[square]) |
-                (knights & BB_KNIGHT_ATTACKS[square]) |
-                (queens_and_rooks & BB_RANK_ATTACKS[square][rank_pieces]) |
-                (queens_and_rooks & BB_FILE_ATTACKS[square][file_pieces]) |
-                (queens_and_bishops & BB_DIAG_ATTACKS[square][diag_pieces]) |
-                (pawns & BB_PAWN_ATTACKS[!color][square]));
+            const auto attackers = attacker_pieces_mask(color, square)
+                | (kings & BB_KING_ATTACKS[square])
+                | (pawns & BB_PAWN_ATTACKS[!color][square]);
 
             return attackers & occupied_co(color);
         }
 
-        Bitboard attackers_mask(Color color, Square square) const
-        {
-            return attackers_mask(color, square, occupied());
-        }
-
-        /* same as above but no pawns nor kings */
+        /*
+         * Get the bitboard of squares attacked from a given square
+         * by pieces other than pawns and kings.
+         */
         Bitboard attacker_pieces_mask(Color color, Square square) const
         {
             const auto occupied_mask = occupied();
+    #if USE_MAGIC_BITS
+            const auto attackers = (knights & BB_KNIGHT_ATTACKS[square])
+                | (bishops & attacks.Bishop(occupied_mask, square))
+                | (rooks & attacks.Rook(occupied_mask, square))
+                | (queens & attacks.Queen(occupied_mask, square));
+    #else
             const auto rank_pieces = BB_RANK_MASKS[square] & occupied_mask;
             const auto file_pieces = BB_FILE_MASKS[square] & occupied_mask;
             const auto diag_pieces = BB_DIAG_MASKS[square] & occupied_mask;
@@ -544,11 +559,11 @@ namespace chess
             const auto queens_and_rooks = queens | rooks;
             const auto queens_and_bishops = queens | bishops;
 
-            const auto attackers = (
-                (knights & BB_KNIGHT_ATTACKS[square]) |
-                (queens_and_rooks & BB_RANK_ATTACKS[square][rank_pieces]) |
-                (queens_and_rooks & BB_FILE_ATTACKS[square][file_pieces]) |
-                (queens_and_bishops & BB_DIAG_ATTACKS[square][diag_pieces]));
+            const auto attackers = (knights & BB_KNIGHT_ATTACKS[square])
+                | (queens_and_rooks & BB_RANK_ATTACKS[square][rank_pieces])
+                | (queens_and_rooks & BB_FILE_ATTACKS[square][file_pieces])
+                | (queens_and_bishops & BB_DIAG_ATTACKS[square][diag_pieces]);
+    #endif /* !USE_MAGIC_BITS */
 
             return attackers & occupied_co(color);
         }
@@ -612,32 +627,7 @@ namespace chess
 
         inline Bitboard& pieces(PieceType piece_type)
         {
-        #if 0
-            static Bitboard none;
-
-            switch (piece_type)
-            {
-            case PAWN:
-                return pawns;
-            case KNIGHT:
-                return knights;
-            case BISHOP:
-                return bishops;
-            case ROOK:
-                return rooks;
-            case QUEEN:
-                return queens;
-            case KING:
-                return kings;
-
-            case NONE:
-                ASSERT(false && "invalid piece type");
-                break;
-            }
-            return none;
-        #else
             return _pieces[piece_type - 1];
-        #endif
         }
 
         Bitboard pieces_mask(PieceType piece_type, Color color) const
@@ -753,12 +743,12 @@ namespace chess
             : midgame + (endgame - midgame) * double(32 - pc) / (32 - ENDGAME_PIECE_COUNT);
     #else
         /* sigmoid */
-        return (endgame - midgame) * (1 - logistic((pc - 32 + ENDGAME_PIECE_COUNT + 1) / 2)) + midgame;
+        return (endgame - midgame) * (1 - logistic((pc - 19) / 2)) + midgame;
     #endif
     }
 
-#if TUNING_ENABLED
-    inline double interpolate(int pc, int mg, int eg)
+#if TUNING_ENABLED || defined(TUNING_PARTIAL)
+    inline constexpr double interpolate(int pc, int mg, int eg)
     {
         return _interpolate(pc, mg, eg);
     }
@@ -771,11 +761,14 @@ namespace chess
             return { _interpolate(is, MG, EG)... };
         }
 
-        static constexpr auto value = make_values(std::make_index_sequence<33>{});
+        static constexpr auto _value = make_values(std::make_index_sequence<33>{});
+
+        static double value(int i) { return _value[i]; }
     };
 
-    #define interpolate(pc, mg, eg) Interpolate<mg, eg>::value[pc]
-#endif
+    #define interpolate(pc, mg, eg) Interpolate<mg, eg>::value(pc)
+
+#endif /* !TUNING_ENABLED */
 
 
     struct State : public BoardPosition
@@ -962,6 +955,73 @@ namespace chess
         state._hash = 0;
         state._endgame = ENDGAME_UNKNOWN;
     }
+
+
+    /*
+     * Evaluate the incremental score change for a move
+     */
+    inline score_t State::eval_delta(Square from_square, Square to_square) const
+    {
+        const auto endgame = is_endgame();
+
+        const auto color = piece_color_at(from_square);
+        const auto i = square_index(from_square, color);
+        const auto j = square_index(to_square, color);
+
+        const auto& table = select_piece_square_table(endgame, piece_type_at(from_square));
+        score_t delta = SIGN[color] * (table[j] - table[i]);
+
+        /* capture? subtract the value of the captured piece */
+        if (const auto type = piece_type_at(to_square))
+        {
+            ASSERT(type != PieceType::KING);
+
+            int d = weight(type);
+
+        #if 0
+            const auto& table = select_piece_square_table(endgame, type);
+        #else
+            /* can't capture the king, no need to check for king's endgame table */
+            const auto& table = SQUARE_TABLE[type];
+        #endif
+
+            ASSERT(piece_color_at(to_square) != color);
+
+            /* subtract the piece-square value */
+            d += table[square_index(to_square, !color)];
+
+            delta -= SIGN[!color] * d; /* subtract weight of captured */
+        }
+
+        return delta;
+    }
+
+
+    inline score_t State::eval_simple() const
+    {
+        int score = 0;
+        const auto endgame = is_endgame();
+
+        for (auto color: {BLACK, WHITE})
+        {
+            const auto sign = SIGN[color];
+
+            for (auto piece_type : PIECES)
+            {
+                const auto mask = pieces_mask(piece_type, color);
+                score += sign * weight(piece_type) * popcount(mask);
+
+                const auto& table = select_piece_square_table(endgame, piece_type);
+
+                for_each_square(mask, [&](Square square) {
+                    score += sign * table[square_index(square, color)];
+                });
+            }
+        }
+
+        return score;
+    }
+
 
     /*
      * FIXME: doubled-up pawns are double counted as "connected" if they are pawns on

@@ -353,7 +353,9 @@ void TranspositionTable::store(Context& ctxt, score_t alpha)
     ASSERT(ctxt._score > SCORE_MIN);
     ASSERT(ctxt._score < SCORE_MAX);
 
+#if EXTRA_STATS
     update_stats(ctxt);
+#endif /* EXTRA_STATS */
 
     if (auto p = _table->lookup(ctxt.state(), SpinLock::Acquire::Write, ctxt.depth(), ctxt._score))
     {
@@ -382,14 +384,13 @@ void TranspositionTable::store_killer_move(const Context& ctxt)
     ASSERT(ctxt._score); /* do not store draws */
 
 #if KILLER_MOVE_HEURISTIC
+    ASSERT(ctxt._ply < PLY_MAX);
+
     const auto& move = ctxt._cutoff_move;
     if (!move)
         return;
 
     ASSERT(!ctxt.state().is_capture(move));
-
-    if (_killer_moves.size() <= size_t(ctxt._ply))
-        _killer_moves.resize(2 * ctxt._ply + 1);
 
     auto& killers = _killer_moves[ctxt._ply];
 
@@ -522,19 +523,20 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
      */
     if (const auto& best = null_move_ctxt.best())
     {
-        if (best->is_capture())
+        if (best->is_capture() && best->_score == -score)
             ctxt._capture_square = best->_move.to_square();
 
         if (-score > MATE_HIGH)
         {
-            ASSERT(best->_score == -score);
-
             ctxt._mate_detected = CHECKMATE + score + 1;
             ASSERT(ctxt._mate_detected > 0);
         }
     }
 
+#if EXTRA_STATS
     ++ctxt.get_tt()->_null_move_failed;
+#endif /* EXTRA_STATS */
+
     return false;
 }
 
@@ -714,32 +716,37 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             ctxt._max_depth -= 2;
 
         bool null_move = ctxt.is_null_move_ok();
+
+    #if EXTRA_STATS
         table._null_move_not_ok += !null_move;
+    #endif /* EXTRA_STATS */
 
-        auto move_count = 0;
-
-        const bool prune_ok = ctxt.can_forward_prune();
-        const auto futility = prune_ok ? ctxt.futility_margin() : 0;
+        int move_count = 0, futility = -1;
 
         /* iterate over moves */
         while (auto next_ctxt = ctxt.next(std::exchange(null_move, false), false, futility))
         {
             if (!next_ctxt->is_null_move())
             {
+            #if EXTRA_STATS
                 table._history_counters += next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS;
+            #endif /* EXTRA_STATS */
 
                 /* Futility pruning */
-                if (futility && move_count)
+                if (move_count > 0)
                 {
-                    ASSERT(prune_ok);
-                    ASSERT(move_count > 0);
+                    if (futility < 0)
+                        futility = ctxt.futility_margin();
 
-                    const auto val = futility - next_ctxt->evaluate_material();
-
-                    if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune())
+                    if (futility > 0)
                     {
-                        update_pruned(table, ctxt, *next_ctxt, table._futility_prune_count);
-                        continue;
+                        const auto val = futility - next_ctxt->evaluate_material();
+
+                        if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune())
+                        {
+                            update_pruned(table, ctxt, *next_ctxt, table._futility_prune_count);
+                            continue;
+                        }
                     }
                 }
 
@@ -825,7 +832,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 next_ctxt->extend(); /* apply fractional extensions */
 
                 /* Late-move reduction and pruning */
-                if (move_count && next_ctxt->late_move_reduce(prune_ok, move_count) == LMRAction::Prune)
+                if (move_count && next_ctxt->late_move_reduce(move_count) == LMRAction::Prune)
                 {
                     update_pruned(table, ctxt, *next_ctxt, table._late_move_prune_count);
                     continue;
@@ -858,7 +865,10 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         ctxt._score = SCORE_MIN;
                         continue;
                     }
+
+                #if EXTRA_STATS
                     ++table._null_move_cutoffs;
+                #endif /* EXTRA_STATS */
 
                     /* verification not expected to modify ctxt._score */
                     ASSERT(ctxt._score == move_score);
@@ -895,6 +905,12 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         /* zero-score moves may mean draw (path-dependent) */
                         if (move_score && !next_ctxt->is_qsearch())
                         {
+                            if (ctxt._ply < PLY_HISTORY_MAX)
+                                table._plyHistory[ctxt._ply][ctxt.turn()][next_ctxt->_move]
+                                    += ctxt.depth() * 0.1
+                                    + ctxt.is_counter_move(next_ctxt->_move) * 0.5
+                                    + (move_score > MATE_HIGH);
+
                             table.store_countermove(ctxt);
                             table.store_killer_move(ctxt);
 
@@ -904,8 +920,9 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     }
                 }
 
-                table._history_counters_hit +=
-                    (next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS);
+            #if EXTRA_STATS
+                table._history_counters_hit += (next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS);
+            #endif /* EXTRA_STATS */
 
                 break; /* found a cutoff */
             }
@@ -1250,21 +1267,14 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
  */
 void TranspositionTable::shift()
 {
-#if 0
-    std::shift_left(_pv.begin(), _pv.end(), 2);
-    std::shift_left(_killer_moves.begin(), _killer_moves().end(), 2);
-#else
     if (_pv.size() >= 2)
     {
         std::rotate(_pv.begin(), _pv.begin() + 2, _pv.end());
         _pv.resize(_pv.size() - 2);
     }
-    if (_killer_moves.size() >= 2)
-    {
-        std::rotate(_killer_moves.begin(), _killer_moves.begin() + 2, _killer_moves.end());
-        _killer_moves.resize(_killer_moves.size() - 2);
-    }
-#endif
+
+    shift_left_2(_killer_moves.begin(), _killer_moves.end());
+    shift_left_2(_plyHistory.begin(), _plyHistory.end());
 
     log_pv(*this, "shift");
 }

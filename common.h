@@ -58,6 +58,9 @@ using score_t = int32_t;
 
 #define EXCHANGES_DETECT_CHECKMATE          false
 
+/* Collect extra stats for troubleshooting */
+#define EXTRA_STATS                         false
+
 #define KILLER_MOVE_HEURISTIC               true
 
 #if !defined(LOW_MEMORY_PROFILE) && (__arm__ || __aarch64__)
@@ -116,6 +119,9 @@ using score_t = int32_t;
 /* if false, use piece-type/to-square tables */
 #define USE_BUTTERFLY_TABLES                false
 
+/* Use magic-bits: https://github.com/goutham/magic-bits */
+#define USE_MAGIC_BITS                      false
+
 /* Check time and call user-defined callback every N nodes */
 #ifndef CALLBACK_PERIOD
   #define CALLBACK_PERIOD                   4096
@@ -149,7 +155,7 @@ namespace search
         LATE_MOVES = 11, /* all other legal moves not covered above */
         UNORDERED_MOVES = 12,
         QUIET_MOVES = 13,
-        PRUNED_MOVES = 14, /* experimental: futility-prune at move ordering level */
+        PRUNED_MOVES = 14, /* futility-prune at move ordering level */
         ILLEGAL_MOVES = 15,
     };
 }

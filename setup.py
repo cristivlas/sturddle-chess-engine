@@ -11,22 +11,25 @@ sourcefiles = [
     'search.cpp',
 ]
 
-
+platform = sysconfig.get_platform()
 """
 Compiler args.
 """
 inc_dirs = ['-I./libpopcnt', '-I./thread-pool']
 
 # Assert-enabled build
-# args = []
+args = []
+link = []
 
 # Debug build
-# args = [ '-O0', '-D_DEBUG' ]
+# if platform.startswith('win'):
+#     args = [ '/Od', '/Zi' ]
+#     link = ['/DEBUG']
+# else:
+#     args = [ '-O0', '-D_DEBUG' ]
 
 # Release build
 args = ['-DNO_ASSERT', '-DLAZY_STATE_COPY' ]
-
-platform = sysconfig.get_platform()
 
 if platform.startswith('win'):
     args.append('/std:c++17')
@@ -49,6 +52,6 @@ else:
         args.append('-fno-extern-tls-init')
 
 
-extensions = [Extension('chess_engine', sources=sourcefiles, extra_compile_args=args + inc_dirs)]
+extensions = [Extension('chess_engine', sources=sourcefiles, extra_compile_args=args + inc_dirs, extra_link_args=link)]
 
 setup(ext_modules=cythonize(extensions))

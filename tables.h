@@ -22,18 +22,11 @@
 
 #include "common.h"
 
-#if TUNING_ENABLED
-    #define TABLE_TYPE int
-#else
-    #define TABLE_TYPE static constexpr int
-#endif /* TUNING_ENABLED */
-
-
 /*
  * Piece-square tables.
  * https://www.chessprogramming.org/Simplified_Evaluation_Function
  */
-TABLE_TYPE SQUARE_TABLE[][64] = {
+static constexpr int SQUARE_TABLE[][64] = {
     {/* NONE */
     },
     {/* PAWN */
@@ -99,7 +92,7 @@ TABLE_TYPE SQUARE_TABLE[][64] = {
 };
 
 
-TABLE_TYPE ENDGAME_KING_SQUARE_TABLE[64] = {
+static constexpr int ENDGAME_KING_SQUARE_TABLE[64] = {
     -50, -40, -30, -20, -20, -30, -40, -50,
     -30, -20, -10,   0,   0, -10, -20, -30,
     -30, -10,  20,  30,  30,  20, -10, -30,
@@ -108,4 +101,28 @@ TABLE_TYPE ENDGAME_KING_SQUARE_TABLE[64] = {
     -30, -10,  20,  30,  30,  20, -10, -30,
     -30, -30,   0,   0,   0,   0, -30, -30,
     -50, -30, -30, -30, -30, -30, -30, -50,
+};
+
+
+static constexpr int square_indices[2][64] = {
+    {
+         0,  1,  2,  3,  4,  5,  6,  7,
+         8,  9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23,
+        24, 25, 26, 27, 28, 29, 30, 31,
+        32, 33, 34, 35, 36, 37, 38, 39,
+        40, 41, 42, 43, 44, 45, 46, 47,
+        48, 49, 50, 51, 52, 53, 54, 55,
+        56, 57, 58, 59, 60, 61, 62, 63,
+    },
+    {
+        56, 57, 58, 59, 60, 61, 62, 63,
+        48, 49, 50, 51, 52, 53, 54, 55,
+        40, 41, 42, 43, 44, 45, 46, 47,
+        32, 33, 34, 35, 36, 37, 38, 39,
+        24, 25, 26, 27, 28, 29, 30, 31,
+        16, 17, 18, 19, 20, 21, 22, 23,
+         8,  9, 10, 11, 12, 13, 14, 15,
+         0,  1,  2,  3,  4,  5,  6,  7,
+    }
 };

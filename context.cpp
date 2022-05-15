@@ -37,22 +37,21 @@ using namespace chess;
 using search::TranspositionTable;
 
 
-/* Late-move pruning counts (initialization idea borrowed from Crafty) */
-struct LMP
+/*
+ * Late-move pruning counts (initialization idea borrowed from Crafty)
+ */
+template<std::size_t... I>
+constexpr std::array<int, sizeof ... (I)> lmp(std::index_sequence<I...>)
 {
-    const size_t _size;
-    std::vector<int> _counters;
+    return { static_cast<int>(LMP_BASE + pow(I + .5, 1.9)) ... };
+}
 
-    LMP(size_t size = 16) : _size(size), _counters(size)
-    {
-        std::generate_n(_counters.begin(), size, [] {
-            static int i = 0;
-            return 13 + int(pow(i++ + .5, 1.9));
-        });
-    }
-} LMP;
+static const auto LMP = lmp(std::make_index_sequence<PLY_MAX>{});
 
-/* Late-move reduction tables (adapted from berserk) */
+
+/*
+ * Late-move reduction tables (adapted from berserk)
+ */
 struct LMR
 {
     int _table[PLY_MAX][64] = { { 0 }, { 0 } };
@@ -339,8 +338,9 @@ namespace search
                     if (next_ctxt->_retry_above_alpha == RETRY::Reduced)
                     {
                         _retry_next = true;
+                    #if EXTRA_STATS
                         ++_tt->_retry_reductions;
-
+                    #endif /* EXTRA_STATS */
                         /* increment, so that late_move_reduce() skips it */
                         _full_depth_count = next_move_index() + 1;
                     }
@@ -368,11 +368,7 @@ namespace search
                             if (next_ctxt->is_capture()) /* null move refuted by capture */
                                 _parent->_capture_square = next_ctxt->_move.to_square();
 
-                        #if 0
-                            if (score >= MATE_HIGH)
-                        #else
                             if (score >= CHECKMATE - next_ctxt->depth())
-                        #endif
                                 _parent->_mate_detected = CHECKMATE - score + 1;
                         }
                     }
@@ -958,7 +954,7 @@ namespace search
             static constexpr int ATTACK_WEIGHT[8] = { 0, 0, 50, 75, 88, 94, 97, 99 };
 
             for_each_square(area & ~color_mask, [&](Square square) {
-                int attacks_value = 0;
+                double attacks_value = 0;
 
                 const auto attackers_mask =
                     state.attacker_pieces_mask(!color, square);
@@ -967,7 +963,7 @@ namespace search
                     const auto pt = state.piece_type_at(attacking_square);
                     ASSERT(pt > PieceType::PAWN && pt < PieceType::KING);
 
-                    attacks_value += (WEIGHT[pt] - 100) / KING_ATTACK_FACTOR;
+                    attacks_value += double(WEIGHT[pt] - 100) / KING_ATTACK_FACTOR;
                 });
 
                 const auto attackers = std::min(popcount(attackers_mask), 7);
@@ -1371,7 +1367,9 @@ namespace search
     int Context::eval_king_safety(int piece_count)
     {
         if (_tt_entry._king_safety == SCORE_MIN)
+        {
             _tt_entry._king_safety = search::eval_king_safety(state(), piece_count);
+        }
 
         return _tt_entry._king_safety;
     }
@@ -1411,8 +1409,8 @@ namespace search
             _extension += ONE_PLY * (
                    _move == _parent->_tt_entry._hash_move
                 && abs(_parent->_tt_entry._value) < MATE_HIGH
-                && _parent->history_score(_move) > HISTORY_HIGH
-                && _parent->history_count(_move) > 10000);
+                && _parent->history_count(_move) > 1000
+                && _parent->history_score(_move) > 90);
 
             const auto double_extension_ok = (_double_ext <= DOUBLE_EXT_MAX);
             const auto extend = std::min(1 + double_extension_ok, _extension / ONE_PLY);
@@ -1423,34 +1421,6 @@ namespace search
             _extension %= ONE_PLY;
             _double_ext += extend > 1;
         }
-    }
-
-
-    score_t Context::futility_margin()
-    {
-        ASSERT(can_forward_prune());
-
-        if (_ply == 0 || !_futility_pruning)
-            return 0;
-
-        const auto d = depth();
-
-        if (d < 1)
-            return 0;
-
-        /*
-         * No need to check for futile moves when material is above alpha,
-         * since no move can immediately result in decrease of material
-         * (margin of one PAWN for piece-square evaluation).
-         */
-        if (evaluate_material() > std::max(_alpha, _score) + WEIGHT[PAWN])
-            return 0;
-
-        // return 50 * d + M_PI_2 * pow(depth, M_E);
-        // return 50 * d + pow(depth + M_PI_2, M_E);
-
-        static constexpr double PHI = 1.61803398875;
-        return 50 * d + pow(d + PHI, M_E);
     }
 
 
@@ -1638,6 +1608,7 @@ namespace search
 
         _best.reset();
         _cancel = false;
+        _can_prune = -1;
 
         _capture_square = Square::UNDEFINED;
         _cutoff_move = Move();
@@ -1788,7 +1759,7 @@ namespace search
      * Late move reduction and pruning.
      * https://www.chessprogramming.org/Late_Move_Reductions
      */
-    LMRAction Context::late_move_reduce(bool prune, int count)
+    LMRAction Context::late_move_reduce(int count)
     {
         ASSERT(!is_null_move());
         ASSERT(_parent);
@@ -1799,15 +1770,8 @@ namespace search
         if (depth < 0)
             return LMRAction::None;
 
-        prune = prune && count > 1;
-
         /* counter-based late move pruning */
-        if (LATE_MOVE_PRUNING
-            && prune
-            && depth < int(LMP._size)
-            && count >= LMP._counters[depth]
-            && can_prune()
-           )
+        if (count >= LMP[depth] && can_prune())
             return LMRAction::Prune;
 
         if (depth < 3 || count < _parent->_full_depth_count || !can_reduce())
@@ -1823,12 +1787,12 @@ namespace search
             if (get_tt()->_w_beta <= get_tt()->_w_alpha + 2 * HALF_WINDOW && iteration() >= 13)
                 ++reduction;
 
-            reduction -= _parent->history_count(_move) / 20063;
+            reduction -= _parent->history_count(_move) / 2000;
         }
 
         reduction = std::max(1, reduction);
 
-        if (reduction > depth && prune && can_prune())
+        if (reduction > depth && can_prune())
             return LMRAction::Prune;
 
         ASSERT(reduction > 0);
@@ -1841,7 +1805,9 @@ namespace search
          */
         _retry_above_alpha = RETRY::Reduced;
 
+    #if EXTRA_STATS
         ++_tt->_reductions;
+    #endif /* EXTRA_STATS */
 
         return LMRAction::Ok;
     }
@@ -1877,7 +1843,7 @@ namespace search
         if (depth() > 0
             || is_null_move()
             || is_retry()
-            || state().promotion == PieceType::QUEEN /* ignore under-promotions */
+            || state().promotion
         #if 0
             || (is_capture() && (_ply % 2) && !is_standing_pat(*this))
         #endif
@@ -2181,26 +2147,30 @@ namespace search
 
         incremental_update(move, ctxt);
 
-        /* idea: combine futility pruning with late-move pruning */
-        /* (and do this before checking the legality of the move,
-         * as profiling shows State::is_check() to be expensive).
+        /* Prune before checking the legality of the move,
+         * profiling suggests State::is_check() is expensive.
          */
-        if (futility
-            && ctxt.depth() >= 0
-            && ctxt.depth() < int(LMP._size)
-            && _current >= LMP._counters[ctxt.depth()]
-            && ctxt.can_prune_move(move)
-           )
+        if (_phase > 2)
         {
-            auto val = futility + move._state->simple_score * SIGN[!move._state->turn];
-
-            if (val < ctxt._alpha || val < ctxt._score)
+            if (ctxt.depth() > 0 && _current >= LMP[ctxt.depth()] && ctxt.can_prune_move(move))
             {
                 _have_pruned_moves = true;
                 move._group = MoveOrder::PRUNED_MOVES;
+            #if EXTRA_STATS
                 ++ctxt.get_tt()->_futility_prune_count;
-
+            #endif /* EXTRA_STATS */
                 return false;
+            }
+            else if (futility > 0)
+            {
+                const auto val = futility + move._state->simple_score * SIGN[!move._state->turn];
+
+                if ((val < ctxt._alpha || val < ctxt._score) && ctxt.can_prune_move(move))
+                {
+                    _have_pruned_moves = true;
+                    move._group = MoveOrder::PRUNED_MOVES;
+                    return false;
+                }
             }
         }
 
@@ -2486,11 +2456,11 @@ namespace search
     }
 
 
-    template<typename T, T... is> constexpr std::array<double, sizeof ...(is)>
-    history_thresholds(std::integer_sequence<T, is...>)
+    template<std::size_t... I>
+    constexpr std::array<double, sizeof ... (I)> thresholds(std::index_sequence<I...>)
     {
         auto logistic = [](int i) { return HISTORY_HIGH / (1 + exp(6 - i)); };
-        return { logistic(is) ... };
+        return { logistic(I) ... };
     }
 
 
@@ -2501,7 +2471,7 @@ namespace search
      */
     void MoveMaker::order_moves(Context& ctxt, size_t start_at, score_t futility)
     {
-        static const auto hist_thresholds = history_thresholds(std::make_index_sequence<PLY_MAX>{});
+        static const auto hist_thresholds = thresholds(std::make_index_sequence<PLY_MAX>{});
         static constexpr int MAX_PHASE = 4;
 
         ASSERT(_phase <= MAX_PHASE);
@@ -2581,37 +2551,40 @@ namespace search
                             break;
                         }
                     }
-                    /* tactical */
+
                     if ((ctxt.is_counter_move(move)
                         || move.from_square() == ctxt._capture_square
                         || is_pawn_push(ctxt, move)
                         || is_attack_on_king(ctxt, move)
                         )
-                        && make_move(ctxt, move, MoveOrder::TACTICAL_MOVES)
-                       )
+                        && make_move(ctxt, move, MoveOrder::TACTICAL_MOVES))
+                    {
                         move._score = ctxt.history_score(move);
+                    }
                     break;
 
                 case 4:
                     if (!make_move(ctxt, move, futility))
+                    {
                         break;
-
+                    }
                     move._score = ctxt.history_score(move);
 
-                    if (move._state->has_fork(!move._state->turn) || is_direct_check(move))
+                    if (move._score >= HISTORY_LOW
+                        && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
+                    {
                         move._group = MoveOrder::TACTICAL_MOVES;
+                    }
                     else
+                    {
                         move._group = MoveOrder::LATE_MOVES;
-
+                    }
                     break;
 
                 default:
-                    ASSERT_MESSAGE(false, ("unexpected move ordering phase: " + std::to_string(_phase)));
+                    ASSERT(false);
                     break;
                 }
-
-                if (move._group == MoveOrder::TACTICAL_MOVES && move._score < HISTORY_LOW)
-                    move._group = MoveOrder::LATE_MOVES;
             }
         }
 

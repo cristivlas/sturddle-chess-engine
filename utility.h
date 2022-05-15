@@ -126,5 +126,19 @@ namespace
             }
         }
     }
+
+    template<typename  I> inline void shift_left_2(I first, I last)
+    {
+    #if 0
+        /* need C++20 */
+        return std::shift_left(first, last, 2);
+    #else
+        using V = typename std::iterator_traits<I>::value_type;
+
+        auto i = std::rotate(first, first + 2, last);
+        *i++ = V(); *i = V();
+    #endif
+    }
+
 } /* namespace */
 

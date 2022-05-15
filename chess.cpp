@@ -31,40 +31,22 @@
 #include "tables.h"
 #include "zobrist.h"
 
+#if USE_MAGIC_BITS
+const magic_bits::Attacks attacks;
+#endif /* USE_MAGIC_BITS */
+
 static constexpr chess::Bitboard BB_LIGHT_SQUARES = 0x55aa55aa55aa55aaULL;
 static constexpr chess::Bitboard BB_DARK_SQUARES  = 0xaa55aa55aa55aa55ULL;
 
 
-static int square_indices[2][64] = { {}, {} };
-
-
-static inline int square_index(int i, chess::Color color)
-{
-    return square_indices[color][i];
-}
-
-
-static inline constexpr int _square_index(int i, chess::Color color)
-{
-    if (color == chess::BLACK)
-        i = chess::square_mirror(i);
-    return (7 - i / 8) * 8 + i % 8;
-}
-
-
-static void init_square_indices()
-{
-    for (auto color : { chess::BLACK, chess::WHITE })
-        for (int i = 0; i != 64; ++i)
-            square_indices[color][i] = _square_index(i, color);
-}
-
-
 namespace chess
 {
-#if TUNING_ENABLED && MOBILITY_TUNING_ENABLED
+#if MOBILITY_TUNING_ENABLED
+
     int MOBILITY[] = DEFAULT_MOBILITY_WEIGHTS;
-#endif
+
+#endif /* MOBILITY_TUNING_ENABLED */
+
     AttackMasks BB_DIAG_MASKS, BB_FILE_MASKS, BB_RANK_MASKS;
     Bitboard BB_SQUARES[64];
 
@@ -243,8 +225,6 @@ namespace chess
             return;
         once = true;
 
-        init_square_indices();
-
         std::generate(&BB_SQUARES[0], &BB_SQUARES[64], [&] {
             static int i = 0;
             return 1ULL << i++;
@@ -304,6 +284,30 @@ namespace chess
 
     Bitboard Position::attacks_mask(Square square) const
     {
+    #if USE_MAGIC_BITS
+        switch (piece_type_at(square))
+        {
+        case PieceType::PAWN:
+            {
+                const auto bb_square = BB_SQUARES[square];
+                const auto color = (bb_square & white) == bb_square;
+                return BB_PAWN_ATTACKS[color][square];
+            }
+        case PieceType::KING:
+            return BB_KING_ATTACKS[square];
+        case PieceType::KNIGHT:
+            return BB_KNIGHT_ATTACKS[square];
+        case PieceType::BISHOP:
+            return attacks.Bishop(occupied(), square);
+        case PieceType::ROOK:
+            return attacks.Rook(occupied(), square);
+        case PieceType::QUEEN:
+            return attacks.Queen(occupied(), square);
+        case PieceType::NONE:
+            ASSERT(false);
+            return BB_EMPTY;
+        }
+    #else
         const auto bb_square = BB_SQUARES[square];
 
         if (bb_square & pawns)
@@ -335,6 +339,7 @@ namespace chess
             }
             return attacks;
         }
+    #endif /* !USE_MAGIC_BITS */
     }
 
 
@@ -511,15 +516,6 @@ namespace chess
             }
         }
         return BB_ALL;
-    }
-
-
-    static inline const int* select_piece_square_table(bool end_game, PieceType pt)
-    {
-        if (end_game && pt == PieceType::KING)
-            return ENDGAME_KING_SQUARE_TABLE;
-
-        return SQUARE_TABLE[pt];
     }
 
 
@@ -762,72 +758,6 @@ namespace chess
         for_each_square(capturers, [&](Square capturer) {
             moves.emplace_back(Move(capturer, en_passant_square));
         });
-    }
-
-
-    /*
-     * Evaluate the incremental score change for a move
-     */
-    score_t State::eval_delta(Square from_square, Square to_square) const
-    {
-        const auto endgame = is_endgame();
-
-        const auto color = piece_color_at(from_square);
-        const auto i = square_index(from_square, color);
-        const auto j = square_index(to_square, color);
-
-        const auto& table = select_piece_square_table(endgame, piece_type_at(from_square));
-        score_t delta = SIGN[color] * (table[j] - table[i]);
-
-        /* capture? subtract the value of the captured piece */
-        if (const auto type = piece_type_at(to_square))
-        {
-            ASSERT(type != PieceType::KING);
-
-            int d = weight(type);
-
-        #if 0
-            const auto& table = select_piece_square_table(endgame, type);
-        #else
-            /* can't capture the king, no need to check for king's endgame table */
-            const auto& table = SQUARE_TABLE[type];
-        #endif
-
-            ASSERT(piece_color_at(to_square) != color);
-
-            /* subtract the piece-square value */
-            d += table[square_index(to_square, !color)];
-
-            delta -= SIGN[!color] * d; /* subtract weight of captured */
-        }
-
-        return delta;
-    }
-
-
-    score_t State::eval_simple() const
-    {
-        int score = 0;
-        const auto endgame = is_endgame();
-
-        for (auto color: {BLACK, WHITE})
-        {
-            const auto sign = SIGN[color];
-
-            for (auto piece_type : PIECES)
-            {
-                const auto mask = pieces_mask(piece_type, color);
-                score += sign * weight(piece_type) * popcount(mask);
-
-                const auto& table = select_piece_square_table(endgame, piece_type);
-
-                for_each_square(mask, [&](Square square) {
-                    score += sign * table[square_index(square, color)];
-                });
-            }
-        }
-
-        return score;
     }
 
 
