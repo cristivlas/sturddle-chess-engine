@@ -26,11 +26,24 @@
 
 namespace search
 {
-    class SharedHashTable
+    enum class Acquire : int8_t
     {
-        static constexpr int BUCKET_SIZE = 16;
+        TryLock,
+        Lock,
 
-        using entry_t = TT_Entry;
+#if TRY_LOCK_ON_READ
+        Read = TryLock,
+#else
+        Read = Lock,
+#endif /* !TRY_LOCK_ON_READ */
+
+        Write = Lock,
+    };
+
+
+    template<typename T, int BUCKET_SIZE=16> class SharedHashTable
+    {
+        using entry_t = T;
         using data_t = std::vector<entry_t>;
 
     #if SMP
@@ -60,7 +73,7 @@ namespace search
     #if SMP
             std::atomic_bool* lock_p() { return &_ht->_locks[_ix]; }
 
-            inline void lock()
+            INLINE void lock()
             {
                 while (std::atomic_exchange_explicit(lock_p(), true, ACQUIRE))
                     ;
@@ -68,7 +81,7 @@ namespace search
                 entry()->_lock = this;
             }
 
-            inline void release()
+            INLINE void release()
             {
                 ASSERT(_locked);
                 ASSERT(entry()->_lock == this);
@@ -77,7 +90,7 @@ namespace search
                 _locked = false;
             }
 
-            inline bool try_lock()
+            INLINE bool try_lock()
             {
                 if (!std::atomic_exchange_explicit(lock_p(), true, ACQUIRE))
                 {
@@ -88,9 +101,9 @@ namespace search
                 return false;
             }
     #else
-            inline void lock(bool) { _locked = true; }
-            inline void release() { _locked = false; }
-            inline bool try_lock() { return true; }
+            INLINE void lock(bool) { _locked = true; }
+            INLINE void release() { _locked = false; }
+            INLINE bool try_lock() { return true; }
     #endif /* !SMP */
 
         protected:
@@ -100,14 +113,6 @@ namespace search
             SpinLock() = default;
 
         public:
-            enum class Acquire : int8_t
-            {
-                TryLock,
-                Lock,
-                Read = TryLock,
-                Write = Lock,
-            };
-
             SpinLock(SharedHashTable& ht, size_t ix, Acquire acquire)
                 : _ht(&ht), _ix(ix)
             {
@@ -151,7 +156,7 @@ namespace search
 
         class Proxy : public SpinLock
         {
-            TT_Entry* const _entry = nullptr;
+            entry_t* const _entry = nullptr;
 
         public:
             Proxy() = default;
@@ -162,9 +167,9 @@ namespace search
             {
             }
 
-            inline const entry_t* operator->() const { return _entry; }
-            inline const entry_t& operator *() const { return *_entry; }
-            inline entry_t& operator *() { return *_entry; }
+            INLINE const entry_t* operator->() const { return _entry; }
+            INLINE const entry_t& operator *() const { return *_entry; }
+            INLINE entry_t& operator *() { return *_entry; }
         };
 
     public:
@@ -192,26 +197,20 @@ namespace search
             data_t(capacity).swap(_data);
         }
 
-        /*
-         * https://en.wikipedia.org/wiki/Open_addressing
-         */
-        Proxy lookup(const State& state, SpinLock::Acquire acquire, int depth = 0, int value = 0)
+        Proxy lookup(const chess::State& state, Acquire acquire, int depth = 0, int value = 0)
         {
             const auto h = state.hash();
             size_t index = h % _data.size();
 
             for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
             {
-            #if TRY_LOCK_ON_READ
                 Proxy p(*this, i, acquire);
+
                 if (p.is_locked())
-            #else
-                Proxy p(*this, i, SpinLock::Acquire::Lock);
-            #endif
                 {
                     if (!p->is_valid())
                     {
-                        if (acquire == SpinLock::Acquire::Write)
+                        if (acquire == Acquire::Write)
                         {
                             ++_used; /* slot is unoccupied, bump up usage count */
                             return p;
@@ -225,7 +224,7 @@ namespace search
                     if (p->matches(state) && age <= _clock)
                         return p;
 
-                    if (acquire == SpinLock::Acquire::Write)
+                    if (acquire == Acquire::Write)
                     {
                         if (age != _clock)
                             return p;
@@ -238,6 +237,9 @@ namespace search
                     }
                 }
 
+            /*
+             * https://en.wikipedia.org/wiki/Open_addressing
+             */
             #if QUADRATIC_PROBING
                 i = (h + j * j) % _data.size();
             #else
@@ -249,19 +251,19 @@ namespace search
              * acquire == SpinLock::Acquire::Write: lock and return the entry at index;
              * otherwise: return unlocked Proxy, which means nullptr (no match found).
              */
-            return acquire == SpinLock::Acquire::Write ? Proxy(*this, index, acquire) : Proxy();
+            return acquire == Acquire::Write ? Proxy(*this, index, acquire) : Proxy();
         }
 
-        inline size_t capacity() const { return _data.size(); }
-        inline size_t size() const { return _used; }
+        INLINE size_t capacity() const { return _data.size(); }
+        INLINE size_t size() const { return _used; }
 
-        static inline size_t size_in_bytes(size_t n)
+        static INLINE size_t size_in_bytes(size_t n)
         {
-            return n * (sizeof(data_t::value_type) + sizeof(locks_t::value_type));
+            return n * (sizeof(typename data_t::value_type) + sizeof(locks_t::value_type));
         }
 
-        inline size_t clock() const { return _clock; }
-        inline void increment_clock() { ++_clock; }
+        INLINE size_t clock() const { return _clock; }
+        INLINE void increment_clock() { ++_clock; }
 
     private:
         uint16_t    _clock = 0;

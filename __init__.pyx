@@ -183,6 +183,9 @@ cdef extern from 'chess.h' namespace 'chess':
         Bitboard checkers_mask(Color) const
 
         void generate_castling_moves(vector[Move]& moves) const
+        void generate_moves(vector[Move]&, vector[Move]&) const
+
+        vector[Move]& generate_pseudo_legal_moves(vector[Move]&, Bitboard, Bitboard) const
 
 
     cdef score_t estimate_static_exchanges(const State&, Color, int, PieceType)
@@ -256,10 +259,8 @@ cdef class BoardState:
 
 
     def apply(self, move: chess.Move):
-        assert move
-        cdef Move _move = cxx_move(move)
-        assert not _move.is_none()
-        self._state.apply_move(_move)
+        cdef Move cm = cxx_move(move)
+        self._state.apply_move(cm)
 
 
     cpdef capture_value(self):
@@ -452,6 +453,10 @@ cdef extern from 'context.h' namespace 'search':
         TranspositionTable* get_tt() const
 
         const vector[BaseMove]& get_pv() nogil const
+
+        # perft
+        ContextPtr  next(bool null_move, bool is_first_move, score_t futility_margin)
+        int         rewind(int where, bool reorder)
 
 
 cpdef board_from_state(state: BoardState):
@@ -671,6 +676,10 @@ cdef class NodeContext:
         parent = self.parent
         return self if not parent else parent.top
 
+
+    # perft
+    def next(self):
+        return deref(self._ctxt).next(False, False, 0).get() != NULL
 
 
 # ---------------------------------------------------------------------
@@ -1064,6 +1073,45 @@ def get_hash_full():
     return int(TranspositionTable.usage() * 10)
 
 
+def perft(fen, repeat=1):
+    cdef vector[Move] moves
+    board = BoardState(chess.Board(fen=fen))
+    count = 0
+    start = time.perf_counter()
+    for i in range(0, repeat):
+        board._state.generate_pseudo_legal_moves(moves, BB_ALL, BB_ALL)
+        count += moves.size()
+    return count, time.perf_counter() - start
+
+
+def perft2(fen, repeat=1):
+    cdef vector[Move] moves
+    cdef vector[Move] buffer
+    board = BoardState(chess.Board(fen=fen))
+    count = 0
+    start = time.perf_counter()
+    for i in range(0, repeat):
+        board._state.generate_moves(moves, buffer)
+        count += moves.size()
+    return count, time.perf_counter() - start
+
+
+def perft3(fen, repeat=1):
+    cdef TranspositionTable table
+    node = NodeContext(chess.Board(fen=fen))
+    deref(node._ctxt).set_tt(address(table))
+    count = 0
+    start = time.perf_counter()
+
+    for i in range(0, repeat):
+        deref(node._ctxt)._max_depth = i % 100
+        while node.next():
+            count += 1
+        deref(node._ctxt).rewind(0, True)
+
+    return count, time.perf_counter() - start
+
+
 def read_config(fname='sturddle.cfg', echo=False):
     with open(fname) as f:
         ns = {'__builtins__': {}}
@@ -1082,7 +1130,7 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0
-__minor__   = 85
+__minor__   = 88
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
 

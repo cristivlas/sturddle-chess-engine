@@ -31,7 +31,7 @@
 namespace chess
 {
     /* Get attackers of given color targetting a square, discounting pinned pieces */
-    Bitboard get_direct_attackers(
+    INLINE static Bitboard get_direct_attackers(
         const State&    board,
         Color           color,
         Square          target_square,
@@ -113,7 +113,7 @@ namespace chess
     public:
         using AttackVector = std::vector<Attack>;
 
-        const AttackVector& attack_plan(
+        INLINE const AttackVector& attack_plan(
             const State&    board_state,
             Color           color,
             Square          square,
@@ -126,7 +126,7 @@ namespace chess
             return _attackers;
         }
 
-        const AttackVector& defense_plan(
+        INLINE const AttackVector& defense_plan(
             const State&    board_state,
             Color           color,
             Square          square,
@@ -163,7 +163,7 @@ namespace chess
 
             for_each_square(attackers_mask, [&] (Square square)
             {
-                attacks.emplace_back(Attack(square, board.piece_type_at(square)));
+                attacks.emplace_back(square, board.piece_type_at(square));
 
                 if (BB_SQUARES[square] & (board.pawns | board.bishops | board.rooks | board.queens))
                 {
@@ -174,7 +174,7 @@ namespace chess
         }
 
 
-        static void sort_attacks(AttackVector& attacks, AttackVector& plan)
+        INLINE static void sort_attacks(AttackVector& attacks, AttackVector& plan)
         {
             plan.reserve(attacks.size());
 
@@ -188,7 +188,7 @@ namespace chess
                 auto a = attacks.back();
                 attacks.pop_back();
 
-                plan.push_back(a);
+                plan.emplace_back(a);
                 if (!a._support.empty())
                 {
                     attacks.insert(attacks.end(), a._support.cbegin(), a._support.cend());
@@ -308,3 +308,4 @@ namespace chess
     }
 
 } /* namespace chess */
+

@@ -66,41 +66,6 @@ namespace
     };
 
 
-    template<typename T> class MemoryPool
-    {
-    public:
-        explicit MemoryPool(size_t n_prealloc = 0)
-        {
-            for (size_t i = 0; i != n_prealloc; ++i)
-                _free.emplace_back(operator new(sizeof (T)));
-        }
-
-        void* get(size_t size)
-        {
-            ASSERT(size == sizeof(T));
-            if (_free.empty())
-                return nullptr;
-
-            auto ptr = _free.back();
-            _free.pop_back();
-            return ptr;
-        }
-
-        void put(void* ptr, size_t size)
-        {
-            ASSERT(size == sizeof(T));
-            _free.emplace_back(ptr);
-        }
-
-    private:
-        MemoryPool(const MemoryPool&) = delete;
-        MemoryPool& operator=(const MemoryPool&) = delete;
-
-        std::vector<void*> _free;
-        std::vector<void*> _used;
-    };
-
-
     using std::chrono::duration_cast;
     using std::chrono::high_resolution_clock;
     using std::chrono::nanoseconds;

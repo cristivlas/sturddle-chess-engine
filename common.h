@@ -26,6 +26,7 @@
 #include <iostream>
 #include <stdexcept>
 
+
 #if defined(_MSC_VER)
   #pragma warning(disable:4244)
   #define _USE_MATH_DEFINES
@@ -33,6 +34,16 @@
 #else
   #define HAVE_INT128 (INTPTR_MAX == INT64_MAX)
 #endif /* Microsoft */
+
+#if !defined(_DEBUG)
+#if _MSC_VER
+  #define INLINE __forceinline
+#elif __GNUC__
+  #define INLINE __attribute__((always_inline)) inline
+#endif
+#else
+  #define INLINE inline
+#endif
 
 #include <cmath>
 
@@ -56,6 +67,7 @@ using score_t = int32_t;
 
 #define EVAL_MOBILITY                       true
 
+/* NOTE: this setting has no effect when using SEE */
 #define EXCHANGES_DETECT_CHECKMATE          false
 
 /* Collect extra stats for troubleshooting */
@@ -72,11 +84,12 @@ using score_t = int32_t;
 
 #define MTDF_REORDER_MOVES                  true
 
-#define RECYCLE_CONTEXTS                    true /* custom operator new */
+/* Context operators new & delete use thread_local free lists */
+#define RECYCLE_CONTEXTS                    true
 
 #define REVERSE_FUTILITY_PRUNING            true
 
-#define SEE_PIN_AWARENESS_DEPTH             0
+#define SEE_PIN_AWARENESS_DEPTH             -1
 
 /*
  * https://www.chessprogramming.org/Singular_Extensions
@@ -101,9 +114,7 @@ using score_t = int32_t;
 #endif /* !SMP */
 
 
-/*
- * NOTE: the hash table size (in MB) can be changed at runtime with set_param()
- */
+/* NOTE: the hash table size (in MB) can be changed at runtime with set_param() */
 #if LOW_MEMORY_PROFILE
   /* https://planetmath.org/goodhashtableprimes */
   constexpr size_t TRANSPOSITION_TABLE_SLOTS = 3145739;
@@ -119,8 +130,11 @@ using score_t = int32_t;
 /* if false, use piece-type/to-square tables */
 #define USE_BUTTERFLY_TABLES                false
 
-/* Use magic-bits: https://github.com/goutham/magic-bits */
-#define USE_MAGIC_BITS                      false
+/* Use magic-bits: https://github.com/goutham/magic-bits (~10% faster than attacks.h) */
+#define USE_MAGIC_BITS                      true
+
+/* Half-baked hack */
+#define USE_MOVES_CACHE                     false
 
 /* Check time and call user-defined callback every N nodes */
 #ifndef CALLBACK_PERIOD

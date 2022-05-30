@@ -226,13 +226,13 @@ namespace chess
         };
 
 
-        inline std::uint64_t en_passant_key(const State& board)
+        INLINE std::uint64_t en_passant_key(const State& board)
         {
-            static constexpr Bitboard (*shift[2])(Bitboard) = { shift_up, shift_down };
-
             if (board.en_passant_square >= 0)
             {
-                Bitboard ep_mask = shift[board.turn](BB_SQUARES[board.en_passant_square]);
+                Bitboard ep_mask = board.turn
+                    ? shift_down(BB_SQUARES[board.en_passant_square])
+                    : shift_up(BB_SQUARES[board.en_passant_square]);
 
                 ep_mask = shift_left(ep_mask) | shift_right(ep_mask);
 
@@ -244,14 +244,14 @@ namespace chess
         }
 
 
-        constexpr inline std::uint64_t side_to_move_key(int turn)
+        constexpr INLINE std::uint64_t side_to_move_key(int turn)
         {
             return random_u64[781 - turn];
         }
     } /* namespace */
 
 
-    inline uint64_t zobrist_hash(const State& state)
+    INLINE uint64_t zobrist_hash(const State& state)
     {
         uint64_t hash_value = 0;
 

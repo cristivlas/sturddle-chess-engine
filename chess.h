@@ -66,7 +66,7 @@ namespace chess
             init(_data);
             _data[0] = reinterpret_cast<uint64_t>(hash); /* cache locality hack */
         }
-        inline uint64_t operator[] (uint64_t k) const
+        INLINE uint64_t operator[] (uint64_t k) const
         {
             return _data[reinterpret_cast<size_t (*)(uint64_t)>(_data[0])(k) + 1];
         }
@@ -87,7 +87,14 @@ namespace chess
 
     extern AttackMasks BB_DIAG_MASKS, BB_FILE_MASKS, BB_RANK_MASKS;
 
-    extern Bitboard BB_SQUARES[64];
+    template<std::size_t... I>
+    constexpr std::array<uint64_t, sizeof ... (I)> bb_squares(std::index_sequence<I...>)
+    {
+        return { 1ULL << I ... };
+    }
+
+    static constexpr auto BB_SQUARES = bb_squares(std::make_index_sequence<64>{});
+
     extern Bitboard BB_KING_ATTACKS[64];
     extern Bitboard BB_KNIGHT_ATTACKS[64];
     extern Bitboard BB_PAWN_ATTACKS[2][64];
@@ -186,7 +193,7 @@ namespace chess
         KING = 6,
     };
 
-    inline bool operator !(PieceType type) { return type == PieceType::NONE; }
+    INLINE bool operator !(PieceType type) { return type == PieceType::NONE; }
 
 
     constexpr PieceType PIECES[6] =
@@ -207,12 +214,12 @@ namespace chess
         WHITE = 1,
     };
 
-    inline constexpr Color operator !(Color color)
+    INLINE constexpr Color operator !(Color color)
     {
         return static_cast<Color>(!static_cast<bool>(color));
     }
 
-    inline void flip(Color& color)
+    INLINE void flip(Color& color)
     {
         color = !color;
     }
@@ -249,14 +256,14 @@ namespace chess
      * BitBoard and Square utilities
      */
 
-    inline int popcount(uint64_t u)
+    INLINE int popcount(uint64_t u)
     {
         /* Evals break if results are converted to unsigned! */
         return int(popcnt64(u));
     }
 
 
-    inline int msb(uint64_t v)
+    INLINE int msb(uint64_t v)
     {
         ASSERT(v);
 #if _MSC_VER
@@ -276,7 +283,7 @@ namespace chess
     }
 
 
-    inline int lsb(uint64_t u)
+    INLINE int lsb(uint64_t u)
     {
         ASSERT(u);
 #if (__GNUC__)
@@ -298,23 +305,23 @@ namespace chess
     Bitboard square_file_mask(Square);
     Bitboard square_rank_mask(Square);
 
-    inline constexpr int square_file(int square)
+    INLINE constexpr int square_file(int square)
     {
         return square & 7;
     }
 
-    inline constexpr int square_rank(int square)
+    INLINE constexpr int square_rank(int square)
     {
         return square >> 3;
     }
 
-    inline int square_distance(int a, int b)
+    INLINE int square_distance(int a, int b)
     {
         return std::max(abs(square_file(a) - square_file(b)), abs(square_rank(a) - square_rank(b)));
     }
 
     // https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating
-    inline constexpr int square_mirror(int square)
+    INLINE constexpr int square_mirror(int square)
     {
         return square ^ 0x38;
     }
@@ -369,6 +376,9 @@ namespace chess
 
     struct State;
 
+    uint64_t zobrist_hash(const State& state);
+
+
     /* Move representation */
     class BaseMove
     {
@@ -384,12 +394,12 @@ namespace chess
             , _promotion(promo)
         {}
 
-        inline constexpr Square to_square() const
+        INLINE constexpr Square to_square() const
         {
             return _to_square;
         }
 
-        inline constexpr Square from_square() const
+        INLINE constexpr Square from_square() const
         {
             return _from_square;
         }
@@ -423,7 +433,7 @@ namespace chess
     };
 
 
-    inline std::ostream& operator <<(std::ostream& out, const BaseMove& move)
+    INLINE std::ostream& operator <<(std::ostream& out, const BaseMove& move)
     {
         return out << move.uci();
     }
@@ -451,12 +461,12 @@ namespace chess
     };
 
 
-    inline bool operator==(const BaseMove& lhs, const BaseMove& rhs)
+    INLINE bool operator==(const BaseMove& lhs, const BaseMove& rhs)
     {
         return lhs.is_equal(rhs);
     }
 
-    inline bool operator!=(const BaseMove& lhs, const BaseMove& rhs)
+    INLINE bool operator!=(const BaseMove& lhs, const BaseMove& rhs)
     {
         return !lhs.is_equal(rhs);
     }
@@ -464,7 +474,7 @@ namespace chess
 
 #if HAVE_INT128
 
-    inline void swap(Move& lhs, Move& rhs)
+    INLINE void swap(Move& lhs, Move& rhs)
     {
         using int128_t = __int128;
         static_assert(sizeof(Move) == sizeof(int128_t), "expect sizeof(Move)==16");
@@ -483,13 +493,13 @@ namespace chess
     using MovesList = std::vector<Move>;
 
 
-    inline constexpr int square_index(int i, chess::Color color)
+    INLINE constexpr int square_index(int i, chess::Color color)
     {
         return square_indices[color][i];
     }
 
 
-    inline const int (&select_piece_square_table(bool endgame, PieceType pt))[64]
+    INLINE const int (&select_piece_square_table(bool endgame, PieceType pt))[64]
     {
         if (endgame && pt == PieceType::KING)
             return ENDGAME_KING_SQUARE_TABLE;
@@ -605,9 +615,7 @@ namespace chess
             return _occupied_co[color];
         }
 
-        std::vector<int> piece_types(Bitboard) const;
-
-        inline PieceType _piece_type_at(Square square) const
+        INLINE PieceType _piece_type_at(Square square) const
         {
             const auto mask = BB_SQUARES[square];
             if ((occupied() & mask) == 0)
@@ -625,7 +633,7 @@ namespace chess
             return PieceType::KING;
         }
 
-        inline Bitboard& pieces(PieceType piece_type)
+        INLINE Bitboard& pieces(PieceType piece_type)
         {
             return _pieces[piece_type - 1];
         }
@@ -635,13 +643,13 @@ namespace chess
             return const_cast<Position*>(this)->pieces(piece_type) & occupied_co(color);
         }
 
-        inline PieceType piece_type_at(Square square) const
+        INLINE PieceType piece_type_at(Square square) const
         {
             ASSERT(_piece_types[square] == _piece_type_at(square));
             return _piece_types[square];
         }
 
-        inline Color piece_color_at(Square square) const
+        INLINE Color piece_color_at(Square square) const
         {
             constexpr Color colors[] = { BLACK, WHITE };
 
@@ -650,16 +658,52 @@ namespace chess
             return colors[(mask & white) != 0];
         }
 
-        inline std::pair<PieceType, Color> piece_at(Square square) const
-        {
-            if (auto piece_type = piece_type_at(square))
-                return std::make_pair(piece_type, piece_color_at(square));
-
-            return std::make_pair(PieceType::NONE, BLACK);
-        }
-
         Bitboard pin_mask(Color, Square, bool threat_only = false) const;
     };
+
+
+    INLINE Bitboard Position::attacks_mask(Square square) const
+    {
+        const auto bb_square = BB_SQUARES[square];
+
+        if (bb_square & pawns)
+        {
+            const bool color = (bb_square & white) == bb_square;
+            return BB_PAWN_ATTACKS[color][square];
+        }
+        else if (bb_square & knights)
+        {
+            return BB_KNIGHT_ATTACKS[square];
+        }
+        else if (bb_square & kings)
+        {
+            return BB_KING_ATTACKS[square];
+        }
+        else
+        {
+            Bitboard mask = 0;
+            const auto occupied = black | white;
+    #if USE_MAGIC_BITS
+            if ((bb_square & bishops) || (bb_square & queens))
+                mask = attacks.Bishop(occupied, square);
+
+            if ((bb_square & rooks) || (bb_square & queens))
+                mask |= attacks.Rook(occupied, square);
+    #else
+            if ((bb_square & bishops) || (bb_square & queens))
+            {
+                mask = BB_DIAG_ATTACKS[square][BB_DIAG_MASKS[square] & occupied];
+            }
+
+            if ((bb_square & rooks) || (bb_square & queens))
+            {
+                mask |= BB_RANK_ATTACKS[square][BB_RANK_MASKS[square] & occupied] |
+                        BB_FILE_ATTACKS[square][BB_FILE_MASKS[square] & occupied];
+            }
+    #endif /* !USE_MAGIC_BITS */
+            return mask;
+        }
+    }
 
 
     struct BoardPosition : public Position
@@ -687,18 +731,18 @@ namespace chess
 
     static_assert(sizeof(BoardPosition) % 8 == 0, "8-byte alignment expected");
 
-    inline bool operator==(const BoardPosition& lhs, const BoardPosition& rhs)
+    INLINE bool operator==(const BoardPosition& lhs, const BoardPosition& rhs)
     {
         return lhs.equals(rhs);
     }
 
-    inline bool operator!=(const BoardPosition& lhs, const BoardPosition& rhs)
+    INLINE bool operator!=(const BoardPosition& lhs, const BoardPosition& rhs)
     {
         return !lhs.equals(rhs);
     }
 
 
-    template<typename T> inline T constexpr pow2(T x) { return x * x; }
+    template<typename T> INLINE T constexpr pow2(T x) { return x * x; }
 
     namespace
     {
@@ -716,14 +760,14 @@ namespace chess
             return { _exp<I>::value ... };
         }
 
-        inline constexpr double _e(int x)
+        INLINE constexpr double _e(int x)
         {
             auto constexpr e = _exp_table(std::make_index_sequence<33>{});
             return x < 0 ? (1.0 / e[-x]) : e[x];
         }
     }
 
-    inline constexpr double logistic(int x)
+    INLINE constexpr double logistic(int x)
     {
         return 1 / (1.0 + _e(-x));
     }
@@ -731,7 +775,7 @@ namespace chess
     /*
      * https://www.chessprogramming.org/Tapered_Eval
      */
-    inline constexpr double _interpolate(double pc, int midgame, int endgame)
+    INLINE constexpr double _interpolate(double pc, int midgame, int endgame)
     {
         ASSERT(pc >= 2);
         ASSERT(pc <= 32);
@@ -748,7 +792,7 @@ namespace chess
     }
 
 #if TUNING_ENABLED || defined(TUNING_PARTIAL)
-    inline constexpr double interpolate(int pc, int mg, int eg)
+    INLINE constexpr double interpolate(int pc, int mg, int eg)
     {
         return _interpolate(pc, mg, eg);
     }
@@ -820,20 +864,43 @@ namespace chess
          */
         score_t eval_simple() const;
 
-        uint64_t hash() const;
+        uint64_t hash() const
+        {
+            if (_hash == 0)
+                _hash = zobrist_hash(*this);
+
+            return _hash;
+        }
 
         void rehash() { _hash = 0; hash(); }
 
-        bool has_connected_rooks(Color) const;
-        bool has_fork(Color) const;
+        bool has_connected_rooks(Color color) const
+        {
+            auto rook_mask = rooks & occupied_co(color);
+
+            return for_each_square_r<bool>(rook_mask, [&](Square rook) {
+                return attacks_mask(rook) & rook_mask;
+            });
+        }
+
+        bool has_fork(Color color) const
+        {
+            const auto attacked = occupied_co(!color) & ~pawns;
+
+            return for_each_square_r<bool>(occupied_co(color) & (pawns | knights | bishops),
+                [&](Square attacking_square) {
+                    return popcount(attacks_mask(attacking_square) & attacked) > 1;
+                });
+        }
+
         bool has_insufficient_material(Color) const;
 
         bool is_capture(const BaseMove& move) const;
         bool is_castling(const BaseMove&) const;
 
-        bool is_check() const { return is_check(this->turn); }
+        INLINE bool is_check() const { return is_check(this->turn); }
 
-        bool is_check(Color color) const
+        INLINE bool is_check(Color color) const
         {
             if (_check[color] < 0)
                 _check[color] = checkers_mask(color) != BB_EMPTY;
@@ -847,10 +914,14 @@ namespace chess
         bool is_en_passant(const BaseMove&) const;
         bool is_pinned(Color color, bool threat = false) const;
 
+        bool just_king_and_pawns(Color color) const
+        {
+            return (~(kings | pawns) & occupied_co(color)) == 0;
+        }
         /* Side the move is down to just king and (maybe) pawns? */
         bool just_king_and_pawns() const
         {
-            return (occupied_co(turn) & ~(kings | pawns)) == 0;
+            return just_king_and_pawns(turn);
         }
 
         int longest_pawn_sequence(Bitboard mask) const;
@@ -861,11 +932,13 @@ namespace chess
             Bitboard to_mask = BB_ALL,
             Bitboard from_mask = BB_ALL) const;
 
+        void generate_moves(MovesList& out, MovesList& buffer) const;
+
         void generate_castling_moves(MovesList& moves, Bitboard to_mask = BB_ALL) const;
 
         void eval_apply_delta(const BaseMove&, const State& previous);
 
-        static inline constexpr int weight(PieceType piece_type)
+        static INLINE constexpr int weight(PieceType piece_type)
         {
             return WEIGHT[piece_type];
         }
@@ -895,56 +968,109 @@ namespace chess
         mutable _endgame = ENDGAME_UNKNOWN;
     }; /* State */
 
-    /* utilities */
-    const char* piece_name(PieceType);
-
-    inline constexpr const char* color_name(Color color)
+    INLINE int score_pushed_pawns(const State& state, const BaseMove& move)
     {
-        return color == WHITE ? "white" : "black";
+        static constexpr int scores[2][8] = {
+            { 0, 3, 2, 1, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 1, 2, 3, 0 },
+        };
+
+        if (state.pawns & BB_SQUARES[move.to_square()])
+        {
+            return scores[!state.turn][square_rank(move.to_square())];
+        }
+        return 0;
     }
 
 
-    inline std::ostream& operator <<(std::ostream& os, Color color)
+    INLINE void State::apply_move(const BaseMove& move)
     {
-        return os << color_name(color);
+        ASSERT(move);
+        ASSERT(piece_type_at(move.to_square()) != PieceType::KING);
+
+        _check = {-1, -1};
+
+        this->capture_value = weight(piece_type_at(move.to_square()));
+        this->promotion = move.promotion();
+
+        const auto color = piece_color_at(move.from_square());
+
+        if ((this->is_castle = is_castling(move)) == true)
+        {
+            const auto king_to_file = square_file(move.to_square());
+            ASSERT(king_to_file == 2 || king_to_file == 6);
+
+        #if 0
+            Square rook_from_square = UNDEFINED, rook_to_square = UNDEFINED;
+            if (king_to_file == 2)
+            {
+                rook_from_square = (color == WHITE ? A1 : A8);
+                rook_to_square = (color == WHITE ? D1 : D8);
+            }
+            else
+            {
+                rook_from_square = (color == WHITE ? H1 : H8);
+                rook_to_square = (color == WHITE ? F1 : F8);
+            }
+        #else
+            static constexpr Square swap_squares[2][2][2] = {
+                { { H8, H1 }, { F8, F1 } },
+                { { A8, A1 }, { D8, D1 } },
+            };
+            const auto rook_from_square = swap_squares[king_to_file == 2][0][color];
+            const auto rook_to_square = swap_squares[king_to_file == 2][1][color];
+        #endif
+            const auto piece_type = remove_piece_at(rook_from_square);
+            ASSERT(piece_type == ROOK);
+
+            ASSERT(piece_type_at(rook_to_square) == NONE);
+            set_piece_at(rook_to_square, piece_type, color);
+        }
+
+        const auto piece_type = remove_piece_at(move.from_square());
+
+        /* update castling rights */
+        if (piece_type == PieceType::KING)
+        {
+            castling_rights &= ~BB_BACKRANKS[color];
+        }
+        castling_rights &= ~BB_SQUARES[move.from_square()] & ~BB_SQUARES[move.to_square()];
+
+        /* save current en-passant square */
+        const auto ep_square = en_passant_square;
+        this->en_passant_square = Square::UNDEFINED; /* reset */
+
+        if (piece_type == PieceType::PAWN)
+        {
+            const auto diff = move.to_square() - move.from_square();
+
+            if (diff == 16 && square_rank(move.from_square()) == 1)
+            {
+                en_passant_square = Square(move.from_square() + 8);
+            }
+            else if (diff == -16 && square_rank(move.from_square()) == 6)
+            {
+                en_passant_square = Square(move.from_square() - 8);
+            }
+            else if (move.to_square() == ep_square && (abs(diff) == 7 || abs(diff) == 9) && !capture_value)
+            {
+                /* Remove pawns captured en passant. */
+                remove_piece_at(Square(ep_square - 8 * SIGN[turn]));
+                capture_value = weight(PieceType::PAWN);
+            }
+        }
+
+        set_piece_at(move.to_square(), piece_type, color, move.promotion());
+        flip(turn);
+
+        pushed_pawns_score = score_pushed_pawns(*this, move);
+
+        _endgame = ENDGAME_UNKNOWN; /* recalculate lazily */
+        _hash = 0; /* invalidate */
     }
 
-    inline std::ostream& operator <<(std::ostream& os, PieceType piece_type)
-    {
-        return os << piece_name(piece_type);
-    }
 
-    inline std::ostream& operator <<(std::ostream& os, Square square)
-    {
-        return os << square_name(square);
-    }
-
-
-    inline constexpr Bitboard shift_down(Bitboard b)
-    {
-        return b >> 8;
-    }
-
-    inline constexpr Bitboard shift_up(Bitboard b)
-    {
-        return (b << 8) & BB_ALL;
-    }
-
-    inline constexpr Bitboard shift_right(Bitboard b)
-    {
-        return (b << 1) & ~BB_FILE_A & BB_ALL;
-    }
-
-    inline constexpr Bitboard shift_left(Bitboard b)
-    {
-        return (b >> 1) & ~BB_FILE_H;
-    }
-
-    Bitboard edges(int square);
-    Bitboard sliding_attacks(int, Bitboard occupied, const std::vector<int>& deltas);
-
-
-    inline void State::clone_into(State& state) const
+    INLINE void State::clone_into(State& state) const
     {
         state = *this;
 
@@ -960,7 +1086,7 @@ namespace chess
     /*
      * Evaluate the incremental score change for a move
      */
-    inline score_t State::eval_delta(Square from_square, Square to_square) const
+    INLINE score_t State::eval_delta(Square from_square, Square to_square) const
     {
         const auto endgame = is_endgame();
 
@@ -997,7 +1123,7 @@ namespace chess
     }
 
 
-    inline score_t State::eval_simple() const
+    INLINE score_t State::eval_simple() const
     {
         int score = 0;
         const auto endgame = is_endgame();
@@ -1024,13 +1150,13 @@ namespace chess
 
 
     /*
-     * FIXME: doubled-up pawns are double counted as "connected" if they are pawns on
+     * FIXME: doubled-up pawns are double counted as "connected" if there are pawns on
      * the adjacent files. OTOH doubled-up pawns with no paws on neighboring files will
      * EACH be considered "isolated" (which may violate the principle of orthogonality,
      * as doubled and tripled pawns are penalized via diff_doubled_pawns). An alternative
      * could be to count files with connected/isolated pawns instead.
      */
-    static inline int count_pawns(Bitboard pawns, Bitboard color_mask, Bitboard mask, bool connected)
+    INLINE int count_pawns(Bitboard pawns, Bitboard color_mask, Bitboard mask, bool connected)
     {
         int count = 0;
 
@@ -1042,17 +1168,20 @@ namespace chess
         return count;
     }
 
-    inline int State::count_connected_pawns(Color color, Bitboard mask) const
+
+    INLINE int State::count_connected_pawns(Color color, Bitboard mask) const
     {
         return count_pawns(pawns, _occupied_co[color], mask, true);
     }
 
-    inline int State::count_isolated_pawns(Color color, Bitboard mask) const
+
+    INLINE int State::count_isolated_pawns(Color color, Bitboard mask) const
     {
         return count_pawns(pawns, _occupied_co[color], mask, false);
     }
 
-    inline int State::diff_doubled_pawns() const
+
+    INLINE int State::diff_doubled_pawns() const
     {
         int count = 0;
 
@@ -1070,7 +1199,8 @@ namespace chess
         return count;
     }
 
-    inline score_t State::eval() const
+
+    INLINE score_t State::eval() const
     {
         if (!simple_score)
             simple_score = eval_simple();
@@ -1085,7 +1215,8 @@ namespace chess
         return value * SIGN[turn];
     }
 
-    inline score_t State::eval_material() const
+
+    INLINE score_t State::eval_material() const
     {
         int score = 0;
 
@@ -1102,10 +1233,11 @@ namespace chess
         return score;
     }
 
+
     /*
      * Apply incremental material and piece squares evaluation.
      */
-    inline void State::eval_apply_delta(const BaseMove& move, const State& prev)
+    INLINE void State::eval_apply_delta(const BaseMove& move, const State& prev)
     {
         if (move.promotion()
             || prev.simple_score == 0
@@ -1120,7 +1252,8 @@ namespace chess
         }
     }
 
-    inline bool State::is_castling(const BaseMove& move) const
+
+    INLINE bool State::is_castling(const BaseMove& move) const
     {
         if ((castling_rights != BB_EMPTY) && (kings & BB_SQUARES[move.from_square()]))
         {
@@ -1130,7 +1263,8 @@ namespace chess
         return false;
     }
 
-    inline bool State::is_en_passant(const BaseMove& move) const
+
+    INLINE bool State::is_en_passant(const BaseMove& move) const
     {
         return en_passant_square == move.to_square()
             && (pawns & BB_SQUARES[move.from_square()])
@@ -1139,7 +1273,8 @@ namespace chess
             && (occupied() & BB_SQUARES[move.to_square()]) == 0;
     }
 
-    inline bool State::is_pinned(Color color, bool threat) const
+
+    INLINE bool State::is_pinned(Color color, bool threat) const
     {
         return for_each_square_r<bool>(occupied_co(color), [&] (Square square) {
 
@@ -1150,19 +1285,23 @@ namespace chess
         });
     }
 
-    inline bool State::is_capture(const BaseMove& move) const
+
+    INLINE bool State::is_capture(const BaseMove& move) const
     {
         ASSERT (move);
         return (BB_SQUARES[move.to_square()] & occupied_co(!turn)) || is_en_passant(move);
     }
 
-    /* static */ inline bool State::is_endgame(const State& state)
+
+    /* static */ INLINE bool State::is_endgame(const State& state)
     {
         return (popcount(state.occupied()) <= ENDGAME_PIECE_COUNT)
-            || ((state.knights | state.bishops | state.rooks | state.queens) == 0);
+            || state.just_king_and_pawns(BLACK)
+            || state.just_king_and_pawns(WHITE);
     }
 
-    inline bool State::is_endgame() const
+
+    INLINE bool State::is_endgame() const
     {
         if (_endgame == ENDGAME_UNKNOWN)
         {
@@ -1171,7 +1310,8 @@ namespace chess
         return (_endgame == ENDGAME_TRUE);
     }
 
-    inline int State::longest_pawn_sequence(Bitboard mask) const
+
+    INLINE int State::longest_pawn_sequence(Bitboard mask) const
     {
         int result = 0, count = 0;
         auto pawn_mask = (pawns & mask);
@@ -1187,52 +1327,101 @@ namespace chess
         return result == 1 ? 0 : result;
     }
 
-    inline Bitboard State::passed_pawns(Color color, Bitboard mask) const
+
+    INLINE Bitboard State::passed_pawns(Color color, Bitboard mask) const
     {
         return pawns & occupied_co(color) & BB_PASSED[color] & mask;
     }
 
-    inline PieceType State::remove_piece_at(Square square)
+
+    INLINE PieceType State::remove_piece_at(Square square)
     {
         ASSERT(square != Square::UNDEFINED);
 
-        auto piece_type = piece_type_at(square);
+        const auto piece_type = piece_type_at(square);
+
         if (piece_type)
         {
             const auto mask = BB_SQUARES[square];
-            pieces(piece_type) ^= mask;
+
+            pieces(piece_type) &= ~mask;
             white &= ~mask;
             black &= ~mask;
         }
 
         _piece_types[square] = PieceType::NONE;
+
         return piece_type;
     }
 
-    inline void State::set_piece_at(
-        Square square,
-        PieceType piece_type,
-        Color color,
-        PieceType promotion)
+
+    INLINE void State::set_piece_at(Square square, PieceType type, Color color, PieceType promo)
     {
         ASSERT(square != Square::UNDEFINED);
-        ASSERT(piece_type);
+        ASSERT(type);
 
         remove_piece_at(square);
 
         const auto mask = BB_SQUARES[square];
 
-        if (promotion != PieceType::NONE)
+        if (promo != PieceType::NONE)
         {
-            piece_type = promotion;
+            type = promo;
         }
 
-        pieces(piece_type) |= mask;
-        _occupied_co[color] ^= mask;
+        pieces(type) |= mask;
+        _occupied_co[color] |= mask;
 
         ASSERT(_piece_types[square] == PieceType::NONE);
-        _piece_types[square] = piece_type;
+        _piece_types[square] = type;
     }
+
+
+    /*
+     * Utilities
+     */
+    const char* piece_name(PieceType);
+
+    INLINE constexpr const char* color_name(Color color)
+    {
+        return color == WHITE ? "white" : "black";
+    }
+
+    INLINE std::ostream& operator <<(std::ostream& os, Color color)
+    {
+        return os << color_name(color);
+    }
+
+    INLINE std::ostream& operator <<(std::ostream& os, PieceType piece_type)
+    {
+        return os << piece_name(piece_type);
+    }
+
+    INLINE std::ostream& operator <<(std::ostream& os, Square square)
+    {
+        return os << square_name(square);
+    }
+
+    INLINE constexpr Bitboard shift_down(Bitboard b)
+    {
+        return b >> 8;
+    }
+
+    INLINE constexpr Bitboard shift_up(Bitboard b)
+    {
+        return (b << 8) & BB_ALL;
+    }
+
+    INLINE constexpr Bitboard shift_right(Bitboard b)
+    {
+        return (b << 1) & ~BB_FILE_A & BB_ALL;
+    }
+
+    INLINE constexpr Bitboard shift_left(Bitboard b)
+    {
+        return (b >> 1) & ~BB_FILE_H;
+    }
+
 
     /* debug */
     void print_bb(Bitboard);
@@ -1247,4 +1436,7 @@ namespace chess
     score_t estimate_static_exchanges(const State&, Color, Square, PieceType = PieceType::NONE);
     score_t estimate_captures(const State&);
 
-} // namespace chess
+} /* namespace chess */
+
+#include "zobrist.h"
+

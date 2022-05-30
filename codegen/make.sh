@@ -1,1 +1,1 @@
-g++ -Wall -I.. -I../libpopcnt codegen.cpp ../chess.cpp -o codegen
+clang++ -std=c++17 -Wall -I.. -I../libpopcnt codegen.cpp ../chess.cpp -o codegen

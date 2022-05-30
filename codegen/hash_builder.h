@@ -547,39 +547,39 @@ namespace
         {
             /* Try a bunch of strategies and see which one fits the data best. */
             /* The idea is to maximize performance with minimum memory. */
-            _builders.emplace_back(std::move(std::make_unique<RShiftHashBuilder>(16)));
+            _builders.emplace_back(std::make_unique<RShiftHashBuilder>(16));
 
             for (size_t table_size : { 512, 1024, 2048, 4096, 8192 })
             {
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixAMixer,  3>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixAMixer,  5>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixAMixer,  7>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixAMixer,  9>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixAMixer, 11>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixAMixer, 15>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixAMixer, 17>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixAMixer, 19>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixAMixer, 21>>(table_size)));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixAMixer,  3>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixAMixer,  5>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixAMixer,  7>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixAMixer,  9>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixAMixer, 11>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixAMixer, 15>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixAMixer, 17>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixAMixer, 19>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixAMixer, 21>>(table_size));
 
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixBMixer,  3>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixBMixer,  5>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixBMixer,  7>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixBMixer,  9>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixBMixer, 11>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixBMixer, 15>>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixBMixer, 17>>(table_size)));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixBMixer,  3>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixBMixer,  5>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixBMixer,  7>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixBMixer,  9>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixBMixer, 11>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixBMixer, 15>>(table_size));
+                _builders.emplace_back(std::make_unique<HashMaskBuilder<MixBMixer, 17>>(table_size));
 
-                // _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixBMixer, 19>>(table_size)));
-                // _builders.emplace_back(std::move(std::make_unique<HashMaskBuilder<MixBMixer, 21>>(table_size)));
+                // _builders.emplace_back(std::make_unique<HashMaskBuilder<MixBMixer, 19>>(table_size));
+                // _builders.emplace_back(std::make_unique<HashMaskBuilder<MixBMixer, 21>>(table_size));
 
-                _builders.emplace_back(std::move(std::make_unique<HashMixABuilder>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMixBBuilder>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMix6Builder>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMix7Builder>(table_size)));
-                _builders.emplace_back(std::move(std::make_unique<HashMix9Builder>(table_size)));
+                _builders.emplace_back(std::make_unique<HashMixABuilder>(table_size));
+                _builders.emplace_back(std::make_unique<HashMixBBuilder>(table_size));
+                _builders.emplace_back(std::make_unique<HashMix6Builder>(table_size));
+                _builders.emplace_back(std::make_unique<HashMix7Builder>(table_size));
+                _builders.emplace_back(std::make_unique<HashMix9Builder>(table_size));
             }
 
-            _builders.emplace_back(std::move(std::make_unique<PerfectHashBuilder>()));
+            _builders.emplace_back(std::make_unique<PerfectHashBuilder>());
         }
 
         std::string strategy() const override

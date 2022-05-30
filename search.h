@@ -25,6 +25,7 @@
 #include <memory>
 #include <thread>
 #include "chess.h"
+#include "shared_hash_table.h"
 
 constexpr int ONE_PLY = 16; /* fractional extensions */
 constexpr int PLY_MAX = 100;
@@ -46,6 +47,11 @@ namespace search
 {
     struct Context;
     class TranspositionTable;
+
+#if USE_MOVES_CACHE
+    using MovesCache = SharedHashTable<struct Moves, 1>;
+    extern std::shared_ptr<MovesCache> moves_cache;
+#endif /* USE_MOVES_CACHE */
 
     /*
      * Search algorithms
@@ -163,7 +169,8 @@ namespace search
      */
     class TranspositionTable
     {
-        using TablePtr = std::shared_ptr<class SharedHashTable>;
+        using HashTable = SharedHashTable<TT_Entry>;
+        using HashTablePtr = std::shared_ptr<HashTable>;
 
     #if USE_BUTTERFLY_TABLES
         using HistoryCounters = MoveTable<std::pair<int, int>>;
@@ -181,7 +188,7 @@ namespace search
 
         KillerMovesTable    _killer_moves; /* killer moves at each ply */
         HistoryCounters     _hcounters[2]; /* History heuristic counters. */
-        static TablePtr     _table;        /* shared hashtable */
+        static HashTablePtr _table;        /* shared hashtable */
 
     public:
         TranspositionTable() = default;
@@ -236,7 +243,7 @@ namespace search
         void store(Context&, score_t alpha);
         void store(Context&, TT_Entry&, score_t);
 
-        void store_countermove(const Context&);
+        void store_countermove(Context&);
         void store_killer_move(const Context&);
 
         void store_pv(Context&, bool = false);

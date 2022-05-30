@@ -124,24 +124,24 @@ template<typename T> class RefCounted
     static_assert(std::atomic<int>::is_always_lock_free);
     std::atomic<int> _refcnt;
 
-    void increment()
+    INLINE void increment()
     {
         _refcnt.fetch_add(1, std::memory_order_relaxed);
     }
 
-    bool decrement()
+    INLINE bool decrement()
     {
         return _refcnt.fetch_sub(1, std::memory_order_acq_rel) == 1;
     }
 #else
     int _refcnt = 0;
 
-    void increment()
+    INLINE void increment()
     {
         ++_refcnt;
     }
 
-    bool decrement()
+    INLINE bool decrement()
     {
         return --_refcnt == 0;
     }
@@ -155,9 +155,9 @@ protected:
     RefCounted(const RefCounted&) : _refcnt(0) {}
     ~RefCounted() = default;
 
-    void add_ref() { increment(); }
+    INLINE void add_ref() { increment(); }
 
-    void remove_ref()
+    INLINE void remove_ref()
     {
         ASSERT(_refcnt > 0);
         static_assert(!std::has_virtual_destructor<T>::value); // for perf. reasons

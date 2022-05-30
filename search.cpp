@@ -29,7 +29,6 @@
 #include <sstream>
 #include <utility>
 #include "context.h"
-#include "shared_hash_table.h"
 #include "thread_pool.hpp"
 #include "search.h"
 #include "utility.h"
@@ -45,12 +44,10 @@
 using namespace chess;
 using namespace search;
 
-using SpinLock = SharedHashTable::SpinLock;
-
 
 void log_pv(const TranspositionTable& tt, const char* info)
 {
-#if 0
+#if _DEBUG
     std::ostringstream out;
 
     out << info << ": ";
@@ -58,13 +55,13 @@ void log_pv(const TranspositionTable& tt, const char* info)
         out << move << " ";
 
     Context::log_message(LogLevel::DEBUG, out.str());
-#endif
+#endif /* _DEBUG */
 }
 
 
 const score_t* TT_Entry::lookup_score(Context& ctxt) const
 {
-    if (_depth >= ctxt.depth() && is_valid())
+    if ((_depth >= ctxt.depth()) * is_valid())
     {
         if (is_lower())
         {
@@ -74,7 +71,7 @@ const score_t* TT_Entry::lookup_score(Context& ctxt) const
         {
             ctxt._beta = std::min(ctxt._beta, _value);
         }
-        else if (ctxt._alpha <= _alpha && ctxt._beta >= _beta)
+        else if ((ctxt._alpha <= _alpha) * (ctxt._beta >= _beta))
         {
             ASSERT(_value > _alpha && _value < _beta);
             return &_value;
@@ -106,8 +103,8 @@ static inline size_t pick_prime(size_t n)
 static constexpr int ONE_MEGABYTE = 1024 * 1024;
 
 
-TranspositionTable::TablePtr TranspositionTable::_table =
-    std::make_shared<SharedHashTable>(pick_prime(TRANSPOSITION_TABLE_SLOTS));
+TranspositionTable::HashTablePtr TranspositionTable::_table =
+    std::make_shared<TranspositionTable::HashTable>(pick_prime(TRANSPOSITION_TABLE_SLOTS));
 
 
 static size_t mem_avail()
@@ -131,7 +128,7 @@ static size_t mem_avail()
 {
     ASSERT_ALWAYS(_table);
 
-    const size_t cur_size = SharedHashTable::size_in_bytes(_table->capacity());
+    const size_t cur_size = HashTable::size_in_bytes(_table->capacity());
     const size_t max_mem = mem_avail() + cur_size;
 
     return max_mem / ONE_MEGABYTE;
@@ -141,7 +138,7 @@ static size_t mem_avail()
 /* static */ size_t TranspositionTable::get_hash_size()
 {
     ASSERT_ALWAYS(_table);
-    return SharedHashTable::size_in_bytes(_table->capacity()) / ONE_MEGABYTE;
+    return HashTable::size_in_bytes(_table->capacity()) / ONE_MEGABYTE;
 }
 
 
@@ -152,7 +149,7 @@ static size_t mem_avail()
     const auto max_size = max_hash_size(); /* in Megabytes */
 
     /* convert requested size to requested capacity */
-    auto req_cap = (MB * ONE_MEGABYTE) / SharedHashTable::size_in_bytes(1);
+    auto req_cap = (MB * ONE_MEGABYTE) / HashTable::size_in_bytes(1);
 
     /* prime number close to requested capacity */
     auto prime_cap = pick_prime(req_cap);
@@ -162,7 +159,7 @@ static size_t mem_avail()
         if (prime_cap == _table->capacity())
             return;
 
-        auto size = SharedHashTable::size_in_bytes(prime_cap) / ONE_MEGABYTE;
+        auto size = HashTable::size_in_bytes(prime_cap) / ONE_MEGABYTE;
         if (size < max_size)
             break;
 
@@ -181,7 +178,7 @@ static size_t mem_avail()
 
     std::ostringstream out;
     out << "hash: req=" << MB << " new=" << get_hash_size() << " free=" << mem_avail() / ONE_MEGABYTE;
-    Context::log_message(LogLevel::INFO, out.str());
+    Context::log_message(LogLevel::DEBUG, out.str());
 }
 
 
@@ -228,6 +225,10 @@ void TranspositionTable::clear()
 /* static */ void TranspositionTable::increment_clock()
 {
     _table->increment_clock();
+
+#if USE_MOVES_CACHE
+    moves_cache->increment_clock();
+#endif /* USE_MOVES_CACHE */
 }
 
 
@@ -263,12 +264,13 @@ const score_t* TranspositionTable::lookup(Context& ctxt)
     if (ctxt.is_repeated() > 0)
         return nullptr;
 
-    if (auto p = _table->lookup(ctxt.state(), SpinLock::Acquire::Read))
+    if (auto p = _table->lookup(ctxt.state(), Acquire::Read))
     {
         ASSERT(p->matches(ctxt.state()));
         ctxt._tt_entry = *p;
-
+#if EXTRA_STATS
         ++_hits;
+#endif /* EXTRA_STATS */
     }
 
     /* http://www.talkchess.com/forum3/viewtopic.php?topic_view=threads&p=305236&t=30788 */
@@ -316,7 +318,7 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha)
     * Another thread has completed a deeper search from the time the current
     * thread has started searching (and probed the cache) in this position?
     */
-    else if (entry._depth > ctxt.depth() && entry._version > ctxt._tt_entry._version)
+    else if ((entry._depth > ctxt.depth()) * (entry._version > ctxt._tt_entry._version))
     {
         return;
     }
@@ -357,14 +359,14 @@ void TranspositionTable::store(Context& ctxt, score_t alpha)
     update_stats(ctxt);
 #endif /* EXTRA_STATS */
 
-    if (auto p = _table->lookup(ctxt.state(), SpinLock::Acquire::Write, ctxt.depth(), ctxt._score))
+    if (auto p = _table->lookup(ctxt.state(), Acquire::Write, ctxt.depth(), ctxt._score))
     {
         store(ctxt, *p, alpha);
     }
 }
 
 
-void TranspositionTable::store_countermove(const Context& ctxt)
+void TranspositionTable::store_countermove(Context& ctxt)
 {
     if (ctxt._move)
     {
@@ -375,6 +377,8 @@ void TranspositionTable::store_countermove(const Context& ctxt)
         const auto pt = ctxt.state().piece_type_at(ctxt._move.to_square());
         _countermoves[ctxt.turn()].lookup(pt, ctxt._move) = ctxt._cutoff_move;
 #endif /* USE_BUTTERFLY_TABLES */
+
+        ctxt.set_counter_move(ctxt._cutoff_move);
     }
 }
 
@@ -422,7 +426,7 @@ void TranspositionTable::get_pv_from_table(
 
     auto move = ctxt._tt_entry._hash_move;
     if (!move) /* try the hash table */
-        if (auto p = _table->lookup(state, SpinLock::Acquire::Read))
+        if (auto p = _table->lookup(state, Acquire::Read))
             move = p->_hash_move;
 
     while (move)
@@ -443,7 +447,7 @@ void TranspositionTable::get_pv_from_table(
         /* Add the move to the principal variation. */
         pv.emplace_back(move);
 
-        auto p = _table->lookup(state, SpinLock::Acquire::Read);
+        auto p = _table->lookup(state, Acquire::Read);
         if (!p)
             break;
 
@@ -649,6 +653,9 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         && !ctxt.is_null_move()
         && (ctxt.is_leftmost() || ctxt._alpha + 1 < ctxt._beta);
 
+    /* Reduce by one ply at expected cut nodes */
+    ctxt._max_depth -= (!ctxt.is_pv_node() * (ctxt.depth() > 7)) && ctxt.can_reduce();
+
     if (ctxt._alpha + 1 < ctxt._beta)
     {
         ASSERT(ctxt._algorithm != NEGASCOUT || ctxt.is_leftmost() || ctxt.is_retry());
@@ -692,16 +699,17 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
          */
         if (ctxt._ply != 0
             && !ctxt.is_singleton()
-            && !ctxt._excluded
+            && !ctxt._excluded /* no reverse pruning during singular extension */
             && !ctxt.is_pv_node()
             && ctxt.depth() > 0
             && ctxt.depth() < 7
             && ctxt._tt_entry._eval < MATE_HIGH
-            && ctxt._tt_entry._eval > ctxt._beta + std::max(50 * ctxt.depth(), ctxt.improvement())
+            && ctxt._tt_entry._eval > ctxt._beta + std::max(135 * ctxt.depth(), ctxt.improvement())
             && !ctxt.is_check())
         {
             ASSERT(ctxt._tt_entry._eval > SCORE_MIN);
             ASSERT(ctxt._tt_entry._eval < SCORE_MAX);
+
             return ctxt._tt_entry._eval;
         }
     #endif /* REVERSE_FUTILITY_PRUNING */
@@ -775,7 +783,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
                     /*
                      * Hack: use ply + 2 for the singular search to avoid clobbering
-                     * the current context _move_maker's _moves and _states stacks.
+                     * _move_maker's _moves / _states stacks for the current context.
                      */
                     auto s_ctxt = ctxt.clone(ctxt._ply + 2);
 
@@ -892,31 +900,31 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     return ctxt._score;
                 #endif /* CACHE_HEURISTIC_CUTOFFS */
                 }
-                else
+                else if (next_ctxt->is_capture() + next_ctxt->is_promotion() == 0)
                 {
-                    /* store data for move reordering heuristics */
-                    if (!next_ctxt->is_capture())
+                    /*
+                     * Store data for move reordering heuristics.
+                     */
+
+                    /* sanity checks */
+                    ASSERT (next_ctxt->_move);
+                    ASSERT (next_ctxt->_move == ctxt._cutoff_move);
+                    ASSERT (!ctxt.state().is_capture(ctxt._cutoff_move));
+
+                    /* zero-score moves may mean draw (path-dependent) */
+                    if (move_score && !next_ctxt->is_qsearch())
                     {
-                        /* sanity checks */
-                        ASSERT (next_ctxt->_move);
-                        ASSERT (next_ctxt->_move == ctxt._cutoff_move);
-                        ASSERT (!ctxt.state().is_capture(ctxt._cutoff_move));
+                        if (ctxt._ply < PLY_HISTORY_MAX)
+                            table._plyHistory[ctxt._ply][ctxt.turn()][next_ctxt->_move]
+                                += 0.01 * ctxt.depth() * next_ctxt->improvement() + (move_score > MATE_HIGH);
 
-                        /* zero-score moves may mean draw (path-dependent) */
-                        if (move_score && !next_ctxt->is_qsearch())
-                        {
-                            if (ctxt._ply < PLY_HISTORY_MAX)
-                                table._plyHistory[ctxt._ply][ctxt.turn()][next_ctxt->_move]
-                                    += ctxt.depth() * 0.1
-                                    + ctxt.is_counter_move(next_ctxt->_move) * 0.5
-                                    + (move_score > MATE_HIGH);
-
+                        if (ctxt.depth() >= COUNTER_MOVE_MIN_DEPTH)
                             table.store_countermove(ctxt);
-                            table.store_killer_move(ctxt);
 
-                            if (next_ctxt->depth() >= HISTORY_MIN_DEPTH)
-                                table.history_update_cutoffs(next_ctxt->_move);
-                        }
+                        table.store_killer_move(ctxt);
+
+                        if (next_ctxt->depth() >= HISTORY_MIN_DEPTH)
+                            table.history_update_cutoffs(next_ctxt->_move);
                     }
                 }
 
@@ -1127,10 +1135,13 @@ public:
         for (size_t i = 0; i < thread_count; ++i)
         {
             _tables[i]._tt._iteration = table._iteration;
-
+#if 0
             _tables[i]._tt._w_alpha = std::max(SCORE_MIN, table._w_alpha - int((i + 1) * 2.5));
             _tables[i]._tt._w_beta = std::min(SCORE_MAX, table._w_beta + int((i + 1) * 2.5));
-
+#else
+            _tables[i]._tt._w_alpha = table._w_alpha;
+            _tables[i]._tt._w_beta = table._w_beta;
+#endif
             /* copy principal variation from main thread */
             if (_tables[i]._tt._pv.empty())
                 _tables[i]._tt._pv = table._pv;
