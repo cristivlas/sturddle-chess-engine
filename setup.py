@@ -15,7 +15,7 @@ platform = sysconfig.get_platform()
 """
 Compiler args.
 """
-inc_dirs = ['-I./libpopcnt', '-I./thread-pool']
+inc_dirs = ['-I./libpopcnt', '-I./thread-pool', '-I./magic-bits/include']
 
 # Assert-enabled build
 args = []

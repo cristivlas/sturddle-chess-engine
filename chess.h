@@ -43,7 +43,7 @@
 #include "libpopcnt.h"
 
 #if USE_MAGIC_BITS
-#include "magic-bits/include/magic_bits.hpp"
+#include "magic_bits.hpp"
 extern const magic_bits::Attacks attacks;
 #endif /* USE_MAGIC_BITS */
 
