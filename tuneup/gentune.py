@@ -62,10 +62,17 @@ if __name__ == '__main__':
         groups.add(grp)
         params[name] = lo, hi, grp
 
-    parser.add_argument('tune', choices=params.keys(), nargs='+')
+    tunable = tuple(['all'] + list(params.keys()))
+    parser.add_argument('tune', choices=tunable, nargs='+')
     parser.add_argument('-z', '--zero-groups', choices=groups, nargs='*')
 
     args = parser.parse_args()
+
+    # strip 'all'
+    _, *tunable = tunable
+
+    # substitute 'all'
+    args.tune = set(p if p != 'all' else q for q in tunable for p in args.tune)
 
     if args.hash:
         fixed_params['Hash'] = args.hash
