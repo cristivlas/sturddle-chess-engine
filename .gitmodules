@@ -6,4 +6,4 @@
 	url = https://github.com/bshoshany/thread-pool.git
 [submodule "magic-bits"]
 	path = magic-bits
-	url = https://github.com/goutham/magic-bits
+	url = https://github.com/cristivlas/magic-bits.git
