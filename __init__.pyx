@@ -176,7 +176,7 @@ cdef extern from 'chess.h' namespace 'chess':
         bint    is_check() const
         bint    is_checkmate() const
         bint    is_endgame() const
-        bint    is_pinned(Color, bint threat) const
+        bint    is_pinned(Color) const
 
         int     longest_pawn_sequence(Bitboard) const
 
@@ -323,8 +323,8 @@ cdef class BoardState:
         return self._state.is_endgame()
 
 
-    cpdef bint is_pinned(self, Color color, bool threat = False):
-        return self._state.is_pinned(color, threat)
+    cpdef bint is_pinned(self, Color color):
+        return self._state.is_pinned(color)
 
 
     cpdef has_fork(self, Color color):
@@ -677,9 +677,13 @@ cdef class NodeContext:
         return self if not parent else parent.top
 
 
-    # perft
-    def next(self):
+    # perft3
+    def has_next(self):
         return deref(self._ctxt).next(False, False, 0).get() != NULL
+
+
+    def next(self):
+        return NodeContext.from_cxx_context(deref(self._ctxt).next(False, False, 0))
 
 
 # ---------------------------------------------------------------------
@@ -1105,7 +1109,7 @@ def perft3(fen, repeat=1):
 
     for i in range(0, repeat):
         deref(node._ctxt)._max_depth = i % 100
-        while node.next():
+        while node.has_next():
             count += 1
         deref(node._ctxt).rewind(0, True)
 
@@ -1130,7 +1134,7 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0
-__minor__   = 88
+__minor__   = 89
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
 

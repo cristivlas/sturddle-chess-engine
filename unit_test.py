@@ -158,14 +158,14 @@ def test_pins():
     tests = [
         ('pin.01', '4k3/1p6/8/4q3/2p2P2/P2p4/1r5P/4RK2 b - -', True),
         ('pin.02', '4k3/1p6/8/4q3/2p2P2/P2p4/7P/4r1K1 b - -', False),
-        ('pin.03', '4k3/1p6/8/4r3/2p2P2/P2p4/5K1P/4R3 b - -', False),
+        ('pin.03', '4k3/1p6/8/4r3/2p2P2/P2p4/5K1P/4R3 b - -', True),
     ]
     for id, epd, expected in tests:
         board = chess.Board(fen=epd)
         state = engine.BoardState(board)
 
         # pin with threat to capture
-        result = state.is_pinned(state.turn, True)
+        result = state.is_pinned(state.turn)
         assert expected == result, f'{id}: expected={expected}, got {result}'
 
 
@@ -185,7 +185,11 @@ def test_static_exchanges():
         # ('capt.12', '2rq1rk1/1p2b1pp/p1b1Np2/2n1P1B1/3p1PPP/4Q3/PPP5/1K1R1B1R w - - 0 21', 'e3', chess.BLACK, 0),
         ('capt.13', 'r4rk1/ppp2ppp/5n2/2bPn3/4K3/2NP4/PPPBB1PP/R6R w - - 3 3', 'e5', chess.WHITE, 325),
         ('capt.14', '2r3k1/p5p1/4p3/1p1bP3/2pb2Q1/5N2/1q3P1P/3R1RK1 b - - 3 32', 'd4', chess.WHITE, 325),
-        ('capt.15', 'rqr3k1/p4p1p/5Qp1/2b5/2N5/2Pn2NP/P2B1PP1/2R2RK1 w - - 0 24', 'g3', chess.BLACK, 325),
+
+        #('capt.15', 'rqr3k1/p4p1p/5Qp1/2b5/2N5/2Pn2NP/P2B1PP1/2R2RK1 w - - 0 24', 'g3', chess.BLACK, 325),
+        #depends on SEE_PIN_AWARENESS_DEPTH in common.h
+        ('capt.15', 'rqr3k1/p4p1p/5Qp1/2b5/2N5/2Pn2NP/P2B1PP1/2R2RK1 w - - 0 24', 'g3', chess.BLACK, 0),
+
         ('capt.16', '5r1k/pp4pp/2p5/2b1q3/4P3/1PB1p3/P3Q1PP/3N2K1 w - -', 'e5', chess.WHITE, 975),
         ('capt.17', '5r1k/pp4pp/2p5/2b1P3/4P3/1PB1p3/P3Q1PP/3N1qK1 w - -', 'f1', chess.WHITE, 0),
     ]

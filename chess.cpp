@@ -27,10 +27,9 @@
 #include <algorithm>
 #include <iomanip>
 #include "chess.h"
-#include "attacks.h"
 
 #if USE_MAGIC_BITS
-const magic_bits::Attacks attacks;
+const magic_bits::Attacks magic_bits_attacks;
 #endif /* USE_MAGIC_BITS */
 
 static constexpr chess::Bitboard BB_LIGHT_SQUARES = 0x55aa55aa55aa55aaULL;
@@ -130,39 +129,9 @@ namespace chess
     }
 
 
-    Bitboard sliding_attacks(int square, Bitboard occupied, const std::vector<int>& deltas)
-    {
-        auto attacks = BB_EMPTY;
-        for (const auto delta : deltas)
-        {
-            int sq = square;
-
-            while (true)
-            {
-                sq += delta;
-                if (sq < 0 || sq >= 64 || square_distance(sq, sq - delta) > 2)
-                    break;
-
-                attacks |= BB_SQUARES[sq];
-
-                if (occupied & BB_SQUARES[sq])
-                    break;
-            }
-        }
-        return attacks;
-    }
-
-
     static Bitboard step_attacks(int square, const std::vector<int>& deltas)
     {
         return sliding_attacks(square, BB_ALL, deltas);
-    }
-
-
-    static Bitboard edges(int square)
-    {
-        return (((BB_RANK_1 | BB_RANK_8) & ~BB_RANKS[square_rank(square)]) |
-                ((BB_FILE_A | BB_FILE_H) & ~BB_FILES[square_file(square)]));
     }
 
 
@@ -178,23 +147,27 @@ namespace chess
             for (int b = 0; b < 64; ++b)
             {
                 const auto bb_b = BB_SQUARES[b];
-                if (BB_DIAG_ATTACKS[a][0] & bb_b)
-                    rays_row[b] = ((BB_DIAG_ATTACKS[a][0] & BB_DIAG_ATTACKS[b][0]) | bb_a | bb_b);
 
-                else if (BB_RANK_ATTACKS[a][0] & bb_b)
-                    rays_row[b] = (BB_RANK_ATTACKS[a][0] | bb_a);
+                if (BB_DIAG_ATTACKS.get(a, 0) & bb_b)
+                    rays_row[b] = ((BB_DIAG_ATTACKS.get(a, 0) & BB_DIAG_ATTACKS.get(b, 0)) | bb_a | bb_b);
 
-                else if (BB_FILE_ATTACKS[a][0] & bb_b)
-                    rays_row[b] = (BB_FILE_ATTACKS[a][0] | bb_a);
+                else if (BB_RANK_ATTACKS.get(a, 0) & bb_b)
+                    rays_row[b] = (BB_RANK_ATTACKS.get(a, 0) | bb_a);
+
+                else if (BB_FILE_ATTACKS.get(a, 0) & bb_b)
+                    rays_row[b] = (BB_FILE_ATTACKS.get(a, 0) | bb_a);
 
                 else
                     rays_row[b] = BB_EMPTY;
             }
             rays[a] = rays_row;
         }
+
         return rays;
     }
 
+
+    using AttackTable = impl::AttackTable;
 
     static void
     init_attack_masks(AttackMasks& mask_table, const AttackTable (&tables)[64], const std::vector<int>& deltas)
@@ -243,9 +216,9 @@ namespace chess
             return step_attacks(i++, {7, 9});
         });
 
-        init_attack_masks(BB_DIAG_MASKS, BB_DIAG_ATTACKS, {-9, -7, 7, 9});
-        init_attack_masks(BB_FILE_MASKS, BB_FILE_ATTACKS, {-8, 8});
-        init_attack_masks(BB_RANK_MASKS, BB_RANK_ATTACKS, {-1, 1});
+        init_attack_masks(BB_DIAG_MASKS, impl::_DIAG_ATTACKS, {-9, -7, 7, 9});
+        init_attack_masks(BB_FILE_MASKS, impl::_FILE_ATTACKS, {-8, 8});
+        init_attack_masks(BB_RANK_MASKS, impl::_RANK_ATTACKS, {-1, 1});
 
         BB_RAYS = init_rays();
     }
@@ -258,7 +231,8 @@ namespace chess
     }
 
 
-    template<typename T> void add_pawn_moves(T& moves_list, Square from_square, Square to_square)
+    template<typename T>
+    INLINE void add_pawn_moves(T& moves_list, Square from_square, Square to_square)
     {
         if ((square_rank(to_square) == 0) || (square_rank(to_square) == 7))
         {
@@ -320,12 +294,18 @@ namespace chess
                 /* pawns moves... */
                 const auto own_pawns = pawns & occupied_co(color) & ~pinned[color];
 
-                const auto single_pawn_moves =
-                    (color ? shift_up(own_pawns) : shift_down(own_pawns)) & ~occupied;
+                Bitboard single_pawn_moves, double_pawn_moves;
 
-                const auto double_pawn_moves = color
-                    ? shift_up(single_pawn_moves) & ~occupied & (BB_RANK_3 | BB_RANK_4)
-                    : shift_down(single_pawn_moves) & ~occupied & (BB_RANK_6 | BB_RANK_5);
+                if (color)
+                {
+                    single_pawn_moves = shift_up(own_pawns) & ~occupied;
+                    double_pawn_moves = shift_up(single_pawn_moves) & ~occupied & (BB_RANK_3 | BB_RANK_4);
+                }
+                else
+                {
+                    single_pawn_moves = shift_down(own_pawns) & ~occupied;
+                    double_pawn_moves = shift_down(single_pawn_moves) & ~occupied & (BB_RANK_6 | BB_RANK_5);
+                }
 
                 /* ... and captures */
                 const auto pawn_captures = attacks[color][PieceType::PAWN] & occupied_co(!color);
@@ -390,50 +370,80 @@ namespace chess
     }
 
 
+    template<typename T>
+    Bitboard _pin_mask(
+        Bitboard    occupied,
+        Bitboard    theirs,
+        Bitboard    square_mask,
+        Square      king_square,
+        const T&    attacks,
+        Bitboard    sliders)
+    {
+        const auto rays = attacks.get(king_square, 0);
+
+        if (rays & square_mask)
+            return for_each_square_r<Bitboard>(rays & sliders & theirs, [&](Square sniper) {
+                if ((between(sniper, king_square) & (occupied | square_mask)) == square_mask)
+                {
+                    return BB_RAYS[king_square][sniper];
+                }
+                return BB_EMPTY;
+            });
+
+        return BB_EMPTY;
+    }
+
     /*
      * If the square is pinned for the side of the given color, return the pin mask.
-     * If threat_only is true, return mask only if sniper's value is less than the victim's
-     * or sniper is not attacked back by victim.
      */
-    Bitboard Position::pin_mask(Color color, Square square, bool threat_only) const
+    Bitboard Position::pin_mask(Color color, Square square) const
     {
-        static const AttackTable* const all_attacks[3] =
-            { BB_FILE_ATTACKS, BB_RANK_ATTACKS, BB_DIAG_ATTACKS };
-
         const auto king_square = king(color);
-        if (king_square < 0)
-            return BB_ALL;
+        ASSERT(king_square >= 0);
 
         const auto square_mask = BB_SQUARES[square];
-        const Bitboard all_sliders[] = { rooks|queens, rooks|queens, bishops|queens };
+        const auto occupied = this->occupied();
+        const auto theirs = this->occupied_co(!color);
 
-        for (int i = 0; i != 3; ++i)
+#if !USE_MAGIC_BITS
+        auto result =
+            _pin_mask(occupied, theirs, square_mask, king_square, BB_FILE_ATTACKS, rooks | queens) |
+            _pin_mask(occupied, theirs, square_mask, king_square, BB_RANK_ATTACKS, rooks | queens) |
+            _pin_mask(occupied, theirs, square_mask, king_square, BB_DIAG_ATTACKS, bishops | queens);
+
+#else
+        Bitboard result = BB_EMPTY;
+
+        for (auto attacks:
+            {
+                std::make_pair(&magic_bits::Attacks::Rook, rooks | queens),
+                std::make_pair(&magic_bits::Attacks::Bishop, bishops | queens),
+            })
         {
-            auto& attacks = all_attacks[i];
-            const auto sliders = all_sliders[i];
+            auto rays = (magic_bits_attacks.*(attacks.first))(0, king_square);
 
-            const auto rays = attacks[king_square][0];
             if (rays & square_mask)
             {
-                if (auto mask = for_each_square_r<Bitboard>(rays & sliders & occupied_co(!color), [&](Square sniper)
-                {
-                    if ((between(sniper, king_square) & (occupied() | square_mask)) == square_mask)
-                    {
-                        if (!threat_only
-                            || piece_type_at(sniper) < piece_type_at(square)
-                            || (attacks_mask(square) & BB_SQUARES[sniper]) == 0)
-                        {
-                            return BB_RAYS[king_square][sniper];
-                        }
-                    }
+                const auto snipers = rays & attacks.second & theirs;
+
+                result = for_each_square_r<Bitboard>(snipers, [&](Square sniper) {
+                    if ((between(sniper, king_square) & (occupied | square_mask)) == square_mask)
+                        return BB_RAYS[king_square][sniper];
+
                     return BB_EMPTY;
-                })) {
-                    return mask;
-                }
+                });
                 break;
             }
         }
-        return BB_ALL;
+
+        ASSERT(result == (
+            _pin_mask(occupied, theirs, square_mask, king_square, BB_FILE_ATTACKS, rooks | queens) |
+            _pin_mask(occupied, theirs, square_mask, king_square, BB_RANK_ATTACKS, rooks | queens) |
+            _pin_mask(occupied, theirs, square_mask, king_square, BB_DIAG_ATTACKS, bishops | queens)));
+
+#endif /* USE_MAGIC_BITS */
+
+        return result ? result : BB_ALL;
     }
 
 
@@ -516,10 +526,18 @@ namespace chess
 
             /* prepare pawn advance generation */
             const auto occupied = black | white;
-            auto single_moves = (turn ? our_pawns << 8 : our_pawns >> 8) & ~occupied;
-            auto double_moves = turn
-                ? (single_moves << 8) & ~occupied & (BB_RANK_3 | BB_RANK_4)
-                : (single_moves >> 8) & ~occupied & (BB_RANK_6 | BB_RANK_5);
+
+            Bitboard single_moves, double_moves;
+            if (turn)
+            {
+                single_moves = (our_pawns << 8) & ~occupied;
+                double_moves = (single_moves << 8) & ~occupied & (BB_RANK_3 | BB_RANK_4);
+            }
+            else
+            {
+                single_moves = (our_pawns >> 8) & ~occupied;
+                double_moves = (single_moves >> 8) & ~occupied & (BB_RANK_6 | BB_RANK_5);
+            }
 
             single_moves &= to_mask;
             double_moves &= to_mask;

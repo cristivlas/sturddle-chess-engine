@@ -40,11 +40,13 @@
 #pragma warning(disable: 4146)
 #endif
 #include "common.h"
+
+#include "attack_tables.h"
 #include "libpopcnt.h"
 
 #if USE_MAGIC_BITS
 #include "magic_bits.hpp"
-extern const magic_bits::Attacks attacks;
+extern const magic_bits::Attacks magic_bits_attacks;
 #endif /* USE_MAGIC_BITS */
 
 #include "tables.h"
@@ -57,24 +59,6 @@ constexpr int SIGN[] = { -1, 1 };
 
 namespace chess
 {
-    class AttackTable {
-        uint64_t* _data = nullptr;
-
-    public:
-        AttackTable(size_t (*hash)(uint64_t), std::function<void(uint64_t*&)> init)
-        {
-            init(_data);
-            _data[0] = reinterpret_cast<uint64_t>(hash); /* cache locality hack */
-        }
-        INLINE uint64_t operator[] (uint64_t k) const
-        {
-            return _data[reinterpret_cast<size_t (*)(uint64_t)>(_data[0])(k) + 1];
-        }
-    };
-    extern const AttackTable BB_DIAG_ATTACKS[64];
-    extern const AttackTable BB_FILE_ATTACKS[64];
-    extern const AttackTable BB_RANK_ATTACKS[64];
-
     using Bitboard = uint64_t;
 
     using AttackMasks = std::array<Bitboard, 64>;
@@ -558,9 +542,9 @@ namespace chess
             const auto occupied_mask = occupied();
     #if USE_MAGIC_BITS
             const auto attackers = (knights & BB_KNIGHT_ATTACKS[square])
-                | (bishops & attacks.Bishop(occupied_mask, square))
-                | (rooks & attacks.Rook(occupied_mask, square))
-                | (queens & attacks.Queen(occupied_mask, square));
+                | (bishops & magic_bits_attacks.Bishop(occupied_mask, square))
+                | (rooks & magic_bits_attacks.Rook(occupied_mask, square))
+                | (queens & magic_bits_attacks.Queen(occupied_mask, square));
     #else
             const auto rank_pieces = BB_RANK_MASKS[square] & occupied_mask;
             const auto file_pieces = BB_FILE_MASKS[square] & occupied_mask;
@@ -570,9 +554,9 @@ namespace chess
             const auto queens_and_bishops = queens | bishops;
 
             const auto attackers = (knights & BB_KNIGHT_ATTACKS[square])
-                | (queens_and_rooks & BB_RANK_ATTACKS[square][rank_pieces])
-                | (queens_and_rooks & BB_FILE_ATTACKS[square][file_pieces])
-                | (queens_and_bishops & BB_DIAG_ATTACKS[square][diag_pieces]);
+                | (queens_and_rooks & BB_RANK_ATTACKS.get(square, rank_pieces))
+                | (queens_and_rooks & BB_FILE_ATTACKS.get(square, file_pieces))
+                | (queens_and_bishops & BB_DIAG_ATTACKS.get(square, diag_pieces));
     #endif /* !USE_MAGIC_BITS */
 
             return attackers & occupied_co(color);
@@ -658,7 +642,7 @@ namespace chess
             return colors[(mask & white) != 0];
         }
 
-        Bitboard pin_mask(Color, Square, bool threat_only = false) const;
+        Bitboard pin_mask(Color, Square) const;
     };
 
 
@@ -685,20 +669,20 @@ namespace chess
             const auto occupied = black | white;
     #if USE_MAGIC_BITS
             if ((bb_square & bishops) || (bb_square & queens))
-                mask = attacks.Bishop(occupied, square);
+                mask = magic_bits_attacks.Bishop(occupied, square);
 
             if ((bb_square & rooks) || (bb_square & queens))
-                mask |= attacks.Rook(occupied, square);
+                mask |= magic_bits_attacks.Rook(occupied, square);
     #else
             if ((bb_square & bishops) || (bb_square & queens))
             {
-                mask = BB_DIAG_ATTACKS[square][BB_DIAG_MASKS[square] & occupied];
+                mask = BB_DIAG_ATTACKS.get(square, BB_DIAG_MASKS[square] & occupied);
             }
 
             if ((bb_square & rooks) || (bb_square & queens))
             {
-                mask |= BB_RANK_ATTACKS[square][BB_RANK_MASKS[square] & occupied] |
-                        BB_FILE_ATTACKS[square][BB_FILE_MASKS[square] & occupied];
+                mask |= BB_RANK_ATTACKS.get(square, BB_RANK_MASKS[square] & occupied) |
+                        BB_FILE_ATTACKS.get(square, BB_FILE_MASKS[square] & occupied);
             }
     #endif /* !USE_MAGIC_BITS */
             return mask;
@@ -912,7 +896,7 @@ namespace chess
 
         bool is_endgame() const;
         bool is_en_passant(const BaseMove&) const;
-        bool is_pinned(Color color, bool threat = false) const;
+        bool is_pinned(Color color) const;
 
         bool just_king_and_pawns(Color color) const
         {
@@ -1274,14 +1258,14 @@ namespace chess
     }
 
 
-    INLINE bool State::is_pinned(Color color, bool threat) const
+    INLINE bool State::is_pinned(Color color) const
     {
         return for_each_square_r<bool>(occupied_co(color), [&] (Square square) {
 
             auto piece_type = piece_type_at(square);
 
             return (piece_type != PieceType::PAWN) && (piece_type != PieceType::KING)
-                && (pin_mask(color, square, threat) != BB_ALL);
+                && (pin_mask(color, square) != BB_ALL);
         });
     }
 
@@ -1435,6 +1419,38 @@ namespace chess
     /* SEE captures.cpp */
     score_t estimate_static_exchanges(const State&, Color, Square, PieceType = PieceType::NONE);
     score_t estimate_captures(const State&);
+
+
+    /*
+     * required by codegen
+     */
+    inline Bitboard sliding_attacks(int square, Bitboard occupied, const std::vector<int>& deltas)
+    {
+        auto attacks = BB_EMPTY;
+        for (const auto delta : deltas)
+        {
+            int sq = square;
+
+            while (true)
+            {
+                sq += delta;
+                if (sq < 0 || sq >= 64 || square_distance(sq, sq - delta) > 2)
+                    break;
+
+                attacks |= BB_SQUARES[sq];
+
+                if (occupied & BB_SQUARES[sq])
+                    break;
+            }
+        }
+        return attacks;
+    }
+
+    inline Bitboard edges(int square)
+    {
+        return (((BB_RANK_1 | BB_RANK_8) & ~BB_RANKS[square_rank(square)]) |
+                ((BB_FILE_A | BB_FILE_H) & ~BB_FILES[square_file(square)]));
+    }
 
 } /* namespace chess */
 

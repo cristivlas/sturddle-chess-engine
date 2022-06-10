@@ -120,7 +120,10 @@ template<typename T> class RefCounted
 {
     template<typename U> friend class ::intrusive_ptr;
 
-#if SMP
+#if SMP && defined(SMP_ALLOW_CONTEXT_SHARING)
+    /*
+     * can get away without atomic if not sharing objects between threads
+     */
     static_assert(std::atomic<int>::is_always_lock_free);
     std::atomic<int> _refcnt;
 

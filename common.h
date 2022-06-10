@@ -89,6 +89,7 @@ using score_t = int32_t;
 
 #define REVERSE_FUTILITY_PRUNING            true
 
+/* Use in SEE heuristic. -1 disables pin awareness */
 #define SEE_PIN_AWARENESS_DEPTH             -1
 
 /*
@@ -130,16 +131,23 @@ using score_t = int32_t;
 /* if false, use piece-type/to-square tables */
 #define USE_BUTTERFLY_TABLES                false
 
-/* Use magic-bits: https://github.com/goutham/magic-bits (~10% faster than attacks.h) */
+/*
+ * Use magic_bits (https://github.com/goutham/magic-bits) instead of attacks.h
+ */
 #define USE_MAGIC_BITS                      true
 
 /* Half-baked hack */
 #define USE_MOVES_CACHE                     false
 
-/* Check time and call user-defined callback every N nodes */
+/*
+ * Number of processed nodes after which the search code checks
+ * how much time it has left, and calls optional user-defined
+ * callback.
+ */
 #ifndef CALLBACK_PERIOD
   #define CALLBACK_PERIOD                   4096
 #endif
+
 
 constexpr int ENDGAME_PIECE_COUNT           = 12;
 

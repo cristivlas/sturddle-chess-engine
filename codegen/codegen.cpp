@@ -66,9 +66,9 @@ int main(int argc, const char* argv[])
 
     chess::_init();
 
-    if (build_attack_tables("BB_DIAG_ATTACKS", diag_attacks, builder, code)
-     && build_attack_tables("BB_FILE_ATTACKS", file_attacks, builder, code)
-     && build_attack_tables("BB_RANK_ATTACKS", rank_attacks, builder, code))
+    if (build_attack_tables("_DIAG_ATTACKS", diag_attacks, builder, code)
+     && build_attack_tables("_FILE_ATTACKS", file_attacks, builder, code)
+     && build_attack_tables("_RANK_ATTACKS", rank_attacks, builder, code))
     {
         code.write(std::cout);
         return 0;

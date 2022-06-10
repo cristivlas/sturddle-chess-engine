@@ -178,7 +178,7 @@ static size_t mem_avail()
 
     std::ostringstream out;
     out << "hash: req=" << MB << " new=" << get_hash_size() << " free=" << mem_avail() / ONE_MEGABYTE;
-    Context::log_message(LogLevel::DEBUG, out.str());
+    Context::log_message(LogLevel::DEBUG, out.str(), false);
 }
 
 
@@ -1199,11 +1199,14 @@ public:
 
         for (auto& t : _tables)
         {
+        #if SMP_ALLOW_CONTEXT_SHARING
             if (t._ctxt && t._ctxt->best() && t._ctxt->_score > _root._score)
             {
                 _root.set_best(t._ctxt->best());
                 _root._score = t._ctxt->_score;
             }
+        #endif /* SMP_ALLOW_CONTEXT_SHARING */
+
             t._ctxt.reset();
         }
     }

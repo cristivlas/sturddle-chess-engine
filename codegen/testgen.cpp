@@ -1,49 +1,14 @@
-#include "chess.h"
-namespace test
-{
-#include "test.h"
-}
-#include <bitset>
+#include "common.h"
 #include <chrono>
-#include <ostream>
-#include <set>
 #include <unordered_map>
+
+#include "chess.h"
 
 using namespace chess;
 
 
-using AttackMasks = std::array<chess::Bitboard, 64>;
-static AttackMasks BB_DIAG_MASKS, BB_FILE_MASKS, BB_RANK_MASKS;
-
-
-static void
-test_attack_tables(
-    const std::vector<int>& deltas,
-    const chess::AttackTable (&tables)[64])
-{
-    for (int square = 0; square < 64; ++square)
-    {
-        auto mask = sliding_attacks(square, 0, deltas) & ~edges(square);
-
-        for_each_subset(mask, [&](Bitboard key)
-        {
-            auto value = sliding_attacks(square, key, deltas);
-
-            if (tables[square][key] != value)
-            {
-                std::cerr << "Fail: [" << key << "] " << tables[square][key] << " != " << value << "\n";
-                exit(1);
-            }
-        });
-    }
-}
-
-
-static void
-perf_test(
-    const chess::AttackTable (&tables)[64],
-    int iterations,
-    const std::vector<int>& deltas)
+template<typename T>
+static void perf_test(const T& attack_tables, int iterations, const std::vector<int>& deltas)
 {
     uint64_t count = 0;
     double total_time = 0;
@@ -66,7 +31,7 @@ perf_test(
         {
             for (const auto& elem : attacks)
             {
-                ASSERT_ALWAYS(elem.second == tables[square][elem.first]);
+                ASSERT_ALWAYS(elem.second == attack_tables.get(square, elem.first));
                 ++count;
             }
         }
@@ -79,26 +44,14 @@ perf_test(
 }
 
 
-static void
-init_attack_masks(
-    AttackMasks& mask_table,
-    const chess::AttackTable (&tables)[64],
-    const std::vector<int>& deltas)
+static void init_attack_masks(AttackMasks& mask_table, const std::vector<int>& deltas)
 {
     for (int square = 0; square < 64; ++square)
     {
         auto mask = sliding_attacks(square, 0, deltas) & ~edges(square);
         mask_table[square] = mask;
-
-        /* validate the generated attack tables */
-        for_each_subset(mask, [&](Bitboard key)
-        {
-            const auto value = sliding_attacks(square, key, deltas);
-            ASSERT_ALWAYS(tables[square][key] == value);
-        });
     }
 }
-
 
 int main()
 {
@@ -106,24 +59,18 @@ int main()
     static const std::vector<int> file_attacks = {-8, 8};
     static const std::vector<int> rank_attacks = {-1, 1};
 
-    chess::_init();
-
-    init_attack_masks(chess::BB_DIAG_MASKS, test::chess::BB_DIAG_ATTACKS, diag_attacks);
-    init_attack_masks(chess::BB_FILE_MASKS, test::chess::BB_FILE_ATTACKS, file_attacks);
-    init_attack_masks(chess::BB_RANK_MASKS, test::chess::BB_RANK_ATTACKS, rank_attacks);
-
-    test_attack_tables(diag_attacks, test::chess::BB_DIAG_ATTACKS);
-    test_attack_tables(file_attacks, test::chess::BB_FILE_ATTACKS);
-    test_attack_tables(rank_attacks, test::chess::BB_RANK_ATTACKS);
+    init_attack_masks(BB_DIAG_MASKS, diag_attacks);
+    init_attack_masks(BB_FILE_MASKS, file_attacks);
+    init_attack_masks(BB_RANK_MASKS, rank_attacks);
 
     const int iterations = 100000;
 
     std::cout << "BB_DIAG_ATTACKS: ";
-    perf_test(test::chess::BB_DIAG_ATTACKS, iterations, diag_attacks);
+    perf_test(BB_DIAG_ATTACKS, iterations, diag_attacks);
 
     std::cout << "BB_FILE_ATTACKS: ";
-    perf_test(test::chess::BB_FILE_ATTACKS, iterations, file_attacks);
+    perf_test(BB_FILE_ATTACKS, iterations, file_attacks);
 
     std::cout << "BB_RANK_ATTACKS: ";
-    perf_test(test::chess::BB_RANK_ATTACKS, iterations, rank_attacks);
+    perf_test(BB_RANK_ATTACKS, iterations, rank_attacks);
 }

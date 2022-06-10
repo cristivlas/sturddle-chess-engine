@@ -239,7 +239,19 @@ namespace search
         Square      _capture_square = Square::UNDEFINED;
 
         const ContextPtr& best() const { return _best; }
-        void set_best(const ContextPtr& best) { best->_parent = this; _best = best; }
+
+        void set_best(const ContextPtr& best)
+        {
+    #if !SMP_ALLOW_CONTEXT_SHARING
+            /*
+             * enforce same thread id
+             */
+            ASSERT(best->_tid == _tid);
+    #endif /* !SMP_ALLOW_CONTEXT_SHARING */
+
+            best->_parent = this;
+            _best = best;
+        }
 
         static void cancel();
         static int  cpu_cores();
@@ -1068,7 +1080,7 @@ namespace search
          * Prune (before verifying move legality, thus saving is_check() calls).
          * Late-move prune before making the move.
          */
-        if (ctxt.depth() > 0 && _current >= LMP[ctxt.depth()])
+        if (ctxt.depth() > 0 && _current >= LMP[ctxt.depth()] && ctxt.can_forward_prune())
         {
             _have_pruned_moves = true;
             ++ctxt._pruned_count;
@@ -1100,9 +1112,7 @@ namespace search
             }
         }
 
-        const bool is_known_legal = (move == ctxt._prev);
-
-        if (!is_known_legal && move._state->is_check(ctxt.turn()))
+        if (move._state->is_check(ctxt.turn()))
         {
             mark_as_illegal(move); /* can't leave the king in check */
             return false;
@@ -1153,22 +1163,7 @@ namespace search
         ASSERT(start_at < moves().size());
 
         auto& moves_list = moves();
-#if 0
-        /*
-         * Walk backwards skipping over quiet, pruned, and illegal moves.
-         */
-        auto n = moves_list.size();
-        for (; n > start_at; --n)
-        {
-            if (moves_list[n-1]._group < MoveOrder::QUIET_MOVES)
-                break;
-        }
-        ASSERT(n == moves_list.size() || moves_list[n]._group >= MoveOrder::QUIET_MOVES);
-        _count = n;
-        const auto last = moves_list.begin() + n;
-#else
         const auto last = moves_list.end();
-#endif
         const auto first = moves_list.begin() + start_at;
 
         insertion_sort(first, last, [&](const Move& lhs, const Move& rhs)

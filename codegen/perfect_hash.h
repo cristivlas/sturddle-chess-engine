@@ -44,7 +44,7 @@ namespace perfect_hash
     }
 
 
-    static inline uint64_t bitparity(uint64_t u)
+    static INLINE uint64_t bitparity(uint64_t u)
     {
     #if _MSC_VER
         return __popcnt64(u) % 2;
@@ -58,12 +58,12 @@ namespace perfect_hash
     /* Recursive template for loop unrolling. */
     template<int B> struct Hash
     {
-        static constexpr inline uint64_t hash(uint64_t n, uint64_t r)
+        static constexpr INLINE uint64_t hash(uint64_t n, uint64_t r)
         {
             return Hash<B-1>::_hash(n, r);
         }
 
-        static inline uint64_t _hash(uint64_t n, uint64_t r)
+        static INLINE uint64_t _hash(uint64_t n, uint64_t r)
         {
             return bitparity(r & n) | (Hash<B-1>::_hash(n, r >> 1) << 1);
         }
@@ -71,7 +71,7 @@ namespace perfect_hash
 
     template<> struct Hash<0>
     {
-        static inline uint64_t _hash(uint64_t n, uint64_t r)
+        static INLINE uint64_t _hash(uint64_t n, uint64_t r)
         {
             return bitparity(r & n);
         }
@@ -109,7 +109,7 @@ namespace perfect_hash
             }
         }
 
-        inline size_t hash(uint64_t n) const
+        INLINE size_t hash(uint64_t n) const
         {
             if (_hash)
             {

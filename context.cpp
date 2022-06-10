@@ -386,7 +386,7 @@ namespace search
     /*
      * NOTE: uses top half of MoveMaker's moves buffers to minimize memory allocations.
      */
-    static INLINE int do_exchanges(
+    static int do_exchanges(
         const State&    state,
         Bitboard        mask,
         score_t         gain = 0,
@@ -726,9 +726,6 @@ namespace search
             return ctxt._tt_entry._capt;
     #endif /* NO_ASSERT */
 
-        /* mask of all pieces attacking the hanging piece, if any */
-        Bitboard attackers = BB_EMPTY;
-
         const auto result = STATIC_EXCHANGES
             ? estimate_captures(*state)
             : do_captures(*state, BB_ALL, BB_ALL);
@@ -1052,10 +1049,9 @@ namespace search
 
                 if ((advance_mask & occupied) == 0)
                 {
-                    const auto pawn = Square(chess::msb(advance_mask));
                     score += sign * interpolate(piece_count, ranks[i].bonus[0], ranks[i].bonus[1]);
                 }
-                else if (const auto pawn_attacks = state.attacks_mask(square) & others_mask)
+                else if (BB_PAWN_ATTACKS[color][square] & others_mask)
                 {
                     score += sign * interpolate(piece_count, ranks[i].bonus[0], ranks[i].bonus[1]);
                 }
@@ -1745,14 +1741,22 @@ namespace search
             for (int i = 0; i != _count; ++i)
             {
                 auto& move = moves()[i];
+
+                if (move._state == nullptr)
+                {
+                    ASSERT(move._group == MoveOrder::UNORDERED_MOVES);
+                    ASSERT(move._score == 0);
+                    break;
+                }
+
                 if (move._group >= MoveOrder::QUIET_MOVES)
                 {
                     _count = i;
                     break;
                 }
 
-                if (move._group < MoveOrder::WINNING_CAPTURES
-                 || move._group > MoveOrder::LOSING_CAPTURES)
+                /* retain previously calculated capture score */
+                if (move._state->capture_value == 0)
                     move._score = 0;
 
                 move._group = MoveOrder::UNORDERED_MOVES;
