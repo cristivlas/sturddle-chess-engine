@@ -93,13 +93,6 @@ namespace chess
     }
 
 
-    Bitboard between(Square a, Square b)
-    {
-        const auto bb = BB_RAYS[a][b] & ((BB_ALL << a) ^ (BB_ALL << b));
-        return bb & (bb - 1);
-    }
-
-
     /* debug */
     void print_bb(Bitboard bb, std::ostream& out)
     {
@@ -169,8 +162,8 @@ namespace chess
 
     using AttackTable = impl::AttackTable;
 
-    static void
-    init_attack_masks(AttackMasks& mask_table, const AttackTable (&tables)[64], const std::vector<int>& deltas)
+    template<typename T> static void
+    init_attack_masks(AttackMasks& mask_table, const T& tables, const std::vector<int>& deltas)
     {
         for (int square = 0; square < 64; ++square)
         {
@@ -181,7 +174,7 @@ namespace chess
             for_each_subset(mask, [&](Bitboard key)
             {
                 const auto value = sliding_attacks(square, key, deltas);
-                ASSERT_ALWAYS(tables[square][key] == value);
+                ASSERT_ALWAYS(tables.get(square, key) == value);
             });
         }
     }
@@ -216,9 +209,9 @@ namespace chess
             return step_attacks(i++, {7, 9});
         });
 
-        init_attack_masks(BB_DIAG_MASKS, impl::_DIAG_ATTACKS, {-9, -7, 7, 9});
-        init_attack_masks(BB_FILE_MASKS, impl::_FILE_ATTACKS, {-8, 8});
-        init_attack_masks(BB_RANK_MASKS, impl::_RANK_ATTACKS, {-1, 1});
+        init_attack_masks(BB_DIAG_MASKS, BB_DIAG_ATTACKS, {-9, -7, 7, 9});
+        init_attack_masks(BB_FILE_MASKS, BB_FILE_ATTACKS, {-8, 8});
+        init_attack_masks(BB_RANK_MASKS, BB_RANK_ATTACKS, {-1, 1});
 
         BB_RAYS = init_rays();
     }
@@ -367,83 +360,6 @@ namespace chess
         }
 
         return mobility;
-    }
-
-
-    template<typename T>
-    Bitboard _pin_mask(
-        Bitboard    occupied,
-        Bitboard    theirs,
-        Bitboard    square_mask,
-        Square      king_square,
-        const T&    attacks,
-        Bitboard    sliders)
-    {
-        const auto rays = attacks.get(king_square, 0);
-
-        if (rays & square_mask)
-            return for_each_square_r<Bitboard>(rays & sliders & theirs, [&](Square sniper) {
-                if ((between(sniper, king_square) & (occupied | square_mask)) == square_mask)
-                {
-                    return BB_RAYS[king_square][sniper];
-                }
-                return BB_EMPTY;
-            });
-
-        return BB_EMPTY;
-    }
-
-    /*
-     * If the square is pinned for the side of the given color, return the pin mask.
-     */
-    Bitboard Position::pin_mask(Color color, Square square) const
-    {
-        const auto king_square = king(color);
-        ASSERT(king_square >= 0);
-
-        const auto square_mask = BB_SQUARES[square];
-        const auto occupied = this->occupied();
-        const auto theirs = this->occupied_co(!color);
-
-#if !USE_MAGIC_BITS
-        auto result =
-            _pin_mask(occupied, theirs, square_mask, king_square, BB_FILE_ATTACKS, rooks | queens) |
-            _pin_mask(occupied, theirs, square_mask, king_square, BB_RANK_ATTACKS, rooks | queens) |
-            _pin_mask(occupied, theirs, square_mask, king_square, BB_DIAG_ATTACKS, bishops | queens);
-
-#else
-        Bitboard result = BB_EMPTY;
-
-        for (auto attacks:
-            {
-                std::make_pair(&magic_bits::Attacks::Rook, rooks | queens),
-                std::make_pair(&magic_bits::Attacks::Bishop, bishops | queens),
-            })
-        {
-            auto rays = (magic_bits_attacks.*(attacks.first))(0, king_square);
-
-            if (rays & square_mask)
-            {
-                const auto snipers = rays & attacks.second & theirs;
-
-                result = for_each_square_r<Bitboard>(snipers, [&](Square sniper) {
-                    if ((between(sniper, king_square) & (occupied | square_mask)) == square_mask)
-                        return BB_RAYS[king_square][sniper];
-
-                    return BB_EMPTY;
-                });
-                break;
-            }
-        }
-
-        ASSERT(result == (
-            _pin_mask(occupied, theirs, square_mask, king_square, BB_FILE_ATTACKS, rooks | queens) |
-            _pin_mask(occupied, theirs, square_mask, king_square, BB_RANK_ATTACKS, rooks | queens) |
-            _pin_mask(occupied, theirs, square_mask, king_square, BB_DIAG_ATTACKS, bishops | queens)));
-
-#endif /* USE_MAGIC_BITS */
-
-        return result ? result : BB_ALL;
     }
 
 

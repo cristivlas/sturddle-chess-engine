@@ -15,9 +15,9 @@ platform = sysconfig.get_platform()
 """
 Compiler args.
 """
-inc_dirs = ['-I./libpopcnt', '-I./thread-pool', '-I./magic-bits/include']
+inc_dirs = ['-I./libpopcnt', '-I./magic-bits/include']
 
-# Assert-enabled build
+# Assert-enabled build (requires TUNING_ENABLED)
 args = []
 link = []
 
@@ -49,8 +49,6 @@ else:
     cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
     if cc and cc.startswith('clang'):
         args.append('-Wno-deprecated-declarations')
-    else:
-        args.append('-fno-extern-tls-init')
 
 
 extensions = [Extension('chess_engine', sources=sourcefiles, extra_compile_args=args + inc_dirs, extra_link_args=link)]

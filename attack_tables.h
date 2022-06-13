@@ -30,26 +30,6 @@ namespace chess
         Rank,
     };
 
-    namespace impl
-    {
-        class AttackTable
-        {
-            const int _strategy = -1;
-
-        public:
-            template<typename F> AttackTable(int strategy, F init)
-                : _strategy(strategy)
-            {
-                init(_data);
-            }
-
-            uint64_t operator[] (uint64_t k) const;
-            uint64_t* _data = nullptr;
-        };
-
-    } /* namespace impl */
-
-
     template<AttacksType> struct Attacks {};
 
 } /* namespace chess */
@@ -61,10 +41,6 @@ namespace chess
   #include "attacks.h"
 #endif
 
-INLINE uint64_t chess::impl::AttackTable::operator[] (uint64_t k) const
-{
-    return _data[chess::impl::hash(_strategy, k)];
-}
 
 namespace chess
 {

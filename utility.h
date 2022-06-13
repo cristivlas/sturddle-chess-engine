@@ -20,9 +20,15 @@
  */
 #pragma once
 
-#include <chrono>
+#include <stdexcept>
+#include <thread>
 #include <vector>
+
 #include "Python.h"
+
+#if USE_THREAD_POOL
+  #include "thread_pool.hpp"
+#endif
 
 enum class CancelReason
 {
@@ -66,11 +72,6 @@ namespace
     };
 
 
-    using std::chrono::duration_cast;
-    using std::chrono::high_resolution_clock;
-    using std::chrono::nanoseconds;
-
-
     /*
      * For sorting small vectors of small objects.
      * Sorting Move objects takes advantage of the XOR swap hack on 64 bit.
@@ -105,5 +106,47 @@ namespace
     #endif
     }
 
-} /* namespace */
+#if USE_THREAD_POOL
+    using ThreadGroup = thread_pool;
+#else
+    /*
+     * Utility for starting threads.
+     *
+     * Interface is compatible with thread_pool, but with a much simpler
+     * implementation since the Lazy SMP search starts a fixed number of
+     * tasks. A real thread pool may be overkill.
+     */
+    class ThreadGroup
+    {
+        const size_t _thread_count;
+        std::vector<std::thread> _threads;
 
+    public:
+        explicit ThreadGroup(size_t count) : _thread_count(count)
+        {
+        }
+
+        size_t get_thread_count() const
+        {
+            return _thread_count;
+        }
+
+        template<typename F> void push_task(F f)
+        {
+            if (_threads.size() >= _thread_count)
+                throw std::logic_error("number of tasks exceeds max thread count");
+
+            _threads.emplace_back(std::thread(f));
+        }
+
+        void wait_for_tasks()
+        {
+            for (auto& thread : _threads)
+                thread.join();
+
+            _threads.clear();
+        }
+    };
+#endif /* !USE_THREAD_POOL */
+
+} /* namespace */

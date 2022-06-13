@@ -225,7 +225,6 @@ namespace search
         int         _full_depth_count = late_move_reduction_count();
         int         _mate_detected = 0;
         int         _pruned_count = 0;
-        int         _prune_reason = 0; /* debug */
 
         HistoryPtr  _history;
 
@@ -498,12 +497,12 @@ namespace search
         if (_can_prune == -1)
         {
             _can_prune =
-                ((_parent != nullptr)
-                * !is_pv_node()
-                * (_max_depth >= 6 || !is_qsearch())
-                * !_excluded
-                * (state().pushed_pawns_score <= 1)
-                * !state().just_king_and_pawns())
+                (_parent != nullptr)
+                && !is_pv_node()
+                && (_max_depth >= 6 || !is_qsearch())
+                && !_excluded
+                && (state().pushed_pawns_score <= 1)
+                && !state().just_king_and_pawns()
                 && (_parent->_mate_detected == 0 || _parent->_mate_detected % 2)
                 && !is_check();
         }
@@ -518,10 +517,10 @@ namespace search
         ASSERT(_move);
 
         return !is_singleton()
-             * !is_extended()
-             * !is_pv_node()
-             * !is_repeated()
-             * _parent->can_prune_move(_move);
+            && !is_extended()
+            && !is_pv_node()
+            && !is_repeated()
+            && _parent->can_prune_move(_move);
     }
 
 
@@ -529,12 +528,12 @@ namespace search
     {
         ASSERT(move && move._state && move != _move);
 
-        return ((move != _tt_entry._hash_move)
-                * (move._state->capture_value == 0)
-                * (move.promotion() == chess::PieceType::NONE)
-                * (move.from_square() != _capture_square)
-                * !is_counter_move(move)
-                * can_forward_prune())
+        return (move != _tt_entry._hash_move)
+            && (move._state->capture_value == 0)
+            && (move.promotion() == chess::PieceType::NONE)
+            && (move.from_square() != _capture_square)
+            && !is_counter_move(move)
+            && can_forward_prune()
             && !move._state->is_check();
     }
 
@@ -543,11 +542,11 @@ namespace search
     {
         ASSERT(!is_null_move());
 
-        return ((_ply != 0)
-                * !is_retry()
-                * !is_singleton()
-                * !is_extended()
-                * (state().pushed_pawns_score <= 1))
+        return (_ply != 0)
+            && !is_retry()
+            && !is_singleton()
+            && (state().pushed_pawns_score <= 1)
+            && !is_extended()
             && (_move.from_square() != _parent->_capture_square)
             && !is_recapture()
             && !state().is_check();
@@ -696,14 +695,14 @@ namespace search
         _retry_next = false;
 
         if (!first_move && !_excluded && !on_next() && !is_check())
-            return nullptr;
+            return ContextPtr();
 
         /* null move must be tried before actual moves */
         ASSERT(!null_move || next_move_index() == 0);
 
         const auto move = null_move ? nullptr : get_next_move(futility);
         if (!move && !null_move)
-            return nullptr;
+            return ContextPtr();
 
         ASSERT(null_move || move->_state);
         ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
@@ -795,7 +794,7 @@ namespace search
                 ctxt->_retry_above_alpha = RETRY::PVS;
                 ASSERT(ctxt->_alpha == ctxt->_beta - 1);
             }
-            else if (ctxt->is_retry() * (_retry_beta < _beta))
+            else if (ctxt->is_retry() && _retry_beta < _beta)
             {
                 ctxt->_beta = _retry_beta;
                 _retry_beta = SCORE_MAX;
@@ -875,6 +874,8 @@ namespace search
 
     INLINE void MoveMaker::ensure_moves(Context& ctxt)
     {
+        ASSERT(!moves().empty() || _count <= 0);
+
         if (_count < 0)
         {
             ASSERT(_current < 0);
@@ -1092,7 +1093,7 @@ namespace search
         incremental_update(move, ctxt);
 
         /* Futility-prune after making the move (state is needed for simple eval). */
-        if (futility)
+        if (futility > 0)
         {
             const auto val = futility + move._state->simple_score * SIGN[!move._state->turn];
 
@@ -1136,8 +1137,7 @@ namespace search
     {
         if (!make_move(ctxt, move))
         {
-            ASSERT(move._group == MoveOrder::QUIET_MOVES
-                || move._group == MoveOrder::ILLEGAL_MOVES);
+            ASSERT(move._group >= MoveOrder::QUIET_MOVES);
             return false;
         }
 

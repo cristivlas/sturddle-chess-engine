@@ -38,10 +38,6 @@
 
 namespace
 {
-    auto get_msb = chess::msb;
-    auto get_lsb = chess::lsb;
-
-
     using TableData = std::vector<uint64_t>;
 
 
@@ -93,6 +89,22 @@ namespace
             os << "/* Tables */\n";
             os << "/************************************************************/\n";
 
+            os << "class AttackTable\n";
+            os << "{\n";
+            os << "    const int _strategy = -1;\n";
+            os << "\n";
+            os << "public:\n";
+            os << "    template<typename F> AttackTable(int s, F init) : _strategy(s)\n";
+            os << "    {\n";
+            os << "        init(_data);\n";
+            os << "    }\n\n";
+            os << "    INLINE uint64_t operator[] (uint64_t mask) const\n";
+            os << "    {\n";
+            os << "        return _data[chess::impl::hash(_strategy, mask)];\n";
+            os << "    }\n\n";
+            os << "    uint64_t* _data = nullptr;\n";
+            os << "};\n\n";
+
             for (const auto& elem : _groups)
             {
                 const auto& group = elem.second;
@@ -111,39 +123,20 @@ namespace
             os << "/************************************************************/\n";
             os << "/* Template specializations */\n";
             os << "/************************************************************/\n";
+
             std::unordered_map<std::string, std::string> type = {
                 { "_FILE_ATTACKS", "AttacksType::File" },
                 { "_RANK_ATTACKS", "AttacksType::Rank" },
                 { "_DIAG_ATTACKS", "AttacksType::Diag" }
             };
+
             for (const auto& elem : _groups)
             {
                 os << "\ntemplate<> struct Attacks<" << type[elem.first] << ">\n";
                 os << "{\n";
                 os << "    INLINE static uint64_t get(int square, uint64_t mask)\n";
                 os << "    {\n";
-
-                if (true)
-                {
-                    os << "        return impl::" << elem.first << "[square][mask];\n";
-                }
-                else
-                {
-                    os << "        switch (square)\n";
-                    os << "        {\n";
-
-                    for (int i = 0; i != 64; ++i)
-                    {
-                        const auto& hash = elem.second._hash_funcs[i];
-                        os << "        case " << i << ": return impl::" << elem.first;
-                        os << "[" << i << "]._data[impl::" << hash << "(mask)];\n";
-                    }
-                    os << "        default: ASSERT(false);\n";
-
-                    os << "        }\n";
-                    os << "        return 0;\n";
-                }
-
+                os << "        return impl::" << elem.first << "[square][mask];\n";
                 os << "    }\n";
                 os << "};\n";
             }
@@ -196,7 +189,7 @@ namespace
                 os << "    case " << index.first << ":\n";
                 os << "        return " << index.second << "(u);\n";
             }
-            os << "    default: ASSERT(false);\n";
+
             os << "    }\n";
             os << "    return 0;\n";
             os << "}\n\n";
@@ -270,86 +263,6 @@ namespace
             _data_size = data.size();
             return data;
         }
-    };
-
-    /* The "hash" function is simply a bitshift */
-    class RShiftHashBuilder : public HashBuilderBase
-    {
-    public:
-        RShiftHashBuilder(size_t max_table_bits) : _max_table_bits(max_table_bits)
-        {
-        }
-
-    private:
-        std::string strategy() const override
-        {
-            return "right_shift_" +  std::to_string(_data_size);
-        }
-
-        bool build_impl(const Input& input) override
-        {
-            reset();
-
-            for (const auto& elem : input)
-            {
-                if (const auto key = elem.first)
-                {
-                    _lsb = std::min(_lsb, get_lsb(key));
-                    _msb = std::max(_msb, get_msb(key));
-                }
-            }
-
-            return bits_required_per_table() <= _max_table_bits;
-        }
-
-        size_t bits_required_per_table() const
-        {
-            ASSERT(_msb >= _lsb);
-            return _msb - _lsb + 1;
-        }
-
-        void write_hash_template(CodeGenerator& code) const override
-        {
-            static constexpr char right_shift[] = {
-                "template<size_t S> struct RightShift {\n"
-                "   static inline size_t hash(uint64_t u) {\n"
-                "       return (u >> S);\n"
-                "   }\n"
-                "};\n"
-            };
-
-            code.add_hash_template(right_shift);
-        }
-
-        void write_instance(
-            CodeGenerator&  code,
-            const char*     name,
-            const Input&    input) const override
-        {
-            std::ostringstream os;
-
-            os << "RightShift<" << _lsb << ">::hash";
-            const auto max_table_size = 1ULL << bits_required_per_table();
-            code.add_instance(name, os.str(), transform(input, max_table_size));
-        }
-
-        void reset()
-        {
-            _msb = 0;
-            _lsb = 64;
-        }
-
-        size_t hash(uint64_t k) const override final
-        {
-            return k >> _lsb;
-        }
-
-
-    private:
-        const size_t _max_table_bits = 0;
-
-        int _msb = 0;
-        int _lsb = 0;
     };
 
 
@@ -436,49 +349,43 @@ namespace
     /*----------------------------------------------------------------------*/
     /* Mixins                                                               */
     /*----------------------------------------------------------------------*/
-    template<size_t S, uint64_t M>
-    struct MultiplyAndShift
+    struct Identity
     {
-        static uint64_t hash(uint64_t key)
-        {
-            key *= M;
-            key = key >> S;
-            return key;
-        }
+        static uint64_t hash(uint64_t key) { return key; }
 
         static std::string mixin()
         {
             std::ostringstream os;
             os << "inline uint64_t " << name() << "(uint64_t key) {\n";
-            os << "    key *= " << M << "ULL;\n";
-            os << "    key >>= " << S << ";\n";
             os << "    return key;\n";
             os << "}\n";
             return os.str();
         }
 
-        static std::string name()
-        {
-            std::ostringstream os;
-            os << "mul_shift_" << S << "_" << std::hex << M << std::dec;
-            return os.str();
-        }
+        static std::string name() { return "id" ; }
 
-        static void add(CodeGenerator& code)
-        {
-            code.add_hash_template(mixin());
-        }
+        static void add(CodeGenerator& code) { code.add_hash_template(mixin()); }
     };
 
 
-    // Numbers to try:
-    // http://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html
-    // https://www.chessprogramming.org/Best_Magics_so_far
+    template<uint64_t M> struct Multiply
+    {
+        static uint64_t hash(uint64_t key) { return key * M; }
 
-    using MixAMixer = MultiplyAndShift<31, 0x81dadef4bc2dd44d>;
-    using MixBMixer = MultiplyAndShift<33, 0xe36aa5c613612997>;
-    using MixCMixer = MultiplyAndShift<31, 0x0a9ba9c8a5b15117>;
-    using MixDMixer = MultiplyAndShift<33, 0x61FFFEDDFEEDAEAE>;
+        static std::string mixin()
+        {
+            std::ostringstream os;
+            os << "inline uint64_t " << name() << "(uint64_t key) {\n";
+            os << "    return key * " << M << "ULL;\n";
+            os << "}\n";
+            return os.str();
+        }
+
+        static std::string name() { return "mul_" + std::to_string(M); }
+
+        static void add(CodeGenerator& code) { code.add_hash_template(mixin()); }
+    };
+
 
     template<typename BaseMixin, size_t N> struct RightShiftMixin
     {
@@ -491,7 +398,7 @@ namespace
         {
             std::ostringstream os;
 
-            os << "static inline uint64_t " << name() << "(uint64_t key) {\n";
+            os << "inline uint64_t " << name() << "(uint64_t key) {\n";
             os << "    return " << BaseMixin::name() << "(key) >> " << N << ";\n";
             os << "}\n";
             return os.str();
@@ -509,6 +416,7 @@ namespace
         }
     };
 
+
     /*----------------------------------------------------------------------*/
     /* Builders                                                             */
     /*----------------------------------------------------------------------*/
@@ -524,7 +432,7 @@ namespace
     public:
         explicit MixinHashBuilder(size_t max_table_size) : _max_table_size(max_table_size)
         {
-            _name << Mixin::name() << "_mixin_" << _max_table_size;
+            _name << Mixin::name() << "_" << _max_table_size;
         }
 
     private:
@@ -559,44 +467,78 @@ namespace
     };
 
 
-    template<typename Mixin, size_t N>
-    using HashMaskBuilder = MixinHashBuilder<RightShiftMixin<Mixin, N>>;
+    /* Apply base Mixin, then RightShift, then mask. */
+    template<typename Mixin, size_t S>
+    using HashMaskBuilder = MixinHashBuilder<RightShiftMixin<Mixin, S>>;
+
 
     class CompositeHashBuilder : public HashBuilder
     {
         std::vector<std::unique_ptr<HashBuilder>> _builders;
         std::string _name = "composite"; /* name of last strategy used */
 
+        /*
+         * utils for adding strategies to _builders
+         */
+        /* wrap mixin M in HashMaskBuilder and add it to builders */
+        template<typename M, size_t S>
+        void add_hash_mask_builder(size_t table_size)
+        {
+            _builders.emplace_back(std::make_unique<HashMaskBuilder<M, S>>(table_size));
+        }
+
+        /* add group of HashMaskBuilder-wrapped mixins, for a variadic list of right shifts */
+        template<typename M, size_t... I>
+        void add_group(size_t table_size, std::integer_sequence<size_t, I...>)
+        {
+            (add_hash_mask_builder<M, I>(table_size), ...);
+        }
+
         template<typename M> void add_group(size_t table_size)
         {
-            _builders.emplace_back(std::make_unique<HashMaskBuilder<M,  3>>(table_size));
-            _builders.emplace_back(std::make_unique<HashMaskBuilder<M,  5>>(table_size));
-            _builders.emplace_back(std::make_unique<HashMaskBuilder<M,  7>>(table_size));
-            _builders.emplace_back(std::make_unique<HashMaskBuilder<M,  9>>(table_size));
-            _builders.emplace_back(std::make_unique<HashMaskBuilder<M, 11>>(table_size));
-            _builders.emplace_back(std::make_unique<HashMaskBuilder<M, 15>>(table_size));
-            _builders.emplace_back(std::make_unique<HashMaskBuilder<M, 17>>(table_size));
-            _builders.emplace_back(std::make_unique<HashMaskBuilder<M, 19>>(table_size));
-            _builders.emplace_back(std::make_unique<HashMaskBuilder<M, 21>>(table_size));
+            add_group<M>(table_size, std::make_integer_sequence<size_t, 64>{});
+        }
+
+        template<uint64_t... M>
+        void add_multipliers(size_t table_size, std::integer_sequence<uint64_t, M...>)
+        {
+            (add_group<Multiply<M>>(table_size), ...);
+        }
+
+        /*
+         * Sources of ideas for some good multipliers:
+         *   http://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html
+         *   https://www.chessprogramming.org/Best_Magics_so_far
+         */
+
+        void add_multipliers(size_t table_size)
+        {
+            add_multipliers(table_size, std::integer_sequence<uint64_t,
+                0x81dadef4bc2dd44d,
+                0x54c77c86f6913e45,
+                0x7fb5d329728ea185,
+                0xe36aa5c613612997,
+                0x64dd81482cbd31d7,
+                0>{});
         }
 
     public:
         explicit CompositeHashBuilder()
         {
-            /* Try a bunch of strategies and see which one fits the data best. */
-            /* The idea is to maximize performance with minimum memory. */
+            /*
+             * Try a bunch of strategies and see which one fits the data best.
+             * The idea is to maximize performance with minimum memory.
+             */
 
-            _builders.emplace_back(std::make_unique<RShiftHashBuilder>(16));
+            for (size_t table_size : { 32, 64 })
+                add_group<Identity>(table_size);
 
-            for (size_t table_size : { 512, 1024, 2048, 4096, 8192 })
-            {
-                add_group<MixAMixer>(table_size);
-                add_group<MixBMixer>(table_size);
-                add_group<MixCMixer>(table_size);
-                add_group<MixDMixer>(table_size);
-            }
+            for (size_t table_size : { 256, 512, 1024, 2048, 4096 })
+                add_multipliers(table_size);
 
-            /* catch all strategy, slow */
+            /*
+             * This is catch all strategy. Guaranteed to find perfect hashing, but slow.
+             */
             _builders.emplace_back(std::make_unique<PerfectHashBuilder>());
         }
 

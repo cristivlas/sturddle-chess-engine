@@ -132,12 +132,15 @@ using score_t = int32_t;
 #define USE_BUTTERFLY_TABLES                false
 
 /*
- * Use magic_bits (https://github.com/goutham/magic-bits) instead of attacks.h
+ * Use this magic_bits implementation instead of attacks.h:
+ * https://github.com/goutham/magic-bits
  */
 #define USE_MAGIC_BITS                      true
 
 /* Half-baked hack */
 #define USE_MOVES_CACHE                     false
+
+#define USE_THREAD_POOL                     true
 
 /*
  * Number of processed nodes after which the search code checks

@@ -23,6 +23,7 @@
  * Move ordering, board state evaluation, and other stuff
  * pertaining to the Context of the node being searched.
  */
+#include <chrono>
 #include <iomanip>
 #include <iterator>
 #include <map>
@@ -35,6 +36,10 @@
 
 using namespace chess;
 using search::TranspositionTable;
+
+using std::chrono::duration_cast;
+using std::chrono::high_resolution_clock;
+using std::chrono::nanoseconds;
 
 
 /*
@@ -214,7 +219,14 @@ namespace search
         ctxt->_alpha = _alpha;
         ctxt->_beta = _beta;
         ctxt->_score = _score;
-        ctxt->_history = ply ? _history : new History(*_history);
+
+        /*
+         * ply != 0 implies use case 2), ok to share history within same thread;
+         * ply == 0 implies cloning at root for use on SMP threads, not safe to
+         * share with non-atomic refcount.
+         */
+        ctxt->_history = ply ? _history : HistoryPtr(new History(*_history));
+
         ctxt->_max_depth = _max_depth;
         ctxt->_parent = _parent;
         ctxt->_ply = ply;
@@ -348,11 +360,6 @@ namespace search
     {
         /* precondition for calling this function */
         ASSERT(!has_moves());
-
-        /* Can't have ALL moves pruned, the search function is expected to
-         * futility- and late-move-prune only after one move has been tried.
-         */
-        ASSERT(!_pruned_count);
 
         if (_pruned_count || _move_maker.have_skipped_moves())
         {

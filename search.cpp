@@ -26,10 +26,10 @@
 #include <sys/sysinfo.h>
 #endif
 
+#include <memory>
 #include <sstream>
 #include <utility>
 #include "context.h"
-#include "thread_pool.hpp"
 #include "search.h"
 #include "utility.h"
 
@@ -61,7 +61,7 @@ void log_pv(const TranspositionTable& tt, const char* info)
 
 const score_t* TT_Entry::lookup_score(Context& ctxt) const
 {
-    if ((_depth >= ctxt.depth()) * is_valid())
+    if (is_valid() && _depth >= ctxt.depth())
     {
         if (is_lower())
         {
@@ -71,7 +71,7 @@ const score_t* TT_Entry::lookup_score(Context& ctxt) const
         {
             ctxt._beta = std::min(ctxt._beta, _value);
         }
-        else if ((ctxt._alpha <= _alpha) * (ctxt._beta >= _beta))
+        else if (ctxt._alpha <= _alpha && ctxt._beta >= _beta)
         {
             ASSERT(_value > _alpha && _value < _beta);
             return &_value;
@@ -318,7 +318,7 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha)
     * Another thread has completed a deeper search from the time the current
     * thread has started searching (and probed the cache) in this position?
     */
-    else if ((entry._depth > ctxt.depth()) * (entry._version > ctxt._tt_entry._version))
+    else if (entry._depth > ctxt.depth() && entry._version > ctxt._tt_entry._version)
     {
         return;
     }
@@ -597,7 +597,12 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
         if (score >= ctxt._beta)
         {
             if (!best_move || score > -best_move->_score)
+            {
                 best_move = next_ctxt;
+            #if LAZY_STATE_COPY
+                best_move->copy_move_state();
+            #endif
+            }
 
             if (++cutoffs >= min_cutoffs)
             {
@@ -607,9 +612,6 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
                 ctxt._alpha = ctxt._score;
 
                 /* Fix-up best move */
-            #if LAZY_STATE_COPY
-                best_move->copy_move_state();
-            #endif
                 ctxt.set_best(best_move);
                 ctxt._cutoff_move = best_move->_move;
 
@@ -654,7 +656,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         && (ctxt.is_leftmost() || ctxt._alpha + 1 < ctxt._beta);
 
     /* Reduce by one ply at expected cut nodes */
-    ctxt._max_depth -= (!ctxt.is_pv_node() * (ctxt.depth() > 7)) && ctxt.can_reduce();
+    ctxt._max_depth -=
+           !ctxt.is_pv_node()
+        && !ctxt.is_null_move()
+        && ctxt.depth() > 7
+        && ctxt.can_reduce();
 
     if (ctxt._alpha + 1 < ctxt._beta)
     {
@@ -1085,20 +1091,20 @@ static score_t search_iteration(Context& ctxt, TranspositionTable& table, score_
 /****************************************************************************
  * Lazy SMP. https://www.chessprogramming.org/Lazy_SMP
  ****************************************************************************/
-static std::unique_ptr<thread_pool> pool;
+static std::unique_ptr<ThreadGroup> threads;
 
 
 static size_t start_pool()
 {
-    if (!pool || pool->get_thread_count() + 1 != size_t(Context::cpu_cores()))
+    if (!threads || threads->get_thread_count() + 1 != size_t(Context::cpu_cores()))
     {
         if (Context::cpu_cores() <= 1)
             return 0;
 
-        pool = std::make_unique<thread_pool>(Context::cpu_cores() - 1);
+        threads = std::make_unique<ThreadGroup>(Context::cpu_cores() - 1);
     }
 
-    return pool->get_thread_count();
+    return threads->get_thread_count();
 }
 
 struct TaskData
@@ -1126,7 +1132,7 @@ public:
 
         if (table._iteration == 1)
         {
-            std::vector<TaskData>(thread_count, { nullptr, table }).swap(_tables);
+            std::vector<TaskData>(thread_count, { ContextPtr(), table }).swap(_tables);
 
             /* run 1st iteration on one thread only */
             return;
@@ -1161,11 +1167,11 @@ public:
 
             ASSERT(t_ctxt->_tid > 0);
 
-            pool->push_task([&, i, t_ctxt, score]() mutable {
+            _tables[i]._ctxt = t_ctxt;
+
+            threads->push_task([&, t_ctxt, score]() mutable {
                 try
                 {
-                    _tables[i]._ctxt = t_ctxt;
-
                     if (search_iteration(*t_ctxt, *t_ctxt->get_tt(), score) > SCORE_MIN
                         && t_ctxt->best())
                     {
@@ -1182,10 +1188,10 @@ public:
 
     ~SMPTasks()
     {
-        if (pool)
+        if (threads)
         {
             Context::cancel();
-            pool->wait_for_tasks();
+            threads->wait_for_tasks();
         }
 
         if (Context::_report)

@@ -159,6 +159,9 @@ def test_pins():
         ('pin.01', '4k3/1p6/8/4q3/2p2P2/P2p4/1r5P/4RK2 b - -', True),
         ('pin.02', '4k3/1p6/8/4q3/2p2P2/P2p4/7P/4r1K1 b - -', False),
         ('pin.03', '4k3/1p6/8/4r3/2p2P2/P2p4/5K1P/4R3 b - -', True),
+        ('pin.04', '6k1/8/2p5/3q1p2/8/1B6/5PP1/1R4K1 b - -', True),
+        ('pin.05', '6k1/8/2p5/3q1p2/8/8/2B2PP1/1R4K1 b - -', False),
+        ('pin.06', '6k1/8/2p5/3q1p2/8/5P2/6P1/3rQ1K1 w - -', True),
     ]
     for id, epd, expected in tests:
         board = chess.Board(fen=epd)

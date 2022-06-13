@@ -36,7 +36,7 @@ public:
             _ptr->remove_ref();
     }
 
-    intrusive_ptr(T* ptr = nullptr) : _ptr(ptr)
+    explicit intrusive_ptr(T* ptr = nullptr) : _ptr(ptr)
     {
         if (_ptr)
             _ptr->add_ref();
@@ -100,9 +100,9 @@ public:
         return *get();
     }
 
-    void reset()
+    void reset(T* ptr = nullptr)
     {
-        intrusive_ptr<T> temp;
+        intrusive_ptr<T> temp(ptr);
         this->swap(temp);
     }
 
@@ -155,7 +155,7 @@ public:
 
 protected:
     constexpr RefCounted() : _refcnt(0) {}
-    RefCounted(const RefCounted&) : _refcnt(0) {}
+    RefCounted(const RefCounted& other) : _refcnt(0) {}
     ~RefCounted() = default;
 
     INLINE void add_ref() { increment(); }

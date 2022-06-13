@@ -312,8 +312,6 @@ namespace chess
 
     std::string square_name(Square);
 
-    Bitboard between(Square a, Square b);
-
 
     template<typename F> constexpr void for_each_square(Bitboard bb, F f)
     {
@@ -687,6 +685,76 @@ namespace chess
     #endif /* !USE_MAGIC_BITS */
             return mask;
         }
+    }
+
+
+    inline Bitboard diagonal_attacks(Bitboard mask, Square square)
+    {
+#if USE_MAGIC_BITS
+        return magic_bits_attacks.Bishop(mask, square);
+#else
+        return BB_DIAG_ATTACKS.get(square, mask);
+#endif /* !USE_MAGIC_BITS */
+    }
+
+
+    inline Bitboard rank_and_file_attacks(Bitboard mask, Square square)
+    {
+#if USE_MAGIC_BITS
+        return magic_bits_attacks.Rook(mask, square);
+#else
+        return BB_RANK_ATTACKS.get(square, mask) | BB_FILE_ATTACKS.get(square, mask);
+#endif /* !USE_MAGIC_BITS */
+    }
+
+
+    INLINE Bitboard between(Square a, Square b)
+    {
+        const auto bb = BB_RAYS[a][b] & ((BB_ALL << a) ^ (BB_ALL << b));
+        return bb & (bb - 1);
+    }
+
+
+    /*
+     * If the square is pinned for the side of the given color, return the pin mask.
+     * Otherwise return BB_ALL (so that the pinned piece's attacks can be restricted
+     * to the direction of the pin).
+     */
+    INLINE Bitboard Position::pin_mask(Color color, Square square) const
+    {
+        const auto king_square = king(color);
+        ASSERT(king_square >= 0);
+
+        const auto square_mask = BB_SQUARES[square];
+        const auto occupied = this->occupied();
+        const auto theirs = this->occupied_co(!color);
+
+        Bitboard result = BB_EMPTY;
+
+        for (auto attacks:
+            {
+                std::make_pair(diagonal_attacks, bishops | queens),
+                std::make_pair(rank_and_file_attacks, rooks | queens),
+            })
+        {
+            auto rays = attacks.first(0, king_square);
+
+            if (rays & square_mask)
+            {
+                const auto snipers = rays & attacks.second & theirs;
+
+                result = for_each_square_r<Bitboard>(snipers, [&](Square sniper)
+                {
+                    if ((between(sniper, king_square) & (occupied | square_mask)) == square_mask)
+                        return BB_RAYS[king_square][sniper];
+
+                    return BB_EMPTY; /* lambda */
+                });
+                break;
+            }
+        }
+
+        return result ? result : BB_ALL;
     }
 
 

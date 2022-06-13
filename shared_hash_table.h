@@ -51,9 +51,9 @@ namespace search
     #else
         struct locks_t /* dummy */
         {
-            using value_type = locks_t;
-            explicit locks_t(size_t){};
-            void swap(locks_t&){};
+            struct value_type {};
+            explicit locks_t(size_t) {};
+            void swap(locks_t&) {};
         };
     #endif /* !SMP */
 
@@ -101,7 +101,7 @@ namespace search
                 return false;
             }
     #else
-            INLINE void lock(bool) { _locked = true; }
+            INLINE void lock() { _locked = true; }
             INLINE void release() { _locked = false; }
             INLINE bool try_lock() { return true; }
     #endif /* !SMP */
@@ -259,7 +259,7 @@ namespace search
 
         static INLINE size_t size_in_bytes(size_t n)
         {
-            return n * (sizeof(typename data_t::value_type) + sizeof(locks_t::value_type));
+            return n * (sizeof(typename data_t::value_type) + sizeof(typename locks_t::value_type));
         }
 
         INLINE size_t clock() const { return _clock; }
