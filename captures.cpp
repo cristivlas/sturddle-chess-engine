@@ -86,6 +86,7 @@ namespace chess
         }
 
         Attack(const Attack&) = default;
+        Attack& operator=(const Attack&) = default;
     };
 
 

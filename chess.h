@@ -426,6 +426,7 @@ namespace chess
     public:
         Move() = default;
         Move(const Move&) = default;
+        Move& operator=(const Move&) = default;
 
         Move(Square from, Square to, PieceType promo = PieceType::NONE)
             : BaseMove(from, to, promo)
