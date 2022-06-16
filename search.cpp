@@ -303,7 +303,7 @@ void TranspositionTable::update_stats(const Context& ctxt)
 }
 
 
-void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha)
+void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, int depth)
 {
     ASSERT(ctxt._score > SCORE_MIN);
     ASSERT(ctxt._score < SCORE_MAX);
@@ -318,7 +318,7 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha)
     * Another thread has completed a deeper search from the time the current
     * thread has started searching (and probed the cache) in this position?
     */
-    else if (entry._depth > ctxt.depth() && entry._version > ctxt._tt_entry._version)
+    else if (entry._depth > depth && entry._version > ctxt._tt_entry._version)
     {
         return;
     }
@@ -341,7 +341,7 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha)
     entry._beta = ctxt._beta;
     entry._value = ctxt._score;
     entry._hash = ctxt.state().hash();
-    entry._depth = ctxt.depth();
+    entry._depth = depth;
     entry._eval = ctxt._tt_entry._eval;
     entry._capt = ctxt._tt_entry._capt;
     entry._king_safety = ctxt._tt_entry._king_safety;
@@ -350,7 +350,7 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha)
 }
 
 
-void TranspositionTable::store(Context& ctxt, score_t alpha)
+void TranspositionTable::store(Context& ctxt, score_t alpha, int depth)
 {
     ASSERT(ctxt._score > SCORE_MIN);
     ASSERT(ctxt._score < SCORE_MAX);
@@ -359,9 +359,9 @@ void TranspositionTable::store(Context& ctxt, score_t alpha)
     update_stats(ctxt);
 #endif /* EXTRA_STATS */
 
-    if (auto p = _table->lookup(ctxt.state(), Acquire::Write, ctxt.depth(), ctxt._score))
+    if (auto p = _table->lookup(ctxt.state(), Acquire::Write, depth, ctxt._score))
     {
-        store(ctxt, *p, alpha);
+        store(ctxt, *p, alpha, depth);
     }
 }
 
@@ -478,7 +478,7 @@ void TranspositionTable::store_pv(Context& root, bool print)
         if (print && ctxt->_ply)
             std::cout << ctxt->_move.uci() << " ";
 
-        if (auto next = ctxt->best())
+        if (const auto& next = ctxt->best())
         {
             ctxt = next.get();
             continue;
@@ -655,7 +655,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         && !ctxt.is_null_move()
         && (ctxt.is_leftmost() || ctxt._alpha + 1 < ctxt._beta);
 
-    /* Reduce by one ply at expected cut nodes */
+    /* reduce by one ply at expected cut nodes */
     ctxt._max_depth -=
            !ctxt.is_pv_node()
         && !ctxt.is_null_move()
@@ -667,6 +667,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         ASSERT(ctxt._algorithm != NEGASCOUT || ctxt.is_leftmost() || ctxt.is_retry());
     }
 
+    /* transposition table lookup */
     if (const auto* p = table.lookup(ctxt))
     {
         ASSERT(ctxt._score == *p);
@@ -678,6 +679,26 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     table._nodes += !COUNT_VALID_MOVES_AS_NODES;
 
     const auto alpha = ctxt._alpha;
+
+    /* syzygy tablebase probing */
+    int v;
+
+    if (ctxt._ply != 0 /* do not probe at root */
+        && ctxt._fifty == 0
+        && Context::tb_cardinality()
+        && popcount(ctxt.state().occupied()) <= Context::tb_cardinality()
+        && cython_wrapper::call(Context::_tb_probe_wdl, ctxt.state(), &v))
+    {
+        if (v < -1)
+            ctxt._score = MATE_LOW + ctxt._ply;
+        else if (v > 1)
+            ctxt._score = MATE_HIGH - ctxt._ply;
+        else
+            ctxt._score = v;
+
+        table.store(ctxt, alpha, ctxt.depth() + 6);
+        return ctxt._score;
+    }
 
     if (ctxt.is_leaf())
     {
@@ -1001,7 +1022,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         && !ctxt.is_qsearch()
         && !ctxt.is_cancelled()
        )
-        table.store(ctxt, alpha);
+        table.store(ctxt, alpha, ctxt.depth());
 
     return ctxt._score;
 }
@@ -1169,14 +1190,10 @@ public:
 
             _tables[i]._ctxt = t_ctxt;
 
-            threads->push_task([&, t_ctxt, score]() mutable {
+            threads->push_task([t_ctxt, score]() mutable {
                 try
                 {
-                    if (search_iteration(*t_ctxt, *t_ctxt->get_tt(), score) > SCORE_MIN
-                        && t_ctxt->best())
-                    {
-                        t_ctxt->get_tt()->store_pv(*t_ctxt);
-                    }
+                    search_iteration(*t_ctxt, *t_ctxt->get_tt(), score);
                 }
                 catch(const std::exception& e)
                 {
@@ -1205,13 +1222,13 @@ public:
 
         for (auto& t : _tables)
         {
-        #if SMP_ALLOW_CONTEXT_SHARING
+        #if 0
             if (t._ctxt && t._ctxt->best() && t._ctxt->_score > _root._score)
             {
                 _root.set_best(t._ctxt->best());
                 _root._score = t._ctxt->_score;
             }
-        #endif /* SMP_ALLOW_CONTEXT_SHARING */
+        #endif
 
             t._ctxt.reset();
         }

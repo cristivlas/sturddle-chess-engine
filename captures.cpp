@@ -90,7 +90,7 @@ namespace chess
     };
 
 
-    inline bool greater_than(const Attack& lhs, const Attack& rhs)
+    INLINE bool greater_than(const Attack& lhs, const Attack& rhs)
     {
         return lhs._type > rhs._type;
     }

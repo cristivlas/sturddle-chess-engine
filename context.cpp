@@ -147,6 +147,7 @@ namespace search
     std::atomic_bool Context::_cancel(false);
     std::mutex Context::_mutex;
 
+    int     Context::_tb_cardinality = 6;
     int     Context::_time_limit = -1; /* milliseconds */
     time    Context::_time_start;
     asize_t Context::_callback_count(0);
@@ -163,8 +164,11 @@ namespace search
     std::string(*Context::_pgn)(ContextPtr) = nullptr;
     void (*Context::_print_state)(const State&) = nullptr;
     void (*Context::_report)(PyObject*, std::vector<ContextPtr>&) = nullptr;
+    bool (*Context::_tb_probe_wdl)(const State&, int*) = nullptr;
+
     size_t (*Context::_vmem_avail)() = nullptr;
 
+    std::string Context::_syzygy_path = "syzygy/3-4-5";
 
 #if RECYCLE_CONTEXTS
     static THREAD_LOCAL Free* free_list = nullptr;

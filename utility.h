@@ -40,6 +40,10 @@ extern void cancel_search(CancelReason);
 
 namespace
 {
+    /*
+     * Utility for calling into Cython.
+     * Not strictly needed if the cython functions are marked 'with gil'.
+     */
     struct cython_wrapper
     {
         class GIL_State

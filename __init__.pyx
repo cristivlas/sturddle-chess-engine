@@ -44,6 +44,7 @@ from datetime import datetime
 
 import chess
 import chess.pgn
+import chess.syzygy
 import logging
 import platform
 import os
@@ -428,35 +429,50 @@ cdef extern from 'context.h' namespace 'search':
         string          (*_pgn)(ContextPtr)
         void            (*_print_state)(const State&)
         void            (*_report)(PyObject*, vector[ContextPtr]&)
+        bool            (*_tb_probe_wdl)(const State&, int*)
         size_t          (*_vmem_avail)()
 
-        ContextPtr      best() const
-        ContextPtr      first_move()
-        int64_t         nanosleep(int) nogil
+        ContextPtr best() const
+        ContextPtr first_move()
+
+        int64_t nanosleep(int) nogil
 
         @staticmethod
-        void            cancel() nogil
+        void cancel() nogil
 
-        int64_t         check_time_and_update_nps()
-
-        @staticmethod
-        void            init()
-
-        bint            is_leftmost() const
-        bint            is_null_move() const
+        int64_t check_time_and_update_nps()
 
         @staticmethod
-        void            set_time_limit_ms(int millisec) nogil
-        void            set_time_info(int millisec, int moves)
+        void init()
 
-        void            set_tt(TranspositionTable*)
+        bool is_repeated() const
+
+        @staticmethod
+        void set_time_limit_ms(int millisec) nogil
+
+        void set_time_info(int millisec, int moves)
+
+        void set_tt(TranspositionTable*)
         TranspositionTable* get_tt() const
 
         const vector[BaseMove]& get_pv() nogil const
 
-        # perft
-        ContextPtr  next(bool null_move, bool is_first_move, score_t futility_margin)
-        int         rewind(int where, bool reorder)
+        # perft-only
+        ContextPtr next(bool, bool, score_t)
+
+        int rewind(int where, bool reorder)
+
+        @staticmethod
+        const string& syzygy_path()
+
+        @staticmethod
+        void set_syzygy_path(const string&)
+
+        @staticmethod
+        void set_tb_cardinality(int)
+
+        @staticmethod
+        int tb_cardinality()
 
 
 cpdef board_from_state(state: BoardState):
@@ -557,6 +573,8 @@ cdef class NodeContext:
         deref(self._ctxt)._pgn = <string (*)(ContextPtr)> pgn
         deref(self._ctxt)._print_state = <void (*)(const State&)> print_state
         deref(self._ctxt)._vmem_avail = <size_t (*)()> vmem_avail
+        deref(self._ctxt)._tb_probe_wdl = <bool (*)(const State&, int*)> tb_probe_wdl
+
         deref(self._ctxt)._history = HistoryPtr(new History())
         self.sync_to_board(board)
 
@@ -622,19 +640,22 @@ cdef class NodeContext:
 
 
     cdef sync_to_board(self, board: chess.Board):
-        self.state = BoardState()
 
         # set history of played positions
+
+        # first, unwind the board to the starting position
+        # (which may not necessarily be a brand new game!)
         b = board.copy()
         while b.move_stack:
             b.pop()
 
-        for move in board.move_stack:
-            b.push(move)
-            self.state.set_from_board(b)
-            deref(deref(self._ctxt)._history).insert(self.state._state)
+        state = BoardState(chess.Board(fen=b.fen()))
 
-        deref(deref(self._ctxt)._history)._fifty = b.halfmove_clock
+        for move in board.move_stack:
+            state.apply(move)
+            deref(deref(self._ctxt)._history).insert(state._state)
+
+        deref(deref(self._ctxt)._history)._fifty = board.halfmove_clock
 
         # setup initial state
         self.state = BoardState(board)
@@ -684,6 +705,10 @@ cdef class NodeContext:
 
     def next(self):
         return NodeContext.from_cxx_context(deref(self._ctxt).next(False, False, 0))
+
+
+    def is_repeated(self):
+        return deref(self._ctxt).is_repeated()
 
 
 # ---------------------------------------------------------------------
@@ -811,9 +836,8 @@ cdef class SearchAlgorithm:
 
 
     cpdef cancel(self):
-        if self.context:
-            deref(self.context._ctxt).cancel()
-            self.is_cancelled = True
+        Context.cancel()
+        self.is_cancelled = True
 
 
     @property
@@ -843,7 +867,7 @@ cdef class SearchAlgorithm:
     cpdef void extend_time_limit(self, int time_limit_ms):
         self.time_limit_ms = time_limit_ms
         with nogil:
-            deref(self.context._ctxt).set_time_limit_ms(time_limit_ms)
+            Context.set_time_limit_ms(time_limit_ms)
 
 
     cpdef get_pv(self):
@@ -970,7 +994,7 @@ cdef class IterativeDeepening(SearchAlgorithm):
         deref(self.context._ctxt)._max_depth = 1
 
         # Set the time limit (which also starts the clock).
-        deref(self.context._ctxt).set_time_limit_ms(self.time_limit_ms)
+        Context.set_time_limit_ms(self.time_limit_ms)
 
         # Provide additional info so the engine can do its own time management.
         if self.time_info:
@@ -1126,15 +1150,62 @@ def read_config(fname='sturddle.cfg', echo=False):
 
 
 # ---------------------------------------------------------------------
+# syzygy tablebases
+# ---------------------------------------------------------------------
+_tb = chess.syzygy.Tablebase()
+_tb_paths = []
+
+def _tb_init():
+    for syzygy_path in Context.syzygy_path().decode().split(os.pathsep):
+        if not os.path.isabs(syzygy_path):
+            syzygy_path = os.path.realpath(
+                os.path.join(os.path.dirname(__file__), syzygy_path)
+            )
+        try:
+            _tb.add_directory(syzygy_path)
+            _tb_paths.append(syzygy_path)
+        except:
+            pass
+
+
+cdef bool tb_probe_wdl(const State& state, int* result) except* :
+    board = board_from_cxx_state(state)
+    try:
+        result[0] = _tb.probe_wdl(board)
+        return True
+    except KeyError as e:
+        logging.error(f'tb_probe_wdl: {e}, path={_tb_paths}')
+
+    piece_count = chess.popcount(board.occupied)
+    Context.set_tb_cardinality(0 if piece_count <= 3 else piece_count - 1)
+
+    logging.info(f'tb_probe_wdl: cardinality={Context.tb_cardinality()}')
+    return False
+
+
+def set_syzygy_path(path):
+    global _tb
+    global _tb_paths
+
+    Context.set_syzygy_path(path.encode())
+    _tb.close()
+    _tb = chess.syzygy.Tablebase()
+    _tb_paths = []
+    _tb_init()
+    logging.info(f'syzygy path={_tb_paths}')
+
+
+# ---------------------------------------------------------------------
 # initialize c++ global data structures
 # ---------------------------------------------------------------------
 Context.init()
 
 NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
+_tb_init()
 
 __major__   = 0
-__minor__   = 90
+__minor__   = 91
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
 
