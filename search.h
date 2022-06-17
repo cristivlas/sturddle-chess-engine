@@ -240,8 +240,8 @@ namespace search
 
         const score_t* lookup(Context&);
 
-        void store(Context&, score_t alpha);
-        void store(Context&, TT_Entry&, score_t);
+        void store(Context&, score_t alpha, int depth);
+        void store(Context&, TT_Entry&, score_t, int depth);
 
         void store_countermove(Context&);
         void store_killer_move(const Context&);

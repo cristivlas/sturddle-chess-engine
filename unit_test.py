@@ -19,8 +19,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 Any third-party files include in this project are subject to copyright
 and licensed as stated in their respective header notes.
 """
+import io
+
 import chess
+import chess.pgn
 import chess.polyglot
+
 import chess_engine as engine
 
 
@@ -319,6 +323,19 @@ def test_longest_pawn_sequence():
         assert count == expected, (id, count, f'expected={expected}')
 
 
+def test_repetition():
+    game = chess.pgn.read_game(io.StringIO('''
+[FEN "4k3/4p3/8/8/8/3B4/4P3/4K3 w - -"]
+
+1. Bg6+ Kd7 2. Bd3 Ke8 3. Bg6+ Kd7 4. Bd3'''))
+    board = game.board()
+    for move in game.mainline_moves():
+        board.push(move)
+
+    node = engine.NodeContext(board)
+    assert node.is_repeated()
+
+
 test_castling()
 test_castling_moves_generation()
 test_connected_rooks()
@@ -336,3 +353,5 @@ test_forks()
 test_connected_pawns()
 test_isolated_pawns()
 test_longest_pawn_sequence()
+
+test_repetition()

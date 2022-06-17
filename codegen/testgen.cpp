@@ -6,6 +6,10 @@
 
 using namespace chess;
 
+namespace chess
+{
+    AttackMasks BB_FILE_MASKS, BB_RANK_MASKS, BB_DIAG_MASKS;
+}
 
 template<typename T>
 static void perf_test(const T& attack_tables, int iterations, const std::vector<int>& deltas)

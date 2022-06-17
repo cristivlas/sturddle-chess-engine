@@ -223,8 +223,12 @@ namespace chess
         UNDEFINED = -1,
     };
 
-
-#define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 2, 1, 3, 2 }
+#if 1
+  #define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 2, 1, 3, 2 }
+#else
+  /* do not include pawns in mobility evals */
+  #define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 2, 2, 1, 3, 2 }
+#endif
 
 #if MOBILITY_TUNING_ENABLED
     extern int MOBILITY[7];
@@ -561,13 +565,13 @@ namespace chess
             return attackers & occupied_co(color);
         }
 
-        Bitboard checkers_mask(Color turn) const
+        INLINE Bitboard checkers_mask(Color turn) const
         {
             const auto king_square = king(turn);
             return attackers_mask(!turn, king_square);
         }
 
-        Square king(Color color) const
+        INLINE Square king(Color color) const
         {
             const auto king_mask = occupied_co(color) & kings;
             /* there should always be a king */
@@ -576,7 +580,7 @@ namespace chess
             return Square(msb(king_mask));
         }
 
-        Bitboard kings_quarter(Color color) const
+        INLINE Bitboard kings_quarter(Color color) const
         {
             const auto king_mask = kings & occupied_co(color);
             for (auto quadrant : BB_QUANDRANTS)
@@ -588,12 +592,12 @@ namespace chess
 
         score_t eval_mobility() const;
 
-        constexpr Bitboard occupied() const
+        INLINE constexpr Bitboard occupied() const
         {
             return white | black;
         }
 
-        constexpr Bitboard occupied_co(Color color) const
+        INLINE constexpr Bitboard occupied_co(Color color) const
         {
             return _occupied_co[color];
         }
@@ -621,7 +625,7 @@ namespace chess
             return _pieces[piece_type - 1];
         }
 
-        Bitboard pieces_mask(PieceType piece_type, Color color) const
+        INLINE Bitboard pieces_mask(PieceType piece_type, Color color) const
         {
             return const_cast<Position*>(this)->pieces(piece_type) & occupied_co(color);
         }
@@ -689,7 +693,7 @@ namespace chess
     }
 
 
-    inline Bitboard diagonal_attacks(Bitboard mask, Square square)
+    INLINE Bitboard diagonal_attacks(Bitboard mask, Square square)
     {
 #if USE_MAGIC_BITS
         return magic_bits_attacks.Bishop(mask, square);
@@ -699,7 +703,7 @@ namespace chess
     }
 
 
-    inline Bitboard rank_and_file_attacks(Bitboard mask, Square square)
+    INLINE Bitboard rank_and_file_attacks(Bitboard mask, Square square)
     {
 #if USE_MAGIC_BITS
         return magic_bits_attacks.Rook(mask, square);
@@ -927,7 +931,7 @@ namespace chess
 
         void rehash() { _hash = 0; hash(); }
 
-        bool has_connected_rooks(Color color) const
+        INLINE bool has_connected_rooks(Color color) const
         {
             auto rook_mask = rooks & occupied_co(color);
 
@@ -936,7 +940,7 @@ namespace chess
             });
         }
 
-        bool has_fork(Color color) const
+        INLINE bool has_fork(Color color) const
         {
             const auto attacked = occupied_co(!color) & ~pawns;
 
@@ -1234,6 +1238,25 @@ namespace chess
     }
 
 
+    INLINE int State::diff_bishop_pairs() const
+    {
+        int count[] = { 0, 0 };
+
+        if (popcount(bishops) == 3)
+        {
+            for (auto color : { BLACK, WHITE })
+            {
+                if (popcount(bishops & occupied_co(color)) == 2)
+                {
+                    count[color] = 1;
+                    break;
+                }
+            }
+        }
+        return count[WHITE] - count[BLACK];
+    }
+
+
     INLINE int State::diff_doubled_pawns() const
     {
         int count = 0;
@@ -1493,7 +1516,7 @@ namespace chess
     /*
      * required by codegen
      */
-    inline Bitboard sliding_attacks(int square, Bitboard occupied, const std::vector<int>& deltas)
+    INLINE Bitboard sliding_attacks(int square, Bitboard occupied, const std::vector<int>& deltas)
     {
         auto attacks = BB_EMPTY;
         for (const auto delta : deltas)
@@ -1515,7 +1538,7 @@ namespace chess
         return attacks;
     }
 
-    inline Bitboard edges(int square)
+    INLINE Bitboard edges(int square)
     {
         return (((BB_RANK_1 | BB_RANK_8) & ~BB_RANKS[square_rank(square)]) |
                 ((BB_FILE_A | BB_FILE_H) & ~BB_FILES[square_file(square)]));

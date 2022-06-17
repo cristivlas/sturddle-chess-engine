@@ -163,6 +163,7 @@ namespace search
     std::string(*Context::_pgn)(ContextPtr) = nullptr;
     void (*Context::_print_state)(const State&) = nullptr;
     void (*Context::_report)(PyObject*, std::vector<ContextPtr>&) = nullptr;
+
     size_t (*Context::_vmem_avail)() = nullptr;
 
 

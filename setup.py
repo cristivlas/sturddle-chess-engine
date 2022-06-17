@@ -29,7 +29,7 @@ link = []
 #     args = [ '-O0', '-D_DEBUG' ]
 
 # Release build
-args = ['-DNO_ASSERT', '-DLAZY_STATE_COPY' ]
+args = ['-DNO_ASSERT']
 
 if platform.startswith('win'):
     args.append('/std:c++17')
@@ -44,6 +44,7 @@ else:
     args.append('-Wno-unused-parameter')
     args.append('-Wno-unused-variable')
     args.append('-DCYTHON_WITHOUT_ASSERTIONS')
+    args.append('-DLAZY_STATE_COPY')
     #args.append('-fprofile-sample-use=code.prof')
 
     cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)

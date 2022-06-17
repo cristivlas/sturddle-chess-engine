@@ -282,7 +282,7 @@ namespace chess
          */
         for (const auto color: {BLACK, WHITE})
         {
-            if (MOBILITY[PieceType::PAWN])
+            if constexpr(MOBILITY[PieceType::PAWN] != 0)
             {
                 /* pawns moves... */
                 const auto own_pawns = pawns & occupied_co(color) & ~pinned[color];
@@ -307,10 +307,6 @@ namespace chess
                     * (popcount(single_pawn_moves | double_pawn_moves) + popcount(pawn_captures));
             }
 
-            // std::cout << popcount(single_pawn_moves | double_pawn_moves);
-            // std::cout << " " << color << " pawn move(s)\n";
-            // std::cout << popcount(pawn_captures) << " pawn capture(s)\n";
-
             /* non-pawns */
             for_each_square(occupied_co(color) & ~pawns, [&](Square square) {
                 if (attacks_from[color][square] == BB_EMPTY)
@@ -324,10 +320,12 @@ namespace chess
                 /* where can the enemy king capture? */
                 Bitboard defended = attacks[!color][KING];
                 for (int i = 0; i != 64; ++i)
-                    // if (i != square) /* skip checks by the piece to move */
+                {
+                    /* skip checks by the piece to move */
+                    // if (i != square)
                     //     defended &= ~checks_from[color][i];
                     defended &= ~checks_from[color][i] | ((i == square) * BB_ALL);
-
+                }
                 switch (piece_type)
                 {
                 case PieceType::KNIGHT:
@@ -349,13 +347,6 @@ namespace chess
 
                 mobility += SIGN[color] * MOBILITY[piece_type]
                     * popcount(attacks_from[color][square] & ~defended);
-
-                // std::cout << "\n" << color << " " << piece_type << "\n";
-                // std::cout << popcount(attacks_from[color][square] & ~defended);
-                // std::cout << " attacks\n";
-                // print_bb(attacks_from[color][square]);
-                // print_bb(defended);
-                // print_bb(attacks_from[color][square] & ~defended);
             });
         }
 
@@ -533,25 +524,6 @@ namespace chess
         for_each_square(capturers, [&](Square capturer) {
             moves.emplace_back(capturer, en_passant_square);
         });
-    }
-
-
-    int State::diff_bishop_pairs() const
-    {
-        int count[] = { 0, 0 };
-
-        if (popcount(bishops) == 3)
-        {
-            for (auto color : { BLACK, WHITE })
-            {
-                if (popcount(bishops & occupied_co(color)) == 2)
-                {
-                    count[color] = 1;
-                    break;
-                }
-            }
-        }
-        return count[WHITE] - count[BLACK];
     }
 
 

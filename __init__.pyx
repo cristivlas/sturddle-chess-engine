@@ -442,11 +442,11 @@ cdef extern from 'context.h' namespace 'search':
         @staticmethod
         void            init()
 
-        bint            is_leftmost() const
-        bint            is_null_move() const
+        bool            is_repeated() const
 
         @staticmethod
         void            set_time_limit_ms(int millisec) nogil
+
         void            set_time_info(int millisec, int moves)
 
         void            set_tt(TranspositionTable*)
@@ -454,9 +454,10 @@ cdef extern from 'context.h' namespace 'search':
 
         const vector[BaseMove]& get_pv() nogil const
 
-        # perft
-        ContextPtr  next(bool null_move, bool is_first_move, score_t futility_margin)
-        int         rewind(int where, bool reorder)
+        # perft-only
+        ContextPtr      next(bool, bool, score_t)
+
+        int             rewind(int where, bool reorder)
 
 
 cpdef board_from_state(state: BoardState):
@@ -557,6 +558,7 @@ cdef class NodeContext:
         deref(self._ctxt)._pgn = <string (*)(ContextPtr)> pgn
         deref(self._ctxt)._print_state = <void (*)(const State&)> print_state
         deref(self._ctxt)._vmem_avail = <size_t (*)()> vmem_avail
+
         deref(self._ctxt)._history = HistoryPtr(new History())
         self.sync_to_board(board)
 
@@ -622,19 +624,22 @@ cdef class NodeContext:
 
 
     cdef sync_to_board(self, board: chess.Board):
-        self.state = BoardState()
 
         # set history of played positions
+
+        # first, unwind the board to the starting position
+        # (which may not necessarily be a brand new game!)
         b = board.copy()
         while b.move_stack:
             b.pop()
 
-        for move in board.move_stack:
-            b.push(move)
-            self.state.set_from_board(b)
-            deref(deref(self._ctxt)._history).insert(self.state._state)
+        state = BoardState(chess.Board(fen=b.fen()))
 
-        deref(deref(self._ctxt)._history)._fifty = b.halfmove_clock
+        for move in board.move_stack:
+            state.apply(move)
+            deref(deref(self._ctxt)._history).insert(state._state)
+
+        deref(deref(self._ctxt)._history)._fifty = board.halfmove_clock
 
         # setup initial state
         self.state = BoardState(board)
@@ -684,6 +689,10 @@ cdef class NodeContext:
 
     def next(self):
         return NodeContext.from_cxx_context(deref(self._ctxt).next(False, False, 0))
+
+
+    def is_repeated(self):
+        return deref(self._ctxt).is_repeated()
 
 
 # ---------------------------------------------------------------------
@@ -812,7 +821,7 @@ cdef class SearchAlgorithm:
 
     cpdef cancel(self):
         if self.context:
-            deref(self.context._ctxt).cancel()
+            Context.cancel()
             self.is_cancelled = True
 
 
@@ -843,7 +852,7 @@ cdef class SearchAlgorithm:
     cpdef void extend_time_limit(self, int time_limit_ms):
         self.time_limit_ms = time_limit_ms
         with nogil:
-            deref(self.context._ctxt).set_time_limit_ms(time_limit_ms)
+            Context.set_time_limit_ms(time_limit_ms)
 
 
     cpdef get_pv(self):
@@ -970,7 +979,7 @@ cdef class IterativeDeepening(SearchAlgorithm):
         deref(self.context._ctxt)._max_depth = 1
 
         # Set the time limit (which also starts the clock).
-        deref(self.context._ctxt).set_time_limit_ms(self.time_limit_ms)
+        Context.set_time_limit_ms(self.time_limit_ms)
 
         # Provide additional info so the engine can do its own time management.
         if self.time_info:
@@ -1134,7 +1143,7 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0
-__minor__   = 90
+__minor__   = 91
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
 

@@ -179,6 +179,7 @@ namespace search
      */
     struct Context : public Free, public RefCounted<Context>
     {
+        friend class MoveMaker;
         friend class RefCounted<Context>;
 
     private:
@@ -241,13 +242,6 @@ namespace search
 
         void set_best(const ContextPtr& best)
         {
-    #if !SMP_ALLOW_CONTEXT_SHARING
-            /*
-             * enforce same thread id
-             */
-            ASSERT(best->_tid == _tid);
-    #endif /* !SMP_ALLOW_CONTEXT_SHARING */
-
             best->_parent = this;
             _best = best;
         }
@@ -373,23 +367,23 @@ namespace search
 
         int repeated_count(const State&) const;
 
-        ContextPtr  _best; /* best search result */
-        mutable int _can_prune = -1;
-        State       _statebuf;
-        bool        _leftmost = false;
-        mutable int _repetitions = -1;
-        Move        _counter_move;
-        friend class MoveMaker;
-        MoveMaker   _move_maker;
-
-        static std::atomic_bool _cancel;
-        static std::mutex _mutex; /* update time limit from another thread */
-
-        static asize_t  _callback_count;
-        static int      _time_limit; /* milliseconds */
-        static time     _time_start;
+        ContextPtr          _best; /* best search result */
+        mutable int         _can_prune = -1;
+        State               _statebuf;
+        bool                _leftmost = false;
+        mutable int         _repetitions = -1;
+        Move                _counter_move;
+        MoveMaker           _move_maker;
 
         TranspositionTable* _tt = nullptr;
+
+        /* search can be cancelled from any thread */
+        static std::atomic<bool> _cancel;
+
+        static std::mutex   _mutex; /* update time limit from another thread */
+        static asize_t      _callback_count;
+        static int          _time_limit; /* milliseconds */
+        static time         _time_start;
     };
 
 
@@ -810,7 +804,7 @@ namespace search
                 else if (state().pawns & chess::BB_SQUARES[move->from_square()])
                     ctxt->_fifty = 0;
                 else
-                    ctxt->_fifty = (_ply == 0) ? _history->_fifty : _fifty + 1;
+                    ctxt->_fifty = (_ply == 0 ? _history->_fifty : _fifty) + 1;
             }
         }
 
