@@ -24,6 +24,8 @@
  */
 #if __linux__
 #include <sys/sysinfo.h>
+#elif __APPLE__
+#include <sys/sysctl.h>
 #endif
 
 #include <memory>
@@ -116,7 +118,14 @@ static size_t mem_avail()
     {
         mem = info.freeram;
     }
+#elif __APPLE__
+    size_t len = sizeof(mem);
+    static int mib[2] = { CTL_HW, HW_USERMEM };
+
+    sysctl(mib, std::extent<decltype(mib)>::value, &mem, &len, nullptr, 0);
+
 #else
+    /* failover to psutil via Cython */
     mem = static_cast<unsigned long>(cython_wrapper::call(search::Context::_vmem_avail));
 #endif /* __linux__ */
 
