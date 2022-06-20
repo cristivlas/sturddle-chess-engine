@@ -1143,7 +1143,7 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0
-__minor__   = 91
+__minor__   = 93
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
 

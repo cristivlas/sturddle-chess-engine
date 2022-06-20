@@ -144,11 +144,10 @@ namespace search
     /*---------------------------------------------------------------------
      * Context
      *---------------------------------------------------------------------*/
-    std::atomic_bool Context::_cancel(false);
-    std::mutex Context::_mutex;
+    atomic_bool Context::_cancel(false);
 
-    int     Context::_time_limit = -1; /* milliseconds */
-    time    Context::_time_start;
+    atomic_int  Context::_time_limit = -1; /* milliseconds */
+    atomic_time Context::_time_start;
     asize_t Context::_callback_count(0);
 
     /* Cython callbacks */
@@ -389,17 +388,11 @@ namespace search
     }
 
 
-    static constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
-
     /*
      * NOTE: uses top half of MoveMaker's moves buffers to minimize memory allocations.
      */
-    static int do_exchanges(
-        const State&    state,
-        Bitboard        mask,
-        score_t         gain = 0,
-        int             ply = FIRST_EXCHANGE_PLY,
-        bool            debug = false)
+    template<bool Debug>
+    int do_exchanges(const State& state, Bitboard mask, score_t gain, int ply)
     {
         ASSERT(popcount(mask) == 1);
         ASSERT(gain >= 0);
@@ -424,7 +417,7 @@ namespace search
                 return lhs._score < rhs._score;
             });
 
-        if (debug)
+        if constexpr(Debug)
         {
             std::ostringstream out;
             out << "\tdo_exchanges (" << Context::_epd(state) << ") gain=" << gain << " ";
@@ -449,7 +442,7 @@ namespace search
 
             ++moves_count;
 
-            if (debug)
+            if constexpr(Debug)
                 Context::log_message(LogLevel::DEBUG, "\t>>> " + move.uci());
 
             const score_t capturer_value = move._score;
@@ -480,7 +473,7 @@ namespace search
 
                 score = std::max(score, next_state.capture_value - gain - capturer_value);
 
-                if (debug)
+                if constexpr(Debug)
                 {
                     std::ostringstream out;
                     out << "\t<<< " << move.uci() << ": " << next_state.capture_value
@@ -499,15 +492,14 @@ namespace search
             {
                 next_state.castling_rights = 0;  /* castling do not capture */
 
-                other = do_exchanges(
+                other = do_exchanges<Debug>(
                     next_state,
                     mask,
                     next_state.capture_value - gain,
-                    ply + 1,
-                    debug);
+                    ply + 1);
             }
             /*****************************************************************/
-            if (debug)
+            if constexpr(Debug)
             {
                 std::ostringstream out;
                 out << "\t<<< " << move.uci() << ": "
@@ -529,7 +521,7 @@ namespace search
         }
     #endif /* EXCHANGES_DETECT_CHECKMATE */
 
-        if (debug)
+        if constexpr(Debug)
         {
             std::ostringstream out;
             out << "\tscore: " << score;
@@ -537,36 +529,6 @@ namespace search
         }
 
         return score;
-    }
-
-
-    /*
-     * Evaluate same square exchanges
-     */
-    score_t eval_exchanges(const Move& move, bool approximate)
-    {
-        score_t val = 0;
-
-        if (move)
-        {
-            ASSERT(move._state);
-            ASSERT(move._state->piece_type_at(move.to_square()));
-
-            if (approximate)
-            {
-                /*
-                 * Approximate without "playing" the moves.
-                 */
-                val = estimate_static_exchanges(*move._state, move._state->turn, move.to_square());
-            }
-            else
-            {
-                auto mask = BB_SQUARES[move.to_square()];
-                val = do_exchanges(*move._state, mask);
-            }
-        }
-
-        return val;
     }
 
 
@@ -610,7 +572,7 @@ namespace search
             return lhs._score > rhs._score;
         });
 
-        if (DEBUG_CAPTURES)
+        if constexpr(DEBUG_CAPTURES)
         {
             std::ostringstream out;
             out << "do_captures (" << Context::_epd(state) << ") ";
@@ -635,7 +597,7 @@ namespace search
             /* victim values less than what we got so far? bail */
             if (move._score <= score)
             {
-                if (DEBUG_CAPTURES)
+                if constexpr(DEBUG_CAPTURES)
                 {
                     std::ostringstream out;
                     out << "\t" << move.uci() << " " << move._score << " <= " << score;
@@ -646,7 +608,7 @@ namespace search
             }
         #endif /* !EXCHANGES_DETECT_CHECKMATE */
 
-            if (DEBUG_CAPTURES)
+            if constexpr(DEBUG_CAPTURES)
                 Context::log_message(LogLevel::DEBUG, "*** " + move.uci());
 
             /****************************************************************/
@@ -671,7 +633,7 @@ namespace search
                 if (next_state.is_checkmate())
                     return CHECKMATE - (ply + 1 - FIRST_EXCHANGE_PLY);
 
-                if (DEBUG_CAPTURES)
+                if constexpr(DEBUG_CAPTURES)
                     Context::log_message(
                         LogLevel::DEBUG,
                         move.uci() + ": skip exchanges: " + std::to_string(gain));
@@ -687,17 +649,16 @@ namespace search
             /* "play through" same square exchanges                         */
             next_state.castling_rights = 0; /* castling moves can't capture */
 
-            const auto other = do_exchanges(
+            const auto other = do_exchanges<DEBUG_CAPTURES>(
                 next_state,
                 BB_SQUARES[move.to_square()],
                 next_state.capture_value,
-                ply + 1,
-                DEBUG_CAPTURES);
+                ply + 1);
             /****************************************************************/
 
             if (other < MATE_LOW)
             {
-                if (DEBUG_CAPTURES)
+                if constexpr(DEBUG_CAPTURES)
                     Context::log_message(LogLevel::DEBUG, move.uci() + ": checkmate");
 
                 return -other;
@@ -707,7 +668,7 @@ namespace search
             if (value > score)
                 score = value;
 
-            if (DEBUG_CAPTURES)
+            if constexpr(DEBUG_CAPTURES)
             {
                 std::ostringstream out;
                 out << "\t" << move.uci() << ": " << value << " ("
@@ -724,7 +685,7 @@ namespace search
 
     static INLINE score_t eval_captures(Context& ctxt)
     {
-        if (DEBUG_CAPTURES)
+        if constexpr(DEBUG_CAPTURES)
             ctxt.log_message(LogLevel::DEBUG, "eval_captures");
 
         auto state = ctxt._state;
@@ -740,7 +701,7 @@ namespace search
 
         ASSERT(result >= 0);
 
-        if (DEBUG_CAPTURES)
+        if constexpr(DEBUG_CAPTURES)
             ctxt.log_message(LogLevel::DEBUG, "captures: " + std::to_string(result));
 
         ASSERT(ctxt._tt_entry._capt == SCORE_MIN || ctxt._tt_entry._capt == result);
@@ -1617,10 +1578,10 @@ namespace search
 
     int64_t Context::check_time_and_update_nps()
     {
-        std::unique_lock<std::mutex> lock(_mutex);
-
-        auto now = std::chrono::steady_clock::now();
-        auto millisec = duration_cast<std::chrono::milliseconds>(now - _time_start).count();
+        const auto now = std::chrono::steady_clock::now();
+        const auto millisec = duration_cast<std::chrono::milliseconds>(
+            now - _time_start.load()
+        ).count();
 
         /*
          * Update nodes-per-second for the this thread.
@@ -1631,7 +1592,10 @@ namespace search
             _tt->set_nps(_tt->nodes());
 
         if (_time_limit >= 0 && millisec >= _time_limit)
+        {
             _cancel = true;
+            return -1;
+        }
 
         return millisec;
     }
@@ -1643,8 +1607,6 @@ namespace search
          * Time limits can be updated from a different
          * thread, to support pondering in the background.
          */
-        std::unique_lock<std::mutex> lock(_mutex);
-
         _cancel = false;
         _time_start = std::chrono::steady_clock::now();
         _time_limit = time_limit;
@@ -1716,8 +1678,7 @@ namespace search
             if (count >= nanosec)
                 break;
 
-            check_time_and_update_nps();
-            if (is_cancelled())
+            if (check_time_and_update_nps() < 0)
                 break;
         }
 #endif /* _POSIX_VERSION */

@@ -82,6 +82,7 @@ Config::Namespace Config::_namespace = {
   #define DECLARE_ALIAS(n, a, v, v_min, v_max) int n(v); Config p_##n(_TOSTR(a), &n, v_min, v_max);
 #endif /* CONFIG_IMPL */
 
+#define DECLARE_CONST(n, v, v_min, v_max) static constexpr int n = v;
 #define DECLARE_PARAM(n, v, v_min, v_max) DECLARE_ALIAS(n, n, v, v_min, v_max)
 
 #if TUNING_ENABLED
@@ -90,7 +91,8 @@ Config::Namespace Config::_namespace = {
  /*
   * tuning disabled: params become compile-time constants
   */
-  #define DECLARE_VALUE(n, v, v_min, v_max) static constexpr int n = v;
+  #define DECLARE_VALUE DECLARE_CONST
+
 #endif /* TUNING_ENABLED */
 
 
@@ -108,15 +110,15 @@ static constexpr int HASH_MIN = 16; /* MB */
 
 GROUP(Settings)
 DECLARE_VALUE(  ASPIRATION_WINDOW,                    1,    0,       1)
-DECLARE_VALUE(  DEBUG_CAPTURES,                       0,    0,       1)
-DECLARE_VALUE(  DEBUG_MATERIAL,                       0,    0,       1)
+DECLARE_CONST(  DEBUG_CAPTURES,                       0,    0,       1)
+DECLARE_CONST(  DEBUG_MATERIAL,                       0,    0,       1)
 DECLARE_PARAM(  EVAL_FUZZ,                            0,    0,     100)
 DECLARE_VALUE(  FIFTY_MOVES_RULE,                     1,    0,       1)
 DECLARE_VALUE(  FUTILITY_PRUNING,                     1,    0,       1)
 DECLARE_VALUE(  MANAGE_TIME,                          1,    0,       1)
 DECLARE_VALUE(  MULTICUT,                             1,    0,       1)
 DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
-DECLARE_VALUE(  STATIC_EXCHANGES,                     0,    0,       1)
+DECLARE_CONST(  STATIC_EXCHANGES,                     0,    0,       1)
 
 GROUP(Search)
 DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  635,    0,    2000)

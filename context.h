@@ -32,6 +32,10 @@
 #include "search.h"
 #include "utility.h"
 
+
+constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
+
+
 /* Configuration API */
 struct Param { int val = 0; int min_val; int max_val; std::string group; };
 
@@ -50,6 +54,10 @@ namespace search
 
     using ContextPtr = intrusive_ptr<struct Context>;
     using HistoryPtr = intrusive_ptr<struct History>;
+
+    using atomic_bool = std::atomic<bool>;
+    using atomic_int = std::atomic<int>;
+    using atomic_time = std::atomic<time>; /* sic */
 
 
     enum Algorithm : int
@@ -378,12 +386,11 @@ namespace search
         TranspositionTable* _tt = nullptr;
 
         /* search can be cancelled from any thread */
-        static std::atomic<bool> _cancel;
+        static atomic_bool  _cancel;
 
-        static std::mutex   _mutex; /* update time limit from another thread */
         static asize_t      _callback_count;
-        static int          _time_limit; /* milliseconds */
-        static time         _time_start;
+        static atomic_int   _time_limit; /* milliseconds */
+        static atomic_time  _time_start;
     };
 
 
@@ -397,7 +404,40 @@ namespace search
     }
 
 
-    score_t eval_exchanges(const Move& move, bool approximate);
+    template<bool Debug = false>
+    int do_exchanges(const State&, Bitboard, score_t = 0, int = FIRST_EXCHANGE_PLY);
+
+    /*
+     * Evaluate same square exchanges
+     */
+    template<bool StaticExchangeEvaluation>
+    score_t eval_exchanges(const Move& move)
+    {
+        score_t val = 0;
+
+        if (move)
+        {
+            ASSERT(move._state);
+            ASSERT(move._state->piece_type_at(move.to_square()));
+
+            if constexpr(StaticExchangeEvaluation)
+            {
+                /*
+                 * Approximate without playing the moves.
+                 */
+                val = estimate_static_exchanges(*move._state, move._state->turn, move.to_square());
+            }
+            else
+            {
+                auto mask = chess::BB_SQUARES[move.to_square()];
+                val = do_exchanges<DEBUG_CAPTURES != 0>(*move._state, mask);
+            }
+        }
+
+        return val;
+    }
+
+
 
     /* Evaluate material plus piece-squares from the point of view
      * of the side that just moved. This is different from the other
@@ -828,16 +868,16 @@ namespace search
         {
             _callback_count = 0; /* reset */
 
-            auto millisec = check_time_and_update_nps();
+            const auto millisec = check_time_and_update_nps();
 
-            if (is_cancelled()) /* time is up? */
+            if (millisec < 0) /* time is up? */
                 return false;
 
             if (_on_next)
                 cython_wrapper::call(_on_next, _engine, millisec);
         }
 
-        return !is_cancelled();
+        return !is_cancelled(); /* check again in case _on_next called cancel() */
     }
 
 
@@ -1009,7 +1049,7 @@ namespace search
              */
             auto capture_gain = move._state->capture_value;
 
-            const auto other = eval_exchanges(move, true /* STATIC_EXCHANGES */);
+            const auto other = eval_exchanges<STATIC_EXCHANGES>(move);
 
             if (other < MATE_LOW)
             {
