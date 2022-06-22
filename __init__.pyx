@@ -36,6 +36,7 @@ from cython.operator cimport address, dereference as deref
 
 from libcpp cimport bool
 from libcpp.map cimport map
+from libcpp.memory cimport unique_ptr
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libc cimport stdint
@@ -403,7 +404,7 @@ cdef extern from 'context.h' namespace 'search':
 
 
     ctypedef intrusive_ptr[Context] ContextPtr
-    ctypedef intrusive_ptr[History] HistoryPtr
+    ctypedef unique_ptr[History] HistoryPtr
 
 
     cdef cppclass Context:
@@ -560,7 +561,7 @@ cdef class NodeContext:
         deref(self._ctxt)._print_state = <void (*)(const State&)> print_state
         deref(self._ctxt)._vmem_avail = <size_t (*)()> vmem_avail
 
-        deref(self._ctxt)._history = HistoryPtr(new History())
+        deref(self._ctxt)._history.reset(new History())
         self.sync_to_board(board)
 
 

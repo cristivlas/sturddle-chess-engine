@@ -23,7 +23,7 @@
 #include <atomic>
 #include <chrono>
 #include <map>
-#include <mutex>
+#include <memory>
 #include <string>
 #include <unordered_set> /* unordered_multiset */
 #include "Python.h"
@@ -53,7 +53,7 @@ namespace search
     using Square = chess::Square;
 
     using ContextPtr = intrusive_ptr<struct Context>;
-    using HistoryPtr = intrusive_ptr<struct History>;
+    using HistoryPtr = std::unique_ptr<struct History>;
 
     using atomic_bool = std::atomic<bool>;
     using atomic_int = std::atomic<int>;
@@ -69,7 +69,7 @@ namespace search
 
 
     /* For detecting repeated positions */
-    struct History : public RefCounted<History>
+    struct History
     {
         History() = default;
 
@@ -235,8 +235,6 @@ namespace search
         int         _mate_detected = 0;
         int         _pruned_count = 0;
 
-        HistoryPtr  _history;
-
         Move        _cutoff_move;   /* from current state to the next */
         Move        _move;          /* from parent to current state */
         BaseMove    _prev;          /* best move from previous iteration */
@@ -369,6 +367,8 @@ namespace search
         static void         (*_report)(PyObject*, std::vector<ContextPtr>&);
         static size_t       (*_vmem_avail)();
 
+        static HistoryPtr   _history;
+
     private:
         const Move* get_next_move(score_t);
         bool has_cycle(const State&) const;
@@ -392,29 +392,6 @@ namespace search
         static atomic_int   _time_limit; /* milliseconds */
         static atomic_time  _time_start;
     };
-
-
-#if RECYCLE_CONTEXTS
-    static THREAD_LOCAL Free* free_list = nullptr;
-
-    INLINE void* Context::operator new(size_t size)
-    {
-        if (auto head = free_list)
-        {
-            free_list = head->_next;
-            return head;
-        }
-        return ::operator new(size);
-    }
-
-
-    INLINE void Context::operator delete(void* ptr, size_t) noexcept
-    {
-        auto ctxt = static_cast<Context*>(ptr);
-        ctxt->_next = free_list;
-        free_list = ctxt;
-    }
-#endif /* RECYCLE_CONTEXTS */
 
 
     /*
@@ -808,7 +785,6 @@ namespace search
         ctxt->_move_maker.set_ply(ctxt->_ply);
         ctxt->_is_retry = retry;
         ctxt->_is_singleton = !ctxt->is_null_move() && _move_maker.is_singleton(*this);
-        ctxt->_history = _history;
         ctxt->_futility_pruning = _futility_pruning && FUTILITY_PRUNING;
         ctxt->_multicut_allowed = _multicut_allowed && MULTICUT;
 

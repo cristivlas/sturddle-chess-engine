@@ -150,6 +150,8 @@ namespace search
     atomic_time Context::_time_start;
     size_t Context::_callback_count(0);
 
+    HistoryPtr Context::_history;
+
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
 
@@ -164,6 +166,29 @@ namespace search
     void (*Context::_report)(PyObject*, std::vector<ContextPtr>&) = nullptr;
 
     size_t (*Context::_vmem_avail)() = nullptr;
+
+
+#if RECYCLE_CONTEXTS
+    static THREAD_LOCAL Free* free_list = nullptr;
+
+    void* Context::operator new(size_t size)
+    {
+        if (auto head = free_list)
+        {
+            free_list = head->_next;
+            return head;
+        }
+        return ::operator new(size);
+    }
+
+
+    void Context::operator delete(void* ptr, size_t) noexcept
+    {
+        auto ctxt = static_cast<Context*>(ptr);
+        ctxt->_next = free_list;
+        free_list = ctxt;
+    }
+#endif /* RECYCLE_CONTEXTS */
 
 
     /* static */ void Context::init()
@@ -197,14 +222,6 @@ namespace search
         ctxt->_alpha = _alpha;
         ctxt->_beta = _beta;
         ctxt->_score = _score;
-
-        /*
-         * ply != 0 implies use case 2), ok to share history within same thread;
-         * ply == 0 implies cloning at root for use on SMP threads, not safe to
-         * share with non-atomic refcount.
-         */
-        ctxt->_history = ply ? _history : HistoryPtr(new History(*_history));
-
         ctxt->_max_depth = _max_depth;
         ctxt->_parent = _parent;
         ctxt->_ply = ply;
@@ -217,6 +234,7 @@ namespace search
         ctxt->_tid = _tid;
         ctxt->_move_maker.set_ply(ply);
         ctxt->_counter_move = _counter_move;
+
         return ctxt;
     }
 
