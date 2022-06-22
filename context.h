@@ -766,6 +766,7 @@ namespace search
 
             state().clone_into(ctxt->_statebuf);
             ctxt->_state = &ctxt->_statebuf;
+            ctxt->_state->_check = { 0, 0 };
             flip(ctxt->_state->turn);
             ctxt->_is_null_move = true;
         }

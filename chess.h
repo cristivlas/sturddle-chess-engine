@@ -1000,6 +1000,7 @@ namespace chess
             return WEIGHT[piece_type];
         }
 
+        mutable std::array<int, 2> _check = {-1, -1};
         mutable uint64_t _hash = 0;
 
     private:
@@ -1013,8 +1014,6 @@ namespace chess
         void set_piece_at(Square, PieceType, Color, PieceType promotion_type = PieceType::NONE);
 
         static bool is_endgame(const State&);
-
-        mutable std::array<int, 2> _check = {-1, -1};
 
         enum : int8_t
         {

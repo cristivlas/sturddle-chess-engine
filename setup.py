@@ -52,6 +52,14 @@ else:
         args.append('-Wno-deprecated-declarations')
 
 
-extensions = [Extension('chess_engine', sources=sourcefiles, extra_compile_args=args + inc_dirs, extra_link_args=link)]
+extensions = [
+    Extension(
+        'chess_engine',
+        sources=sourcefiles,
+        extra_compile_args=args + inc_dirs,
+        extra_link_args=link
+    )
+]
 
 setup(ext_modules=cythonize(extensions))
+
