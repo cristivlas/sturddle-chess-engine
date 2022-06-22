@@ -444,6 +444,8 @@ cdef extern from 'context.h' namespace 'search':
 
         bool            is_repeated() const
 
+        int             rewind(int where, bool reorder)
+
         @staticmethod
         void            set_time_limit_ms(int millisec) nogil
 
@@ -457,7 +459,6 @@ cdef extern from 'context.h' namespace 'search':
         # perft-only
         ContextPtr      next(bool, bool, score_t)
 
-        int             rewind(int where, bool reorder)
 
 
 cpdef board_from_state(state: BoardState):
@@ -683,7 +684,7 @@ cdef class NodeContext:
 
 
     # perft3
-    def has_next(self):
+    cdef has_next(self):
         return deref(self._ctxt).next(False, False, 0).get() != NULL
 
 

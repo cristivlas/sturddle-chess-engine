@@ -47,7 +47,6 @@
 
 #include <cmath>
 
-using asize_t = std::atomic<size_t>;
 using score_t = int32_t;
 
 
@@ -108,7 +107,7 @@ using score_t = int32_t;
   #else
     #define THREAD_LOCAL thread_local
   #endif
-  using count_t = asize_t;
+  using count_t = std::atomic<size_t>;
 #else
   #define THREAD_LOCAL
   using count_t = size_t;

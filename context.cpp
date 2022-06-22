@@ -148,7 +148,7 @@ namespace search
 
     atomic_int  Context::_time_limit = -1; /* milliseconds */
     atomic_time Context::_time_start;
-    asize_t Context::_callback_count(0);
+    size_t Context::_callback_count(0);
 
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
@@ -164,28 +164,6 @@ namespace search
     void (*Context::_report)(PyObject*, std::vector<ContextPtr>&) = nullptr;
 
     size_t (*Context::_vmem_avail)() = nullptr;
-
-
-#if RECYCLE_CONTEXTS
-    static THREAD_LOCAL Free* free_list = nullptr;
-
-    void* Context::operator new(size_t size)
-    {
-        if (auto head = free_list)
-        {
-            free_list = head->_next;
-            return head;
-        }
-        return ::operator new(size);
-    }
-
-    void Context::operator delete(void* ptr, size_t) noexcept
-    {
-        auto ctxt = static_cast<Context*>(ptr);
-        ctxt->_next = free_list;
-        free_list = ctxt;
-    }
-#endif /* RECYCLE_CONTEXTS */
 
 
     /* static */ void Context::init()

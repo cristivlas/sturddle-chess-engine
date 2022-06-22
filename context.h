@@ -388,10 +388,33 @@ namespace search
         /* search can be cancelled from any thread */
         static atomic_bool  _cancel;
 
-        static asize_t      _callback_count;
+        static size_t       _callback_count;
         static atomic_int   _time_limit; /* milliseconds */
         static atomic_time  _time_start;
     };
+
+
+#if RECYCLE_CONTEXTS
+    static THREAD_LOCAL Free* free_list = nullptr;
+
+    INLINE void* Context::operator new(size_t size)
+    {
+        if (auto head = free_list)
+        {
+            free_list = head->_next;
+            return head;
+        }
+        return ::operator new(size);
+    }
+
+
+    INLINE void Context::operator delete(void* ptr, size_t) noexcept
+    {
+        auto ctxt = static_cast<Context*>(ptr);
+        ctxt->_next = free_list;
+        free_list = ctxt;
+    }
+#endif /* RECYCLE_CONTEXTS */
 
 
     /*
@@ -728,15 +751,19 @@ namespace search
         const bool retry = _retry_next;
         _retry_next = false;
 
-        if (!first_move && !_excluded && !on_next() && !is_check())
+        if (!first_move && !_excluded && !on_next() /* && !is_check() */)
             return ContextPtr();
 
         /* null move must be tried before actual moves */
         ASSERT(!null_move || next_move_index() == 0);
 
-        const auto move = null_move ? nullptr : get_next_move(futility);
-        if (!move && !null_move)
-            return ContextPtr();
+        const Move* move;
+
+        if (null_move)
+            move = nullptr;
+        else
+            if ((move = get_next_move(futility)) == nullptr)
+                return ContextPtr();
 
         ASSERT(null_move || move->_state);
         ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
@@ -791,7 +818,6 @@ namespace search
         ctxt->_tt = _tt;
 
         ctxt->_alpha = -_beta;
-        ctxt->_beta = -_alpha;
 
         if (ctxt->is_null_move())
         {
@@ -821,7 +847,7 @@ namespace search
         }
         else
         {
-            ASSERT(move);
+            ctxt->_beta = -_alpha;
 
             if (ctxt->is_pvs_ok())
             {
@@ -838,7 +864,7 @@ namespace search
             /*
              * https://en.wikipedia.org/wiki/Fifty-move_rule
              */
-            if (FIFTY_MOVES_RULE)
+            if constexpr(FIFTY_MOVES_RULE)
             {
                 if (ctxt->is_capture())
                     ctxt->_fifty = 0;
