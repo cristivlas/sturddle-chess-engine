@@ -496,7 +496,7 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
     /* consistency checks */
     ASSERT(null_move_ctxt.is_null_move());
     ASSERT(ctxt.next_move_index() == 0);
-    ASSERT(!ctxt.best());
+    ASSERT(!ctxt._best_move);
     ASSERT(ctxt.turn() != null_move_ctxt.turn());
     ASSERT(&ctxt == null_move_ctxt._parent);
 
@@ -957,7 +957,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 return move_score;
             }
         }
-        ASSERT(ctxt._score <= ctxt._alpha || ctxt.best());
+        ASSERT(ctxt._score <= ctxt._alpha || ctxt._best_move);
 
         if (!ctxt.is_cancelled())
         {
@@ -1155,7 +1155,7 @@ public:
 
             _tables[i]._ctxt = t_ctxt;
 
-            threads->push_task([t_ctxt, score]() mutable {
+            threads->push_task([&t_ctxt, score]() mutable {
                 try
                 {
                     search_iteration(t_ctxt, *t_ctxt.get_tt(), score);
@@ -1179,8 +1179,12 @@ public:
         if (Context::_report)
         {
             std::vector<const Context*> ctxts;
-            for (const auto& table : _tables)
+            for (auto& table : _tables)
+            {
+                // ASSERT(table._ctxt.get_tt() == &table._tt);
                 ctxts.emplace_back(&table._ctxt);
+                table._ctxt.set_tt(&table._tt);
+            }
 
             cython_wrapper::call(Context::_report, Context::_engine, ctxts);
         }

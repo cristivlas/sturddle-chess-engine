@@ -122,7 +122,7 @@ using score_t = int32_t;
 #define MOBILITY_TUNING_ENABLED             false
 
 /* Export parameters to Python scripts? */
-#define TUNING_ENABLED                      false
+#define TUNING_ENABLED                      true
 
 /* if false, use piece-type/to-square tables */
 #define USE_BUTTERFLY_TABLES                false
