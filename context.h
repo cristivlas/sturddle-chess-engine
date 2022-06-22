@@ -1168,9 +1168,8 @@ namespace search
             return false;
         }
 
-        if (_group_quiet_moves && is_standing_pat(ctxt))
+        if (_group_quiet_moves && move._state->capture_value && is_standing_pat(ctxt))
         {
-            ASSERT(move._state->capture_value);
             _have_quiet_moves = true;
             move._group = MoveOrder::QUIET_MOVES;
             return false;

@@ -77,9 +77,10 @@ namespace
             _hash_funcs.emplace(hf, _hash_funcs.size());
             _hash_funcs_index.emplace(_hash_funcs[hf], hf);
             ++_hash_freq[hf];
+            _data_size += data.size();
         }
 
-        void write(std::ostream& os) const
+        void write(std::ostream& os)
         {
             os << "/* Auto-generated attack tables */\n";
             os << "#pragma once\n\n";
@@ -155,6 +156,8 @@ namespace
             }
 
             os << "} /* namespace chess */\n";
+
+            std::clog << "\nTotal tables = " << _data_size / 1024 << " KiB\n";
         }
 
     private:
@@ -188,7 +191,7 @@ namespace
             return os.str();
         }
 
-        void generate_unified_hash_function(std::ostream& os) const
+        void generate_unified_hash_function(std::ostream& os)
         {
             os << "/************************************************************/\n";
             os << "/* Unified hash function. */\n";
@@ -213,6 +216,12 @@ namespace
                 [this](const std::string& lhs, const std::string& rhs) -> bool{
                     return _hash_freq.at(lhs) > _hash_freq.at(rhs);
                 });
+
+            /* reindex */
+            _hash_funcs.clear();
+            for (size_t i = 0; i != hfuncs.size(); ++i)
+                _hash_funcs.emplace(hfuncs[i], i);
+
             for (const auto& hf : hfuncs)
             {
                 os << "    case " << _hash_funcs.at(hf) << ": /* usage: " << _hash_freq.at(hf) << " */\n";
@@ -229,6 +238,7 @@ namespace
         std::unordered_map<std::string, int> _hash_funcs;
         std::map<int, std::string> _hash_funcs_index;
         std::unordered_map<std::string, int> _hash_freq;
+        size_t _data_size = 0;
 
         std::set<std::string> _templates; /* hasher templates */
         std::unordered_map<std::string, Group> _groups;
