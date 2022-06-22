@@ -498,7 +498,7 @@ namespace search
 
     INLINE bool is_quiet(const State& state, const Context* ctxt = nullptr)
     {
-    #if 1
+    #if 0
         return state.promotion != chess::PieceType::QUEEN /* ignore under-promotions */
     #else
         return state.promotion == chess::PieceType::NONE
@@ -1049,18 +1049,22 @@ namespace search
              */
             auto capture_gain = move._state->capture_value;
 
-            const auto other = eval_exchanges<STATIC_EXCHANGES>(move);
-
-            if (other < MATE_LOW)
+            auto other = ctxt.state().weight(ctxt.state().piece_type_at(move.from_square()));
+            if (other >= capture_gain)
             {
-                move._score = -other;
-                move._group = MoveOrder::WINNING_CAPTURES;
+                other = eval_exchanges<true>(move);
 
-                if (DEBUG_CAPTURES)
-                    ctxt.log_message(
-                        LogLevel::DEBUG,
-                        move.uci() + ": " + std::to_string(move._score) + " " + ctxt.epd());
-                return;
+                if (EXCHANGES_DETECT_CHECKMATE && other < MATE_LOW)
+                {
+                    move._score = -other;
+                    move._group = MoveOrder::WINNING_CAPTURES;
+
+                    if (DEBUG_CAPTURES)
+                        ctxt.log_message(
+                            LogLevel::DEBUG,
+                            move.uci() + ": " + std::to_string(move._score) + " " + ctxt.epd());
+                    return;
+                }
             }
             capture_gain -= other;
 
@@ -1115,7 +1119,10 @@ namespace search
          * Prune (before verifying move legality, thus saving is_check() calls).
          * Late-move prune before making the move.
          */
-        if (ctxt.depth() > 0 && _current >= LMP[ctxt.depth()] && ctxt.can_forward_prune())
+        if (_phase > 2
+            && ctxt.depth() > 0
+            && _current >= LMP[ctxt.depth()]
+            && ctxt.can_forward_prune())
         {
             _have_pruned_moves = true;
             ++ctxt._pruned_count;
@@ -1124,6 +1131,14 @@ namespace search
         }
 
         move._state->apply_move(move);
+
+        if (_group_quiet_moves && is_quiet(*move._state))
+        {
+            _have_quiet_moves = true;
+            move._group = MoveOrder::QUIET_MOVES;
+            return false;
+        }
+
         incremental_update(move, ctxt);
 
         /* Futility-prune after making the move (state is needed for simple eval). */
@@ -1153,8 +1168,9 @@ namespace search
             return false;
         }
 
-        if (_group_quiet_moves && (is_quiet(*move._state) || is_standing_pat(ctxt)))
+        if (_group_quiet_moves && is_standing_pat(ctxt))
         {
+            ASSERT(move._state->capture_value);
             _have_quiet_moves = true;
             move._group = MoveOrder::QUIET_MOVES;
             return false;

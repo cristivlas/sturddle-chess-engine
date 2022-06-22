@@ -104,6 +104,7 @@ Config::Namespace Config::_namespace = {
 
 static constexpr int HASH_MIN = 16; /* MB */
 
+/* Min-max range is useful when exposing params via UCI (see sturddle.py) */
 /****************************************************************************
  *              NAME                                VALUE  MIN      MAX
  ****************************************************************************/
@@ -133,7 +134,6 @@ DECLARE_VALUE(  NULL_MOVE_MARGIN,                   475,    0,    1000)
 DECLARE_VALUE(  NULL_MOVE_MIN_VERIFICATION_DEPTH,    14,    0,     100)
 DECLARE_VALUE(  SINGULAR_MARGIN,                     25,    0,     100)
 
-/* Move ordering */
 GROUP(MoveOrdering)
 DECLARE_VALUE(  COUNTER_MOVE_BONUS,                3412,    0,    5000)
 DECLARE_VALUE(  COUNTER_MOVE_MIN_DEPTH,               3,    0,      20)
@@ -144,7 +144,6 @@ DECLARE_VALUE(  HISTORY_HIGH,                        87,    0,     100)
 DECLARE_VALUE(  HISTORY_LOW,                         61,    0,     100)
 DECLARE_VALUE(  HISTORY_MIN_DEPTH,                   11,    0,     100)
 
-/* Tactical evaluation */
 GROUP(Eval)
 DECLARE_VALUE(  BISHOP_PAIR,                         68,    0,     100)
 DECLARE_VALUE(  CASTLING_RIGHTS_BONUS,              108,    0,     300)
@@ -164,8 +163,8 @@ DECLARE_VALUE(  ENDGAME_ISOLATED_PAWNS,             -15, -100,       0)
 DECLARE_VALUE(  ENDGAME_PASSED_FORMATION,            32,    0,     250)
 DECLARE_VALUE(  ENDGAME_PAWN_MAJORITY,               13,    0,     250)
 DECLARE_VALUE(  ENDGAME_THREATS,                     29,    0,     250)
-DECLARE_VALUE(  ENDGAME_UNBLOCKED_PASSED_6,         110,    0,     250)
-DECLARE_VALUE(  ENDGAME_UNBLOCKED_PASSED_7,         230,    0,     250)
+DECLARE_VALUE(  ENDGAME_UNBLOCKED_PASSED_6,         145,    0,     250)
+DECLARE_VALUE(  ENDGAME_UNBLOCKED_PASSED_7,         295,    0,     500)
 
 DECLARE_VALUE(  MIDGAME_CONNECTED_ROOKS,             25,    0,     100)
 DECLARE_VALUE(  MIDGAME_DEFENDED_PASSED,             63,    0,     100)
@@ -177,8 +176,8 @@ DECLARE_VALUE(  MIDGAME_OPEN_FILE,                   30,    0,     250)
 DECLARE_VALUE(  MIDGAME_PASSED_FORMATION,            76,    0,     250)
 DECLARE_VALUE(  MIDGAME_PAWN_MAJORITY,               48,    0,     250)
 DECLARE_VALUE(  MIDGAME_THREATS,                     67,    0,     250)
-DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_6,         100,    0,     250)
-DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_7,         155,    0,     250)
+DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_6,         135,    0,     250)
+DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_7,         215,    0,     250)
 
 #undef DECLARE_ALIAS
 #undef DECLARE_PARAM

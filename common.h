@@ -135,7 +135,7 @@ using score_t = int32_t;
  * Use this magic_bits implementation instead of attacks.h:
  * https://github.com/goutham/magic-bits
  */
-#define USE_MAGIC_BITS                      true
+#define USE_MAGIC_BITS                      false
 
 /* Half-baked hack */
 #define USE_MOVES_CACHE                     false

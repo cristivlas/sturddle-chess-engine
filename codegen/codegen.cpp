@@ -24,8 +24,6 @@
 #include "hash_builder.h"
 
 using namespace chess;
-using namespace perfect_hash;
-
 
 static bool build_attack_tables(
     const char*             name,
