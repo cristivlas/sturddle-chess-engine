@@ -58,17 +58,6 @@ ctypedef stdint.int64_t int64_t
 ctypedef stdint.uint64_t uint64_t
 
 
-cdef extern from 'intrusive.h':
-    cdef cppclass intrusive_ptr[T]:
-        intrusive_ptr()
-        intrusive_ptr(T*)
-        T& operator*()
-        T* get() const
-        bool operator bool()
-        bool operator !()
-        void reset(T*)
-
-
 # ostream placeholder
 cdef extern from '<iostream>' namespace 'std':
     cdef cppclass ostream:
@@ -125,6 +114,7 @@ cdef extern from 'chess.h' namespace 'chess':
 
 
     cdef cppclass BaseMove:
+        BaseMove()
         Square      from_square() const
         Square      to_square() const
         PieceType   promotion() const
@@ -403,7 +393,6 @@ cdef extern from 'context.h' namespace 'search':
         int     _fifty
 
 
-    ctypedef intrusive_ptr[Context] ContextPtr
     ctypedef unique_ptr[History] HistoryPtr
 
 
@@ -419,26 +408,27 @@ cdef extern from 'context.h' namespace 'search':
         Context*        _parent
         HistoryPtr      _history
         Move            _move
-        Move            _prev
+        BaseMove        _prev
+        BaseMove        _best_move
         PyObject*       _engine
 
         string          (*_epd)(const State&)
         void            (*_log_message)(int, const string&, bool)
-        void            (*_on_iter)(PyObject*, ContextPtr, score_t)
+        void            (*_on_iter)(PyObject*, const Context*, score_t)
         void            (*_on_next)(PyObject*, int64_t)
-        string          (*_pgn)(ContextPtr)
+        string          (*_pgn)(const Context*)
         void            (*_print_state)(const State&)
-        void            (*_report)(PyObject*, vector[ContextPtr]&)
+        void            (*_report)(PyObject*, vector[const Context*]&)
         size_t          (*_vmem_avail)()
 
-        ContextPtr      best() const
-        ContextPtr      first_move()
         int64_t         nanosleep(int) nogil
 
         @staticmethod
         void            cancel() nogil
 
         int64_t         check_time_and_update_nps()
+
+        const Move*     first_valid_move()
 
         @staticmethod
         void            init()
@@ -457,8 +447,7 @@ cdef extern from 'context.h' namespace 'search':
 
         const vector[BaseMove]& get_pv() nogil const
 
-        # perft-only
-        ContextPtr      next(bool, bool, score_t)
+        Context* next(bool, score_t)
 
 
 
@@ -478,11 +467,11 @@ cdef void print_state(const State& state) except* with gil:
     print_board(board_from_cxx_state(state))
 
 
-cdef void report(self, vector[ContextPtr]& ctxts) except* with gil:
+cdef void report(self, vector[const Context*]& ctxts) except* with gil:
     self.report_cb(self, [NodeContext.from_cxx_context(c) for c in ctxts])
 
 
-cdef string pgn(ContextPtr ctxt) except* with gil:
+cdef string pgn(const Context* ctxt) except* with gil:
     cdef NodeContext node = NodeContext.from_cxx_context(ctxt)
     moves = []
     while node.parent:
@@ -541,7 +530,7 @@ cdef size_t vmem_avail():
 # Python wrapper for C++ Context
 # ---------------------------------------------------------------------
 cdef class NodeContext:
-    cdef ContextPtr _ctxt
+    cdef Context _ctxt
     cdef public BoardState state
 
     def __init__(self, board: chess.Board=None):
@@ -549,80 +538,68 @@ cdef class NodeContext:
             self.create_from(board)
 
 
-    def __eq__(self, other: NodeContext):
-        return self._ctxt.get() == other._ctxt.get()
-
-
     cdef void create_from(self, board: chess.Board):
-        self._ctxt = ContextPtr(new Context())
-        deref(self._ctxt)._epd = <string (*)(const State&)> epd
-        deref(self._ctxt)._log_message = <void (*)(int, const string&, bool)> log_message
-        deref(self._ctxt)._pgn = <string (*)(ContextPtr)> pgn
-        deref(self._ctxt)._print_state = <void (*)(const State&)> print_state
-        deref(self._ctxt)._vmem_avail = <size_t (*)()> vmem_avail
+        self._ctxt._epd = <string (*)(const State&)> epd
+        self._ctxt._log_message = <void (*)(int, const string&, bool)> log_message
+        self._ctxt._pgn = <string (*)(const Context*)> pgn
+        self._ctxt._print_state = <void (*)(const State&)> print_state
+        self._ctxt._vmem_avail = <size_t (*)()> vmem_avail
 
-        deref(self._ctxt)._history.reset(new History())
+        self._ctxt._history.reset(new History())
         self.sync_to_board(board)
 
 
     @staticmethod
-    cdef NodeContext from_cxx_context(ContextPtr ctxt):
+    cdef NodeContext from_cxx_context(const Context* ctxt):
         cdef NodeContext node = NodeContext()
         if ctxt:
-            node._ctxt = ctxt
+            node._ctxt = deref(ctxt)
             return node
 
 
+    def best_move(self):
+        cdef const Move* move
+
+        best = py_move(self._ctxt._best_move)
+        if not best:
+            move = self._ctxt.first_valid_move()
+            if move:
+                best = py_move(deref(move))
+
+        return best
+
+
     def board(self):
-        return board_from_cxx_state(deref(self._ctxt.get()._state))
-
-
-    cpdef best(self):
-        cdef ContextPtr best = deref(self._ctxt).best()
-        if best:
-            return NodeContext.from_cxx_context(best)
-
-
-    cdef first_move(self):
-        cdef ContextPtr ctxt = deref(self._ctxt).first_move()
-        if ctxt:
-            logging.debug(f'first_move: {py_move(deref(ctxt)._move)} {deref(self._ctxt)._score}')
-            return NodeContext.from_cxx_context(ctxt)
+        return board_from_cxx_state(deref(self._ctxt._state))
 
 
     cdef int max_depth(self):
-        return deref(self._ctxt)._max_depth
+        return self._ctxt._max_depth
 
 
     @property
     def move(self):
-        return py_move(deref(self._ctxt)._move)
+        return py_move(self._ctxt._move)
 
 
     @property
     def ply(self):
-        return deref(self._ctxt)._ply
+        return self._ctxt._ply
 
 
     def stats(self):
-        return task_stats(deref(deref(self._ctxt).get_tt()))
+        return task_stats(deref(self._ctxt.get_tt()))
 
 
     @property
     def task_id(self):
-        return deref(self._ctxt)._tid
+        return self._ctxt._tid
 
 
     @property
     def turn(self):
-        return deref(self._ctxt)._state.turn
+        return self._ctxt._state.turn
 
-
-    def trace(self, *_):
-        node = self.best()
-        if node and node.move:
-            return [node.move.uci()] + node.trace()
-        return []
 
 
     cdef sync_to_board(self, board: chess.Board):
@@ -639,43 +616,43 @@ cdef class NodeContext:
 
         for move in board.move_stack:
             state.apply(move)
-            deref(deref(self._ctxt)._history).insert(state._state)
+            deref(self._ctxt._history).insert(state._state)
 
-        deref(deref(self._ctxt)._history)._fifty = board.halfmove_clock
+        deref(self._ctxt._history)._fifty = board.halfmove_clock
 
         # setup initial state
         self.state = BoardState(board)
-        deref(self._ctxt)._state = address(self.state._state)
+        self._ctxt._state = address(self.state._state)
 
         if board.move_stack:
-            deref(self._ctxt)._move = cxx_move(board.move_stack[-1])
+            self._ctxt._move = cxx_move(board.move_stack[-1])
 
 
     cpdef get_pv(self):
-        cdef vector[BaseMove] pv = deref(self._ctxt).get_pv()
+        cdef vector[BaseMove] pv = self._ctxt.get_pv()
         return [move.uci().decode() for move in pv][1:]
 
 
     @property
     def alpha(self):
-        return deref(self._ctxt)._alpha
+        return self._ctxt._alpha
 
 
     @property
     def beta(self):
-        return deref(self._ctxt)._beta
+        return self._ctxt._beta
 
 
     @property
     def score(self):
-        return deref(self._ctxt)._score
+        return self._ctxt._score
 
 
-    @property
-    def parent(self):
-        cdef Context* parent = deref(self._ctxt)._parent
-        if parent != NULL:
-            return NodeContext.from_cxx_context(ContextPtr(deref(self._ctxt)._parent))
+    # @property
+    # def parent(self):
+    #     cdef Context* parent = self._ctxt._parent
+    #     if parent != NULL:
+    #         return NodeContext.from_cxx_context(self._ctxt._parent)
 
 
     @property
@@ -686,15 +663,15 @@ cdef class NodeContext:
 
     # perft3
     cdef has_next(self):
-        return deref(self._ctxt).next(False, False, 0).get() != NULL
+        return self._ctxt.next(False, 0) != NULL
 
 
-    def next(self):
-        return NodeContext.from_cxx_context(deref(self._ctxt).next(False, False, 0))
+    # def next(self):
+    #     return NodeContext.from_cxx_context(self._ctxt.next(False, 0)
 
 
     def is_repeated(self):
-        return deref(self._ctxt).is_repeated()
+        return self._ctxt.is_repeated()
 
 
 # ---------------------------------------------------------------------
@@ -788,12 +765,13 @@ cdef class SearchAlgorithm:
     cdef TranspositionTable _table
     cdef __trace
     cdef public fail_high_cb, move_cb, node_cb, prune_cb, alpha_cb, report_cb
-    cdef public NodeContext context, best_find
+    cdef public best_move
+    cdef public NodeContext context # important to use the type here
     cdef public depth, is_cancelled, time_info
 
 
     def __init__(self, board: chess.Board, depth=100, **kwargs):
-        self.best_find = None
+        self.best_move = None
         self.depth = depth
         self.is_cancelled = False
         self.context = NodeContext(board)
@@ -803,22 +781,22 @@ cdef class SearchAlgorithm:
 
     cdef set_context_callbacks(self):
         if self.context:
-            deref(self.context._ctxt)._engine = <PyObject*>self
+            self.context._ctxt._engine = <PyObject*> self
 
             # iteration callback
-            deref(self.context._ctxt)._on_iter = <void (*)(PyObject*, ContextPtr, score_t)> self.on_iter
+            self.context._ctxt._on_iter = <void (*)(PyObject*, const Context*, score_t)> self.on_iter
 
             # search callback (checks timer, calls user-defined callback)
             if self.node_cb:
-                deref(self.context._ctxt)._on_next = <void (*)(PyObject*, int64_t)> self.on_next
+                self.context._ctxt._on_next = <void (*)(PyObject*, int64_t)> self.on_next
             else:
-                deref(self.context._ctxt)._on_next = NULL
+                self.context._ctxt._on_next = NULL
 
             # callback for reporting SMP threads stats
             if self.report_cb:
-                deref(self.context._ctxt)._report = <void (*)(PyObject*, vector[ContextPtr]&)> report
+                self.context._ctxt._report = <void (*)(PyObject*, vector[const Context*]&)> report
             else:
-                deref(self.context._ctxt)._report = NULL
+                self.context._ctxt._report = NULL
 
 
     cpdef cancel(self):
@@ -863,7 +841,7 @@ cdef class SearchAlgorithm:
 
     cpdef int64_t nanosleep(self, int nanosec):
         with nogil:
-            return deref(self.context._ctxt).nanosleep(nanosec)
+            return self.context._ctxt.nanosleep(nanosec)
 
 
     @property
@@ -898,11 +876,12 @@ cdef class SearchAlgorithm:
     #
     # Callback wrappers
     #
-    cdef void on_iter(self, ContextPtr ctxt, score_t score) except* with gil:
+    cdef void on_iter(self, const Context* ctxt, score_t score) except* with gil:
         self.current_depth = self.context.max_depth()
-        self.best_find = NodeContext.from_cxx_context(deref(ctxt).best())
+        self.best_move = py_move(deref(ctxt)._best_move)
+
         if self.iteration_callback:
-            self.iteration_callback(self, NodeContext.from_cxx_context(ctxt), score)
+           self.iteration_callback(self, NodeContext.from_cxx_context(ctxt), score)
 
 
     cdef void on_next(self, int64_t milliseconds) except* with gil:
@@ -915,7 +894,7 @@ cdef class SearchAlgorithm:
 
 
     def search(self, board: chess.Board = None, **kwargs):
-        self.best_find = None
+        self.best_move = None
         self.is_cancelled = False
 
         if board:
@@ -927,9 +906,9 @@ cdef class SearchAlgorithm:
 
         self.set_context_callbacks()
 
-        deref(self.context._ctxt).set_tt(address(self._table))
-        deref(self.context._ctxt)._max_depth = self.depth
-        deref(self.context._ctxt)._prev = Move()
+        self.context._ctxt.set_tt(address(self._table))
+        self.context._ctxt._max_depth = self.depth
+        self.context._ctxt._prev = BaseMove()
 
         # optional: (time, moves) left till next time control
         self.time_info = kwargs.get('time_info', None)
@@ -937,22 +916,14 @@ cdef class SearchAlgorithm:
         # call algorithm-specific implementation (Template Method design pattern)
         score = self._search(self._table)
 
-        best = self.context.best()
-        if best:
-            self.best_find = best
-        elif not self.best_find:
-            # if cannot fail over to best find from prev. iteration, use first move
-            self.best_find = self.context.first_move()
+        self.best_move = self.context.best_move()
 
-        deref(self.context._ctxt).check_time_and_update_nps()
+        self.context._ctxt.check_time_and_update_nps()
 
-        if self.best_find and self.best_find.move:
-            self.__trace = [self.best_find.move.uci()] + self.best_find.trace()
-        else:
-            self.__trace = self.context.trace()
+        # for compatibility with pre v.0.95 scripts
+        self.__trace = self.context.get_pv()
 
-        move = self.best_find.move if self.best_find else None
-        return (move, score)
+        return (self.best_move, score)
 
 
     def trace(self):
@@ -977,18 +948,18 @@ cdef class IterativeDeepening(SearchAlgorithm):
         cdef int max_iter = self.depth + 1
         cdef score_t score = 0
 
-        deref(self.context._ctxt)._algorithm = self.algorithm
-        deref(self.context._ctxt)._max_depth = 1
+        self.context._ctxt._algorithm = self.algorithm
+        self.context._ctxt._max_depth = 1
 
         # Set the time limit (which also starts the clock).
         Context.set_time_limit_ms(self.time_limit_ms)
 
         # Provide additional info so the engine can do its own time management.
         if self.time_info:
-            deref(self.context._ctxt).set_time_info(self.time_info[0], self.time_info[1])
+            self.context._ctxt.set_time_info(self.time_info[0], self.time_info[1])
 
         with nogil:
-            score = iterative(deref(self.context._ctxt), table, max_iter)
+            score = iterative(self.context._ctxt, table, max_iter)
 
         return score
 
@@ -997,9 +968,9 @@ cdef class Negamax(SearchAlgorithm):
     cdef score_t _search(self, TranspositionTable& table):
         cdef score_t score = 0
         assert self.context.max_depth() == self.depth
-        deref(self.context._ctxt)._algorithm = NEGAMAX
+        self.context._ctxt._algorithm = NEGAMAX
         with nogil:
-            score = negamax(deref(self.context._ctxt), table)
+            score = negamax(self.context._ctxt, table)
         return score
 
 
@@ -1007,9 +978,9 @@ cdef class Negascout(SearchAlgorithm):
     cdef score_t _search(self, TranspositionTable& table):
         cdef score_t score = 0
         assert self.context.max_depth() == self.depth
-        deref(self.context._ctxt)._algorithm = NEGASCOUT
+        self.context._ctxt._algorithm = NEGASCOUT
         with nogil:
-            score = negamax(deref(self.context._ctxt), table)
+            score = negamax(self.context._ctxt, table)
         return score
 
 
@@ -1017,9 +988,9 @@ cdef class MTDf(SearchAlgorithm):
     cdef score_t _search(self, TranspositionTable& table):
         cdef score_t score = 0
         assert self.context.max_depth() == self.depth
-        deref(self.context._ctxt)._algorithm = MTDF
+        self.context._ctxt._algorithm = MTDF
         with nogil:
-            score = mtdf(deref(self.context._ctxt), 0, table)
+            score = mtdf(self.context._ctxt, 0, table)
         return score
 
 
@@ -1114,15 +1085,15 @@ def perft2(fen, repeat=1):
 def perft3(fen, repeat=1):
     cdef TranspositionTable table
     node = NodeContext(chess.Board(fen=fen))
-    deref(node._ctxt).set_tt(address(table))
+    node._ctxt.set_tt(address(table))
     count = 0
     start = time.perf_counter()
 
     for i in range(0, repeat):
-        deref(node._ctxt)._max_depth = i % 100
+        node._ctxt._max_depth = i % 100
         while node.has_next():
             count += 1
-        deref(node._ctxt).rewind(0, True)
+        node._ctxt.rewind(0, True)
 
     return count, time.perf_counter() - start
 

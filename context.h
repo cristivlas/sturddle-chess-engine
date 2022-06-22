@@ -28,7 +28,6 @@
 #include <unordered_set> /* unordered_multiset */
 #include "Python.h"
 #include "config.h"
-#include "intrusive.h"
 #include "search.h"
 #include "utility.h"
 
@@ -52,7 +51,6 @@ namespace search
     using Color = chess::Color;
     using Square = chess::Square;
 
-    using ContextPtr = intrusive_ptr<struct Context>;
     using HistoryPtr = std::unique_ptr<struct History>;
 
     using atomic_bool = std::atomic<bool>;
@@ -141,8 +139,8 @@ namespace search
             return _states[_ply];
         }
 
-        MoveMaker(const MoveMaker&) = delete;
-        MoveMaker& operator=(const MoveMaker&) = delete;
+        // MoveMaker(const MoveMaker&) = delete;
+        // MoveMaker& operator=(const MoveMaker&) = delete;
 
         int         _ply = 0;
         int         _count = -1;
@@ -176,34 +174,19 @@ namespace search
     };
 
 
-    struct Free
-    {
-        Free* _next = nullptr;
-    };
-
-
     /*
      * The context of a searched node.
      */
-    struct Context : public Free, public RefCounted<Context>
+    struct Context
     {
         friend class MoveMaker;
-        friend class RefCounted<Context>;
 
-    private:
-        ~Context() = default;
-
-    public:
         Context() = default;
-        Context(const Context&) = delete;
-        Context& operator=(const Context&) = delete;
+        ~Context() = default;
+        // Context(const Context&) = delete;
+        // Context& operator=(const Context&) = delete;
 
-    #if RECYCLE_CONTEXTS
-        static void* operator new(size_t);
-        static void operator delete(void*, size_t) noexcept;
-    #endif /* RECYCLE_CONTEXTS */
-
-        ContextPtr clone(int ply = 0) const;
+        Context clone(int ply = 0) const;
 
         /* parent move in the graph */
         Context*    _parent = nullptr;
@@ -235,22 +218,15 @@ namespace search
         int         _mate_detected = 0;
         int         _pruned_count = 0;
 
-        Move        _cutoff_move;   /* from current state to the next */
         Move        _move;          /* from parent to current state */
+        BaseMove    _best_move;
+        BaseMove    _cutoff_move;   /* from current state to the next */
         BaseMove    _prev;          /* best move from previous iteration */
         BaseMove    _excluded;      /* singular extension search */
 
         State*      _state = nullptr;
         TT_Entry    _tt_entry;
         Square      _capture_square = Square::UNDEFINED;
-
-        const ContextPtr& best() const { return _best; }
-
-        void set_best(const ContextPtr& best)
-        {
-            best->_parent = this;
-            _best = best;
-        }
 
         static void cancel();
         static int  cpu_cores();
@@ -267,6 +243,8 @@ namespace search
 
         std::string epd() const;
 
+        static void ensure_stacks(size_t thread_count);
+
         /* Static evaluation */
         score_t     _evaluate();    /* no repetitions, no fifty-moves rule */
         score_t     evaluate();     /* call _evaluate and do the above */
@@ -276,7 +254,7 @@ namespace search
         int         eval_threats(int piece_count);
 
         void        extend();       /* fractional extensions */
-        ContextPtr  first_move();
+        const Move* first_valid_move();
         score_t     futility_margin();
 
         bool        has_improved(score_t margin = 0) { return improvement() > margin; }
@@ -287,8 +265,7 @@ namespace search
 
         score_t     improvement();
         static void init();
-
-        bool        is_beta_cutoff(const ContextPtr&, score_t);
+        bool        is_beta_cutoff(Context*, score_t);
         static bool is_cancelled() { return _cancel; }
         bool        is_capture() const { return state().capture_value != 0; }
         bool        is_check() const { return state().is_check(); }
@@ -318,7 +295,7 @@ namespace search
         static void log_message(LogLevel, const std::string&, bool force = true);
 
         int64_t     nanosleep(int nanosec);
-        ContextPtr  next(bool null_move = false, bool = false, score_t = 0);
+        Context*    next(bool null_move = false, score_t = 0);
         int         next_move_index() { return _move_maker.current(*this); }
         bool        on_next();
 
@@ -360,11 +337,11 @@ namespace search
 
         static std::string  (*_epd)(const State&);
         static void         (*_log_message)(int, const std::string&, bool);
-        static void         (*_on_iter)(PyObject*, ContextPtr, score_t);
+        static void         (*_on_iter)(PyObject*, const Context*, score_t);
         static void         (*_on_next)(PyObject*, int64_t);
-        static std::string  (*_pgn)(ContextPtr);
+        static std::string  (*_pgn)(const Context*);
         static void         (*_print_state)(const State&);
-        static void         (*_report)(PyObject*, std::vector<ContextPtr>&);
+        static void         (*_report)(PyObject*, std::vector<const Context*>&);
         static size_t       (*_vmem_avail)();
 
         static HistoryPtr   _history;
@@ -375,12 +352,11 @@ namespace search
 
         int repeated_count(const State&) const;
 
-        ContextPtr          _best; /* best search result */
+        Move                _counter_move;
         mutable int         _can_prune = -1;
         State               _statebuf;
         bool                _leftmost = false;
         mutable int         _repetitions = -1;
-        Move                _counter_move;
         MoveMaker           _move_maker;
 
         TranspositionTable* _tt = nullptr;
@@ -394,9 +370,13 @@ namespace search
     };
 
 
+    using ContextStack = std::array<Context, PLY_MAX>;
+    extern std::vector<ContextStack> context_stacks;
+
+
     /*
-    * Late-move pruning counts (initialization idea borrowed from Crafty)
-    */
+     * Late-move pruning counts (initialization idea borrowed from Crafty)
+     */
     template<std::size_t... I>
     constexpr std::array<int, sizeof ... (I)> lmp(std::index_sequence<I...>)
     {
@@ -721,15 +701,15 @@ namespace search
     /*
      * Get the next move and wrap it into a Context object.
      */
-    INLINE ContextPtr Context::next(bool null_move, bool first_move, score_t futility)
+    INLINE Context* Context::next(bool null_move, score_t futility /* margin */)
     {
-        ASSERT(first_move || _alpha < _beta);
+        ASSERT(_alpha < _beta);
 
         const bool retry = _retry_next;
         _retry_next = false;
 
-        if (!first_move && !_excluded && !on_next() /* && !is_check() */)
-            return ContextPtr();
+        if (!_excluded && !on_next() /* && !is_check() */)
+            return nullptr;
 
         /* null move must be tried before actual moves */
         ASSERT(!null_move || next_move_index() == 0);
@@ -740,13 +720,13 @@ namespace search
             move = nullptr;
         else
             if ((move = get_next_move(futility)) == nullptr)
-                return ContextPtr();
+                return nullptr;
 
         ASSERT(null_move || move->_state);
         ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
         ASSERT(null_move || move->_group < MoveOrder::UNORDERED_MOVES);
 
-        auto ctxt = intrusive_ptr<Context>(new Context);
+        auto ctxt = new (&context_stacks[_tid][_ply + 1]) Context;
 
         if (move)
         {
@@ -851,12 +831,9 @@ namespace search
             }
         }
 
-        if (!first_move)
-        {
-            ASSERT(ctxt->_alpha < ctxt->_beta);
-            ASSERT(ctxt->_alpha >= ctxt->_score);
-            ASSERT(ctxt->_score == SCORE_MIN);
-        }
+        ASSERT(ctxt->_alpha < ctxt->_beta);
+        ASSERT(ctxt->_alpha >= ctxt->_score);
+        ASSERT(ctxt->_score == SCORE_MIN);
 
         return ctxt;
     }

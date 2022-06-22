@@ -42,6 +42,7 @@ using std::chrono::high_resolution_clock;
 using std::chrono::nanoseconds;
 
 
+
 /*
  * Late-move reduction tables (adapted from berserk)
  */
@@ -158,37 +159,21 @@ namespace search
     std::string (*Context::_epd)(const State&) = nullptr;
     void (*Context::_log_message)(int, const std::string&, bool) = nullptr;
 
-    void (*Context::_on_iter)(PyObject*, ContextPtr, score_t) = nullptr;
+    void (*Context::_on_iter)(PyObject*, const Context*, score_t) = nullptr;
     void (*Context::_on_next)(PyObject*, int64_t) = nullptr;
 
-    std::string(*Context::_pgn)(ContextPtr) = nullptr;
+    std::string(*Context::_pgn)(const Context*) = nullptr;
     void (*Context::_print_state)(const State&) = nullptr;
-    void (*Context::_report)(PyObject*, std::vector<ContextPtr>&) = nullptr;
+    void (*Context::_report)(PyObject*, std::vector<const Context*>&) = nullptr;
 
     size_t (*Context::_vmem_avail)() = nullptr;
 
+    std::vector<ContextStack> context_stacks(1);
 
-#if RECYCLE_CONTEXTS
-    static THREAD_LOCAL Free* free_list = nullptr;
-
-    void* Context::operator new(size_t size)
+    /* static */ void Context::ensure_stacks(size_t thread_count)
     {
-        if (auto head = free_list)
-        {
-            free_list = head->_next;
-            return head;
-        }
-        return ::operator new(size);
+        context_stacks.resize(thread_count);
     }
-
-
-    void Context::operator delete(void* ptr, size_t) noexcept
-    {
-        auto ctxt = static_cast<Context*>(ptr);
-        ctxt->_next = free_list;
-        free_list = ctxt;
-    }
-#endif /* RECYCLE_CONTEXTS */
 
 
     /* static */ void Context::init()
@@ -214,26 +199,26 @@ namespace search
      * 1) clone root at the beginning of SMP searches, and
      * 2) create a temporary context for singularity search.
      */
-    ContextPtr Context::clone(int ply) const
+    Context Context::clone(int ply) const
     {
-        ContextPtr ctxt(new Context);
+        Context ctxt;
 
-        ctxt->_algorithm = _algorithm;
-        ctxt->_alpha = _alpha;
-        ctxt->_beta = _beta;
-        ctxt->_score = _score;
-        ctxt->_max_depth = _max_depth;
-        ctxt->_parent = _parent;
-        ctxt->_ply = ply;
-        ctxt->_prev = _prev;
-        ctxt->_statebuf = state();
-        ctxt->_state = &ctxt->_statebuf;
-        ctxt->_move = _move;
-        ctxt->_excluded = _excluded;
-        ctxt->_tt_entry = _tt_entry;
-        ctxt->_tid = _tid;
-        ctxt->_move_maker.set_ply(ply);
-        ctxt->_counter_move = _counter_move;
+        ctxt._algorithm = _algorithm;
+        ctxt._alpha = _alpha;
+        ctxt._beta = _beta;
+        ctxt._score = _score;
+        ctxt._max_depth = _max_depth;
+        ctxt._parent = _parent;
+        ctxt._ply = ply;
+        ctxt._prev = _prev;
+        ctxt._statebuf = state();
+        ctxt._state = &ctxt._statebuf;
+        ctxt._move = _move;
+        ctxt._excluded = _excluded;
+        ctxt._tt_entry = _tt_entry;
+        ctxt._tid = _tid;
+        ctxt._move_maker.set_ply(ply);
+        ctxt._counter_move = _counter_move;
 
         return ctxt;
     }
@@ -242,7 +227,7 @@ namespace search
     /*
      * Track the best score and move so far, return true if beta cutoff.
      */
-    bool Context::is_beta_cutoff(const ContextPtr& next_ctxt, score_t score)
+    bool Context::is_beta_cutoff(Context* next_ctxt, score_t score)
     {
         ASSERT(next_ctxt->_ply != 0);
         ASSERT(score > SCORE_MIN && score < SCORE_MAX);
@@ -314,7 +299,7 @@ namespace search
             #if LAZY_STATE_COPY
                 next_ctxt->copy_move_state();
             #endif
-                _best = next_ctxt;
+                _best_move = next_ctxt->_move;
             }
         }
 
@@ -1284,13 +1269,12 @@ namespace search
 
 
     /*
-     * Return the first legal move, wrapped in a Context object.
      * Used when the search has fails to find a move before the time runs out.
      */
-    ContextPtr Context::first_move()
+    const Move* Context::first_valid_move()
     {
         rewind(0);
-        return next(false, true /* suppress time-checking callback */);
+        return get_next_move(0 /* = no futility pruning */);
     }
 
 
@@ -1311,7 +1295,7 @@ namespace search
         ASSERT(iteration());
         ASSERT(_retry_above_alpha == RETRY::None);
 
-        _best.reset();
+        _best_move = Move();
         _cancel = false;
         _can_prune = -1;
 

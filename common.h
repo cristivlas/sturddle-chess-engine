@@ -83,9 +83,6 @@ using score_t = int32_t;
 
 #define MTDF_REORDER_MOVES                  true
 
-/* Context operators new & delete use thread_local free lists */
-#define RECYCLE_CONTEXTS                    true
-
 #define REVERSE_FUTILITY_PRUNING            true
 
 /* Use in SEE heuristic. -1 disables pin awareness */

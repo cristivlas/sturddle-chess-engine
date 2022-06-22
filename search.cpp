@@ -337,8 +337,8 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
     /* Store hash move (cutoff or best) */
     auto move = ctxt._cutoff_move;
 
-    if (!move && ctxt.best())
-        move = ctxt.best()->_move;
+    if (!move && ctxt._best_move)
+        move = ctxt._best_move;
 
     if (move
         || (entry.is_lower() && ctxt._score < entry._value)
@@ -476,26 +476,10 @@ void TranspositionTable::get_pv_from_table(
 
 void TranspositionTable::store_pv(Context& root, bool print)
 {
-    ASSERT(root.best());
-
     _pv.clear();
 
-    for (auto ctxt = &root; true; )
-    {
-        _pv.emplace_back(ctxt->_move);
 
-        if (print && ctxt->_ply)
-            std::cout << ctxt->_move.uci() << " ";
-
-        if (const auto& next = ctxt->best())
-        {
-            ctxt = next.get();
-            continue;
-        }
-
-        get_pv_from_table(root, *ctxt, _pv, print);
-        break;
-    }
+    get_pv_from_table(root, root, _pv, print);
 
     if (print)
         std::cout << "\n";
@@ -534,11 +518,8 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
     /*
      * null move refuted? update capture_square and mate_detected
      */
-    if (const auto& best = null_move_ctxt.best())
+    if (null_move_ctxt._best_move)
     {
-        if (best->is_capture() && best->_score == -score)
-            ctxt._capture_square = best->_move.to_square();
-
         if (-score > MATE_HIGH)
         {
             ctxt._mate_detected = CHECKMATE + score + 1;
@@ -582,7 +563,8 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
     int move_count = 0, cutoffs = 0;
     const auto reduction = (ctxt.depth() - 1) / 2;
 
-    ContextPtr best_move;
+    Move best_move;
+    score_t best_score = SCORE_MIN;
 
     /*
      * A take on the idea from https://skemman.is/bitstream/1946/9180/1/research-report.pdf
@@ -605,12 +587,10 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
 
         if (score >= ctxt._beta)
         {
-            if (!best_move || score > -best_move->_score)
+            if (!best_move || score > best_score)
             {
-                best_move = next_ctxt;
-            #if LAZY_STATE_COPY
-                best_move->copy_move_state();
-            #endif
+                best_move = next_ctxt->_best_move;
+                best_score = score;
             }
 
             if (++cutoffs >= min_cutoffs)
@@ -621,8 +601,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
                 ctxt._alpha = ctxt._score;
 
                 /* Fix-up best move */
-                ctxt.set_best(best_move);
-                ctxt._cutoff_move = best_move->_move;
+                ctxt._best_move = best_move;
 
                 return true;
             }
@@ -748,7 +727,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         int move_count = 0, futility = -1;
 
         /* iterate over moves */
-        while (auto next_ctxt = ctxt.next(std::exchange(null_move, false), false, futility))
+        while (auto next_ctxt = ctxt.next(std::exchange(null_move, false), futility))
         {
             if (!next_ctxt->is_null_move())
             {
@@ -803,14 +782,14 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                      */
                     auto s_ctxt = ctxt.clone(ctxt._ply + 2);
 
-                    s_ctxt->set_initial_moves(ctxt.get_moves());
-                    s_ctxt->_excluded = next_ctxt->_move;
-                    s_ctxt->_max_depth = s_ctxt->_ply + (ctxt.depth() - 1) / 2;
-                    s_ctxt->_alpha = s_beta - 1;
-                    s_ctxt->_beta = s_beta;
-                    s_ctxt->_score = SCORE_MIN;
+                    s_ctxt.set_initial_moves(ctxt.get_moves());
+                    s_ctxt._excluded = next_ctxt->_move;
+                    s_ctxt._max_depth = s_ctxt._ply + (ctxt.depth() - 1) / 2;
+                    s_ctxt._alpha = s_beta - 1;
+                    s_ctxt._beta = s_beta;
+                    s_ctxt._score = SCORE_MIN;
 
-                    const auto value = negamax(*s_ctxt, table);
+                    const auto value = negamax(s_ctxt, table);
 
                     if (ctxt.is_cancelled())
                         break;
@@ -1106,6 +1085,8 @@ static std::unique_ptr<ThreadGroup> threads;
 
 static size_t start_pool()
 {
+    Context::ensure_stacks(Context::cpu_cores());
+
     if (!threads || threads->get_thread_count() + 1 != size_t(Context::cpu_cores()))
     {
         if (Context::cpu_cores() <= 1)
@@ -1119,7 +1100,7 @@ static size_t start_pool()
 
 struct TaskData
 {
-    ContextPtr _ctxt;
+    Context _ctxt;
     TranspositionTable _tt;
 };
 
@@ -1142,7 +1123,7 @@ public:
 
         if (table._iteration == 1)
         {
-            std::vector<TaskData>(thread_count, { ContextPtr(), table }).swap(_tables);
+            std::vector<TaskData>(thread_count, { Context(), table }).swap(_tables);
 
             /* run 1st iteration on one thread only */
             return;
@@ -1163,26 +1144,21 @@ public:
                 _tables[i]._tt._pv = table._pv;
 
             auto t_ctxt = _root.clone();
-            t_ctxt->set_tt(&_tables[i]._tt);
-            t_ctxt->_tid = int(_tables.size() - i);
-            t_ctxt->_max_depth += (i % 2) == 0;
+            t_ctxt.set_tt(&_tables[i]._tt);
+            t_ctxt._tid = int(_tables.size() - i);
+            t_ctxt._max_depth += (i % 2) == 0;
 
-            t_ctxt->set_initial_moves(_root.get_moves());
+            t_ctxt.set_initial_moves(_root.get_moves());
+            t_ctxt._tt_entry._hash_move = _tables[i]._ctxt._tt_entry._hash_move;
 
-            if (auto& prev_ctxt = _tables[i]._ctxt)
-            {
-                if (prev_ctxt->_tt_entry._hash_move)
-                    t_ctxt->_tt_entry._hash_move = prev_ctxt->_tt_entry._hash_move;
-            }
-
-            ASSERT(t_ctxt->_tid > 0);
+            ASSERT(t_ctxt._tid > 0);
 
             _tables[i]._ctxt = t_ctxt;
 
             threads->push_task([t_ctxt, score]() mutable {
                 try
                 {
-                    search_iteration(*t_ctxt, *t_ctxt->get_tt(), score);
+                    search_iteration(t_ctxt, *t_ctxt.get_tt(), score);
                 }
                 catch(const std::exception& e)
                 {
@@ -1202,24 +1178,11 @@ public:
 
         if (Context::_report)
         {
-            std::vector<ContextPtr> ctxts;
+            std::vector<const Context*> ctxts;
             for (const auto& table : _tables)
-                ctxts.emplace_back(table._ctxt);
+                ctxts.emplace_back(&table._ctxt);
 
             cython_wrapper::call(Context::_report, Context::_engine, ctxts);
-        }
-
-        for (auto& t : _tables)
-        {
-        #if SMP_ALLOW_CONTEXT_SHARING
-            if (t._ctxt && t._ctxt->best() && t._ctxt->_score > _root._score)
-            {
-                _root.set_best(t._ctxt->best());
-                _root._score = t._ctxt->_score;
-            }
-        #endif /* SMP_ALLOW_CONTEXT_SHARING */
-
-            t._ctxt.reset();
         }
     }
 };
@@ -1269,16 +1232,15 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
             }
         }   /* SMP scope end */
 
-        if (const auto& best = ctxt.best())
+        if (ctxt._best_move)
         {
-            ctxt._prev = best->_move;
+            ctxt._prev = ctxt._best_move;
             table.store_pv(ctxt);
         }
 
-        ASSERT(ctxt.ref_count());
         ASSERT(ctxt.iteration() == ctxt._max_depth);
 
-        cython_wrapper::call(Context::_on_iter, Context::_engine, ContextPtr(&ctxt), score);
+        cython_wrapper::call(Context::_on_iter, Context::_engine, &ctxt, score);
 
         ++i;
     }
