@@ -190,8 +190,6 @@ namespace search
         Context(const Context&) = delete;
         Context& operator=(const Context&) = delete;
 
-        ContextPtr clone(int ply = 0) const;
-
         /* parent move in the graph */
         Context*    _parent = nullptr;
         int         _ply = 0;
@@ -234,6 +232,8 @@ namespace search
         static void cancel();
         static int  cpu_cores();
 
+        ContextPtr  clone(int ply = 0) const;
+
         bool        can_forward_prune() const;
         bool        can_prune() const;
         bool        can_prune_move(const Move&) const;
@@ -245,8 +245,6 @@ namespace search
         int         depth() const { return _max_depth - _ply; }
 
         std::string epd() const;
-
-        static void ensure_stacks(size_t thread_count);
 
         /* Static evaluation */
         score_t     _evaluate();    /* no repetitions, no fifty-moves rule */
@@ -298,7 +296,10 @@ namespace search
         static void log_message(LogLevel, const std::string&, bool force = true);
 
         int64_t     nanosleep(int nanosec);
+
         Context*    next(bool null_move = false, score_t = 0);
+        Context*    next_context(bool init = false) const;
+
         int         next_move_index() { return _move_maker.current(*this); }
         bool        on_next();
 
@@ -373,9 +374,6 @@ namespace search
         static atomic_int   _time_limit; /* milliseconds */
         static atomic_time  _time_start;
     };
-
-    using ContextStack = std::array<std::array<uint8_t, sizeof(Context)>, PLY_MAX>;
-    extern std::vector<ContextStack> context_stacks;
 
 
     /*
@@ -730,7 +728,7 @@ namespace search
         ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
         ASSERT(null_move || move->_group < MoveOrder::UNORDERED_MOVES);
 
-        auto ctxt = new (&context_stacks[tid()][_ply + 1]) Context;
+        auto ctxt = next_context(true);
 
         if (move)
         {

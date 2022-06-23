@@ -168,13 +168,6 @@ namespace search
 
     size_t (*Context::_vmem_avail)() = nullptr;
 
-    std::vector<ContextStack> context_stacks(SMP_CORES);
-
-    /* static */ void Context::ensure_stacks(size_t thread_count)
-    {
-        context_stacks.resize(SMP_CORES);
-    }
-
 
     /* static */ void Context::init()
     {
@@ -220,6 +213,19 @@ namespace search
         ctxt->_counter_move = _counter_move;
 
         return ctxt;
+    }
+
+
+    using ContextStack = std::array<std::array<uint8_t, sizeof(Context)>, PLY_MAX>;
+    static THREAD_LOCAL ContextStack context_stack;
+
+
+    Context* Context::next_context(bool init) const
+    {
+        if (init)
+            return new (&context_stack[_ply + 1]) Context;
+        else
+            return reinterpret_cast<Context*>(&context_stack[_ply + 1]);
     }
 
 
@@ -1294,7 +1300,9 @@ namespace search
         ASSERT(iteration());
         ASSERT(_retry_above_alpha == RETRY::None);
 
+        /* ok to clear, iterative search callback keeps track of best move and score */
         _best_move = Move();
+
         _cancel = false;
         _can_prune = -1;
 

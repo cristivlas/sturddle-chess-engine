@@ -474,34 +474,35 @@ void TranspositionTable::get_pv_from_table(
 }
 
 
-void TranspositionTable::store_pv(Context& root, bool print)
+void TranspositionTable::store_pv(Context& start, bool print)
 {
-    _pv.clear();
+    BaseMovesList pv;
 
-    auto ctxt = &root;
-
-    while (true)
+    for (auto ctxt = &start; true; )
     {
-        _pv.emplace_back(ctxt->_move);
+        pv.emplace_back(ctxt->_move);
 
         if (print && ctxt->_ply)
             std::cout << ctxt->_move.uci() << " ";
 
         if (ctxt->_best_move && ctxt->_ply + 1 < PLY_MAX)
         {
-            auto next = reinterpret_cast<Context*>(&context_stacks[ctxt->tid()][ctxt->_ply + 1]);
+            auto next = ctxt->next_context();
             if (next->_move == ctxt->_best_move)
             {
                 ctxt = next;
                 continue;
             }
         }
-        get_pv_from_table(root, *ctxt, _pv, print);
+        get_pv_from_table(start, *ctxt, pv, print);
         break;
     }
 
     if (print)
         std::cout << "\n";
+
+    if (!pv.empty())
+        _pv.swap(pv);
 
     log_pv(*this, "store_pv");
 }
@@ -1104,8 +1105,6 @@ static std::unique_ptr<ThreadGroup> threads;
 
 static size_t start_pool()
 {
-    Context::ensure_stacks(Context::cpu_cores());
-
     if (!threads || threads->get_thread_count() + 1 != size_t(Context::cpu_cores()))
     {
         if (Context::cpu_cores() <= 1)
@@ -1200,7 +1199,7 @@ public:
                 if (table._ctxt && table._ctxt->get_tt())
                 {
                     ctxts.emplace_back(table._ctxt.get());
-                    ASSERT_ALWAYS(ctxts.back()->get_tt() == &table._tt);
+                    ASSERT(ctxts.back()->get_tt() == &table._tt);
                 }
             }
 
@@ -1259,9 +1258,9 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
             ctxt._prev = ctxt._best_move;
             table.store_pv(ctxt);
         }
-
         ASSERT(ctxt.iteration() == ctxt._max_depth);
 
+        /* post iteration results to Cython */
         cython_wrapper::call(Context::_on_iter, Context::_engine, &ctxt, score);
 
         ++i;

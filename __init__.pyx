@@ -36,7 +36,7 @@ from cython.operator cimport address, dereference as deref
 
 from libcpp cimport bool
 from libcpp.map cimport map
-from libcpp.memory cimport unique_ptr
+from libcpp.memory cimport shared_ptr, unique_ptr
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libc cimport stdint
@@ -395,6 +395,7 @@ cdef extern from 'context.h' namespace 'search':
         int     _fifty
 
 
+    ctypedef shared_ptr[Context] ContextPtr
     ctypedef unique_ptr[History] HistoryPtr
 
 
@@ -533,24 +534,18 @@ cdef size_t vmem_avail():
 # ---------------------------------------------------------------------
 cdef class NodeContext:
     cdef Context* _ctxt
+    cdef ContextPtr _own
     cdef public BoardState state
-    cdef bool _own
 
     def __init__(self, board: chess.Board=None):
-        self._own = False
         if board:
             self.create_from(board)
 
 
-    def __del__(self):
-        print('__del__', self._own)
-        if self._own:
-            del self._ctxt
-
-
     cdef void create_from(self, board: chess.Board):
-        self._ctxt = new Context()
-        self._own = True
+        self._own.reset(new Context())
+        self._ctxt = self._own.get()
+
         self._ctxt._epd = <string (*)(const State&)> epd
         self._ctxt._log_message = <void (*)(int, const string&, bool)> log_message
         self._ctxt._pgn = <string (*)(Context*)> pgn
