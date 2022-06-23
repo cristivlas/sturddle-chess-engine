@@ -1300,9 +1300,10 @@ namespace search
         ASSERT(iteration());
         ASSERT(_retry_above_alpha == RETRY::None);
 
-        /* ok to clear, iterative search callback keeps track of best move and score */
+    #if 0
+        /* ok to clear only if the iterative search  callback keeps track of best move */
         _best_move = Move();
-
+    #endif
         _cancel = false;
         _can_prune = -1;
 

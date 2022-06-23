@@ -889,7 +889,7 @@ cdef class SearchAlgorithm:
     #
     cdef void on_iter(self, Context* ctxt, score_t score) except* with gil:
         self.current_depth = self.context.max_depth()
-        self.best_move = py_move(deref(ctxt)._best_move)
+        # self.best_move = py_move(deref(ctxt)._best_move)
 
         if self.iteration_callback:
            self.iteration_callback(self, NodeContext.from_cxx_context(ctxt), score)

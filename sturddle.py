@@ -313,7 +313,7 @@ class UCI:
         self.snooze()
 
         if self.output_expected:
-            move = self.algorithm.best_find.move if self.algorithm.best_find else None
+            move = self.algorithm.best_move
             self.output_best(move, request_ponder = False)
 
         return True
