@@ -174,10 +174,10 @@ namespace search
 
     #if USE_BUTTERFLY_TABLES
         using HistoryCounters = MoveTable<std::pair<int, int>>;
-        using IndexedMoves = MoveTable<Move>;
+        using IndexedMoves = MoveTable<BaseMove>;
     #else
         using HistoryCounters = PieceMoveTable<std::pair<int, int>>;
-        using IndexedMoves = PieceMoveTable<Move>;
+        using IndexedMoves = PieceMoveTable<BaseMove>;
     #endif /* USE_BUTTERFLY_TABLES */
 
         using PlyHistoryCounters = std::array<MoveTable<float>, 2>;
@@ -198,6 +198,7 @@ namespace search
         static void clear_shared_hashtable();
         static void increment_clock();
 
+        int _tid = 0;
         int _iteration = 0;
         int _eval_depth = 0;
 

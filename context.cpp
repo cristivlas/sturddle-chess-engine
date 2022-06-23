@@ -168,11 +168,11 @@ namespace search
 
     size_t (*Context::_vmem_avail)() = nullptr;
 
-    std::vector<ContextStack> context_stacks(1);
+    std::vector<ContextStack> context_stacks(SMP_CORES);
 
     /* static */ void Context::ensure_stacks(size_t thread_count)
     {
-        context_stacks.resize(thread_count);
+        context_stacks.resize(SMP_CORES);
     }
 
 
@@ -199,26 +199,25 @@ namespace search
      * 1) clone root at the beginning of SMP searches, and
      * 2) create a temporary context for singularity search.
      */
-    Context Context::clone(int ply) const
+    ContextPtr Context::clone(int ply) const
     {
-        Context ctxt;
+        ContextPtr ctxt(new Context);
 
-        ctxt._algorithm = _algorithm;
-        ctxt._alpha = _alpha;
-        ctxt._beta = _beta;
-        ctxt._score = _score;
-        ctxt._max_depth = _max_depth;
-        ctxt._parent = _parent;
-        ctxt._ply = ply;
-        ctxt._prev = _prev;
-        ctxt._statebuf = state();
-        ctxt._state = &ctxt._statebuf;
-        ctxt._move = _move;
-        ctxt._excluded = _excluded;
-        ctxt._tt_entry = _tt_entry;
-        ctxt._tid = _tid;
-        ctxt._move_maker.set_ply(ply);
-        ctxt._counter_move = _counter_move;
+        ctxt->_algorithm = _algorithm;
+        ctxt->_alpha = _alpha;
+        ctxt->_beta = _beta;
+        ctxt->_score = _score;
+        ctxt->_max_depth = _max_depth;
+        ctxt->_parent = _parent;
+        ctxt->_ply = ply;
+        ctxt->_prev = _prev;
+        ctxt->_statebuf = state();
+        ctxt->_state = &ctxt->_statebuf;
+        ctxt->_move = _move;
+        ctxt->_excluded = _excluded;
+        ctxt->_tt_entry = _tt_entry;
+        ctxt->_move_maker.set_ply(ply);
+        ctxt->_counter_move = _counter_move;
 
         return ctxt;
     }
@@ -672,7 +671,7 @@ namespace search
         auto state = ctxt._state;
 
     #if NO_ASSERT
-        if (ctxt._tid == 0 && ctxt._tt_entry._capt != SCORE_MIN)
+        if (ctxt.tid() == 0 && ctxt._tt_entry._capt != SCORE_MIN)
             return ctxt._tt_entry._capt;
     #endif /* NO_ASSERT */
 

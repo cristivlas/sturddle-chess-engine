@@ -139,8 +139,8 @@ namespace search
             return _states[_ply];
         }
 
-        // MoveMaker(const MoveMaker&) = delete;
-        // MoveMaker& operator=(const MoveMaker&) = delete;
+        MoveMaker(const MoveMaker&) = delete;
+        MoveMaker& operator=(const MoveMaker&) = delete;
 
         int         _ply = 0;
         int         _count = -1;
@@ -174,6 +174,9 @@ namespace search
     };
 
 
+    using ContextPtr = std::shared_ptr<struct Context>;
+
+
     /*
      * The context of a searched node.
      */
@@ -184,11 +187,13 @@ namespace search
         Context() = default;
         ~Context() = default;
 
-        Context clone(int ply = 0) const;
+        Context(const Context&) = delete;
+        Context& operator=(const Context&) = delete;
+
+        ContextPtr clone(int ply = 0) const;
 
         /* parent move in the graph */
         Context*    _parent = nullptr;
-        int         _tid = 0;
         int         _ply = 0;
         int         _max_depth = 0;
 
@@ -310,6 +315,8 @@ namespace search
         bool        should_verify_null_move() const;
         int         singular_margin() const;
 
+        int         tid() const { return _tt->_tid; }
+
         Color       turn() const { return state().turn; }
 
         const State& state() const { ASSERT(_state); return *_state; }
@@ -367,8 +374,7 @@ namespace search
         static atomic_time  _time_start;
     };
 
-
-    using ContextStack = std::array<Context, PLY_MAX>;
+    using ContextStack = std::array<std::array<uint8_t, sizeof(Context)>, PLY_MAX>;
     extern std::vector<ContextStack> context_stacks;
 
 
@@ -724,8 +730,7 @@ namespace search
         ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
         ASSERT(null_move || move->_group < MoveOrder::UNORDERED_MOVES);
 
-        ASSERT_ALWAYS(_ply + 1 < PLY_MAX);
-        auto ctxt = new (&context_stacks[_tid][_ply + 1]) Context;
+        auto ctxt = new (&context_stacks[tid()][_ply + 1]) Context;
 
         if (move)
         {
@@ -755,7 +760,6 @@ namespace search
         }
 
         ctxt->_algorithm = _algorithm;
-        ctxt->_tid = _tid;
         ctxt->_parent = this;
         ctxt->_max_depth = _max_depth;
         ctxt->_ply = _ply + 1;
@@ -843,7 +847,7 @@ namespace search
      */
     INLINE bool Context::on_next()
     {
-        if (_tid == 0 && ++_callback_count >= CALLBACK_PERIOD)
+        if (tid() == 0 && ++_callback_count >= CALLBACK_PERIOD)
         {
             _callback_count = 0; /* reset */
 

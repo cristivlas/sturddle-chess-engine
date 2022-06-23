@@ -122,6 +122,8 @@ cdef extern from 'chess.h' namespace 'chess':
         string      uci() const
 
 
+    ctypedef vector[BaseMove] PV
+
     cdef cppclass Move(BaseMove):
         Move()
         Move(Square from_square, Square to_square, PieceType promotion_type)
@@ -401,7 +403,6 @@ cdef extern from 'context.h' namespace 'search':
         const State*    _state
         const int       _ply
         int             _max_depth
-        const int       _tid
         const score_t   _alpha
         const score_t   _beta
         const score_t   _score
@@ -445,9 +446,10 @@ cdef extern from 'context.h' namespace 'search':
         void            set_tt(TranspositionTable*)
         TranspositionTable* get_tt() const
 
-        const vector[BaseMove]& get_pv() nogil const
+        const PV&       get_pv() nogil const
 
-        Context* next(bool, score_t)
+        Context*        next(bool, score_t)
+        int             tid() const
 
 
 
@@ -603,7 +605,7 @@ cdef class NodeContext:
 
     @property
     def task_id(self):
-        return self._ctxt._tid
+        return self._ctxt.tid()
 
 
     @property

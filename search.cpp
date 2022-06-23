@@ -487,16 +487,15 @@ void TranspositionTable::store_pv(Context& root, bool print)
         if (print && ctxt->_ply)
             std::cout << ctxt->_move.uci() << " ";
 
-        if (ctxt->_ply + 1 < PLY_MAX)
+        if (ctxt->_best_move && ctxt->_ply + 1 < PLY_MAX)
         {
-            auto next = &context_stacks[ctxt->_tid][ctxt->_ply + 1];
+            auto next = reinterpret_cast<Context*>(&context_stacks[ctxt->tid()][ctxt->_ply + 1]);
             if (next->_move == ctxt->_best_move)
             {
                 ctxt = next;
                 continue;
             }
         }
-
         get_pv_from_table(root, *ctxt, _pv, print);
         break;
     }
@@ -802,14 +801,14 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                      */
                     auto s_ctxt = ctxt.clone(ctxt._ply + 2);
 
-                    s_ctxt.set_initial_moves(ctxt.get_moves());
-                    s_ctxt._excluded = next_ctxt->_move;
-                    s_ctxt._max_depth = s_ctxt._ply + (ctxt.depth() - 1) / 2;
-                    s_ctxt._alpha = s_beta - 1;
-                    s_ctxt._beta = s_beta;
-                    s_ctxt._score = SCORE_MIN;
+                    s_ctxt->set_initial_moves(ctxt.get_moves());
+                    s_ctxt->_excluded = next_ctxt->_move;
+                    s_ctxt->_max_depth = s_ctxt->_ply + (ctxt.depth() - 1) / 2;
+                    s_ctxt->_alpha = s_beta - 1;
+                    s_ctxt->_beta = s_beta;
+                    s_ctxt->_score = SCORE_MIN;
 
-                    const auto value = negamax(s_ctxt, table);
+                    const auto value = negamax(*s_ctxt, table);
 
                     if (ctxt.is_cancelled())
                         break;
@@ -967,7 +966,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
              */
             if (table._iteration <= 7
                 && ctxt._ply == 0
-                && ctxt._tid == 0
+                && ctxt.tid() == 0
                 && move_count == 1
                 && move_score <= table._w_alpha
                )
@@ -1120,7 +1119,7 @@ static size_t start_pool()
 
 struct TaskData
 {
-    Context _ctxt;
+    ContextPtr _ctxt;
     TranspositionTable _tt;
 };
 
@@ -1143,7 +1142,7 @@ public:
 
         if (table._iteration == 1)
         {
-            std::vector<TaskData>(thread_count, { Context(), table }).swap(_tables);
+            std::vector<TaskData>(thread_count, { ContextPtr(), table }).swap(_tables);
 
             /* run 1st iteration on one thread only */
             return;
@@ -1151,34 +1150,30 @@ public:
 
         for (size_t i = 0; i < thread_count; ++i)
         {
+            _tables[i]._tt._tid = int(_tables.size() - i);
             _tables[i]._tt._iteration = table._iteration;
-#if 0
-            _tables[i]._tt._w_alpha = std::max(SCORE_MIN, table._w_alpha - int((i + 1) * 2.5));
-            _tables[i]._tt._w_beta = std::min(SCORE_MAX, table._w_beta + int((i + 1) * 2.5));
-#else
+
             _tables[i]._tt._w_alpha = table._w_alpha;
             _tables[i]._tt._w_beta = table._w_beta;
-#endif
+
             /* copy principal variation from main thread */
             if (_tables[i]._tt._pv.empty())
                 _tables[i]._tt._pv = table._pv;
 
-            _tables[i]._ctxt = _root.clone();
-            auto& t_ctxt = _tables[i]._ctxt;
+            auto t_ctxt = _root.clone();
+            t_ctxt->_max_depth += (i % 2) == 0;
+            t_ctxt->set_initial_moves(_root.get_moves());
 
-            t_ctxt.set_tt(&_tables[i]._tt);
-            t_ctxt._tid = int(_tables.size() - i);
-            t_ctxt._max_depth += (i % 2) == 0;
+            if (_tables[i]._ctxt)
+                t_ctxt->_tt_entry._hash_move = _tables[i]._ctxt->_tt_entry._hash_move;
 
-            t_ctxt.set_initial_moves(_root.get_moves());
-            t_ctxt._tt_entry._hash_move = _tables[i]._ctxt._tt_entry._hash_move;
+            _tables[i]._ctxt = t_ctxt;
+            auto* tt = &_tables[i]._tt;
 
-            ASSERT(t_ctxt._tid > 0);
-
-            threads->push_task([t_ctxt, score]() mutable {
+            threads->push_task([t_ctxt, tt, score]() mutable {
                 try
                 {
-                    search_iteration(t_ctxt, *t_ctxt.get_tt(), score);
+                    search_iteration(*t_ctxt, *tt, score);
                 }
                 catch(const std::exception& e)
                 {
@@ -1202,9 +1197,9 @@ public:
 
             for (auto& table : _tables)
             {
-                if (table._ctxt._tid)
+                if (table._ctxt && table._ctxt->get_tt())
                 {
-                    ctxts.emplace_back(&table._ctxt);
+                    ctxts.emplace_back(table._ctxt.get());
                     ASSERT_ALWAYS(ctxts.back()->get_tt() == &table._tt);
                 }
             }
