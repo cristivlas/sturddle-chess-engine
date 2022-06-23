@@ -478,8 +478,28 @@ void TranspositionTable::store_pv(Context& root, bool print)
 {
     _pv.clear();
 
+    auto ctxt = &root;
 
-    get_pv_from_table(root, root, _pv, print);
+    while (true)
+    {
+        _pv.emplace_back(ctxt->_move);
+
+        if (print && ctxt->_ply)
+            std::cout << ctxt->_move.uci() << " ";
+
+        if (ctxt->_ply + 1 < PLY_MAX)
+        {
+            auto next = &context_stacks[ctxt->_tid][ctxt->_ply + 1];
+            if (next->_move == ctxt->_best_move)
+            {
+                ctxt = next;
+                continue;
+            }
+        }
+
+        get_pv_from_table(root, *ctxt, _pv, print);
+        break;
+    }
 
     if (print)
         std::cout << "\n";
@@ -1143,7 +1163,9 @@ public:
             if (_tables[i]._tt._pv.empty())
                 _tables[i]._tt._pv = table._pv;
 
-            auto t_ctxt = _root.clone();
+            _tables[i]._ctxt = _root.clone();
+            auto& t_ctxt = _tables[i]._ctxt;
+
             t_ctxt.set_tt(&_tables[i]._tt);
             t_ctxt._tid = int(_tables.size() - i);
             t_ctxt._max_depth += (i % 2) == 0;
@@ -1153,9 +1175,7 @@ public:
 
             ASSERT(t_ctxt._tid > 0);
 
-            _tables[i]._ctxt = t_ctxt;
-
-            threads->push_task([&t_ctxt, score]() mutable {
+            threads->push_task([t_ctxt, score]() mutable {
                 try
                 {
                     search_iteration(t_ctxt, *t_ctxt.get_tt(), score);
@@ -1178,12 +1198,15 @@ public:
 
         if (Context::_report)
         {
-            std::vector<const Context*> ctxts;
+            std::vector<Context*> ctxts;
+
             for (auto& table : _tables)
             {
-                // ASSERT(table._ctxt.get_tt() == &table._tt);
-                ctxts.emplace_back(&table._ctxt);
-                table._ctxt.set_tt(&table._tt);
+                if (table._ctxt._tid)
+                {
+                    ctxts.emplace_back(&table._ctxt);
+                    ASSERT_ALWAYS(ctxts.back()->get_tt() == &table._tt);
+                }
             }
 
             cython_wrapper::call(Context::_report, Context::_engine, ctxts);

@@ -183,7 +183,6 @@ namespace search
 
         Context() = default;
         ~Context() = default;
-        Context(const Context&);
 
         Context clone(int ply = 0) const;
 
@@ -336,11 +335,11 @@ namespace search
 
         static std::string  (*_epd)(const State&);
         static void         (*_log_message)(int, const std::string&, bool);
-        static void         (*_on_iter)(PyObject*, const Context*, score_t);
+        static void         (*_on_iter)(PyObject*, Context*, score_t);
         static void         (*_on_next)(PyObject*, int64_t);
-        static std::string  (*_pgn)(const Context*);
+        static std::string  (*_pgn)(Context*);
         static void         (*_print_state)(const State&);
-        static void         (*_report)(PyObject*, std::vector<const Context*>&);
+        static void         (*_report)(PyObject*, std::vector<Context*>&);
         static size_t       (*_vmem_avail)();
 
         static HistoryPtr   _history;
@@ -502,52 +501,6 @@ namespace search
         }
 
         return false;
-    }
-
-
-    INLINE Context::Context(const Context& other)
-        : _parent(other._parent)
-        , _tid(other._tid)
-        , _ply(other._ply)
-        , _max_depth(other._max_depth)
-        , _algorithm(other._algorithm)
-        , _alpha(other._alpha)
-        , _beta(other._beta)
-        , _score(other._score)
-        , _retry_beta(other._retry_beta)
-        , _futility_pruning(other._futility_pruning)
-        , _is_null_move(other._is_null_move)
-        , _is_pv(other._is_pv)
-        , _is_retry(other._is_retry)
-        , _is_singleton(other._is_singleton)
-        , _is_terminal(other._is_terminal)
-        , _multicut_allowed(other._multicut_allowed)
-        , _retry_above_alpha(other._retry_above_alpha)
-        , _retry_next(other._retry_next)
-        , _double_ext(other._double_ext)
-        , _extension(other._extension)
-        , _fifty(other._fifty)
-        , _full_depth_count(other._full_depth_count)
-        , _mate_detected(other._mate_detected)
-        , _pruned_count(other._pruned_count)
-        , _move(other._move)
-        , _best_move(other._best_move)
-        , _cutoff_move(other._cutoff_move)
-        , _prev(other._prev)
-        , _excluded(other._excluded)
-        , _tt_entry(other._tt_entry)
-        , _capture_square(other._capture_square)
-        , _counter_move(other._counter_move)
-        , _can_prune(other._can_prune)
-        , _statebuf(other._statebuf)
-        , _leftmost(other._leftmost)        
-        , _repetitions(other._repetitions)        
-        , _tt(other._tt)
-    {
-        _null_move_allowed[0] = other._null_move_allowed[0];
-        _null_move_allowed[1] = other._null_move_allowed[1];
-
-        _state = &_statebuf;
     }
 
 
@@ -771,6 +724,7 @@ namespace search
         ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
         ASSERT(null_move || move->_group < MoveOrder::UNORDERED_MOVES);
 
+        ASSERT_ALWAYS(_ply + 1 < PLY_MAX);
         auto ctxt = new (&context_stacks[_tid][_ply + 1]) Context;
 
         if (move)

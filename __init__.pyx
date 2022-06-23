@@ -414,11 +414,11 @@ cdef extern from 'context.h' namespace 'search':
 
         string          (*_epd)(const State&)
         void            (*_log_message)(int, const string&, bool)
-        void            (*_on_iter)(PyObject*, const Context*, score_t)
+        void            (*_on_iter)(PyObject*, Context*, score_t)
         void            (*_on_next)(PyObject*, int64_t)
-        string          (*_pgn)(const Context*)
+        string          (*_pgn)(Context*)
         void            (*_print_state)(const State&)
-        void            (*_report)(PyObject*, vector[const Context*]&)
+        void            (*_report)(PyObject*, vector[Context*]&)
         size_t          (*_vmem_avail)()
 
         int64_t         nanosleep(int) nogil
@@ -467,11 +467,11 @@ cdef void print_state(const State& state) except* with gil:
     print_board(board_from_cxx_state(state))
 
 
-cdef void report(self, vector[const Context*]& ctxts) except* with gil:
+cdef void report(self, vector[Context*]& ctxts) except* with gil:
     self.report_cb(self, [NodeContext.from_cxx_context(c) for c in ctxts])
 
 
-cdef string pgn(const Context* ctxt) except* with gil:
+cdef string pgn(Context* ctxt) except* with gil:
     cdef NodeContext node = NodeContext.from_cxx_context(ctxt)
     moves = []
     while node.parent:
@@ -530,18 +530,28 @@ cdef size_t vmem_avail():
 # Python wrapper for C++ Context
 # ---------------------------------------------------------------------
 cdef class NodeContext:
-    cdef Context _ctxt
+    cdef Context* _ctxt
     cdef public BoardState state
+    cdef bool _own
 
     def __init__(self, board: chess.Board=None):
+        self._own = False
         if board:
             self.create_from(board)
 
 
+    def __del__(self):
+        print('__del__', self._own)
+        if self._own:
+            del self._ctxt
+
+
     cdef void create_from(self, board: chess.Board):
+        self._ctxt = new Context()
+        self._own = True
         self._ctxt._epd = <string (*)(const State&)> epd
         self._ctxt._log_message = <void (*)(int, const string&, bool)> log_message
-        self._ctxt._pgn = <string (*)(const Context*)> pgn
+        self._ctxt._pgn = <string (*)(Context*)> pgn
         self._ctxt._print_state = <void (*)(const State&)> print_state
         self._ctxt._vmem_avail = <size_t (*)()> vmem_avail
 
@@ -550,10 +560,10 @@ cdef class NodeContext:
 
 
     @staticmethod
-    cdef NodeContext from_cxx_context(const Context* ctxt):
+    cdef NodeContext from_cxx_context(Context* ctxt):
         cdef NodeContext node = NodeContext()
         if ctxt:
-            node._ctxt = deref(ctxt)
+            node._ctxt = ctxt
             return node
 
 
@@ -648,11 +658,11 @@ cdef class NodeContext:
         return self._ctxt._score
 
 
-    # @property
-    # def parent(self):
-    #     cdef Context* parent = self._ctxt._parent
-    #     if parent != NULL:
-    #         return NodeContext.from_cxx_context(self._ctxt._parent)
+    @property
+    def parent(self):
+        cdef Context* parent = self._ctxt._parent
+        if parent != NULL:
+            return NodeContext.from_cxx_context(self._ctxt._parent)
 
 
     @property
@@ -779,12 +789,17 @@ cdef class SearchAlgorithm:
         self.report_cb = kwargs.get('threads_report', None)
 
 
+
+    def __eq__(self, other):
+        return self._ctxt == other._ctxt
+
+
     cdef set_context_callbacks(self):
         if self.context:
             self.context._ctxt._engine = <PyObject*> self
 
             # iteration callback
-            self.context._ctxt._on_iter = <void (*)(PyObject*, const Context*, score_t)> self.on_iter
+            self.context._ctxt._on_iter = <void (*)(PyObject*, Context*, score_t)> self.on_iter
 
             # search callback (checks timer, calls user-defined callback)
             if self.node_cb:
@@ -794,7 +809,7 @@ cdef class SearchAlgorithm:
 
             # callback for reporting SMP threads stats
             if self.report_cb:
-                self.context._ctxt._report = <void (*)(PyObject*, vector[const Context*]&)> report
+                self.context._ctxt._report = <void (*)(PyObject*, vector[Context*]&)> report
             else:
                 self.context._ctxt._report = NULL
 
@@ -876,7 +891,7 @@ cdef class SearchAlgorithm:
     #
     # Callback wrappers
     #
-    cdef void on_iter(self, const Context* ctxt, score_t score) except* with gil:
+    cdef void on_iter(self, Context* ctxt, score_t score) except* with gil:
         self.current_depth = self.context.max_depth()
         self.best_move = py_move(deref(ctxt)._best_move)
 
@@ -959,7 +974,7 @@ cdef class IterativeDeepening(SearchAlgorithm):
             self.context._ctxt.set_time_info(self.time_info[0], self.time_info[1])
 
         with nogil:
-            score = iterative(self.context._ctxt, table, max_iter)
+            score = iterative(deref(self.context._ctxt), table, max_iter)
 
         return score
 
@@ -970,7 +985,7 @@ cdef class Negamax(SearchAlgorithm):
         assert self.context.max_depth() == self.depth
         self.context._ctxt._algorithm = NEGAMAX
         with nogil:
-            score = negamax(self.context._ctxt, table)
+            score = negamax(deref(self.context._ctxt), table)
         return score
 
 
@@ -980,7 +995,7 @@ cdef class Negascout(SearchAlgorithm):
         assert self.context.max_depth() == self.depth
         self.context._ctxt._algorithm = NEGASCOUT
         with nogil:
-            score = negamax(self.context._ctxt, table)
+            score = negamax(deref(self.context._ctxt), table)
         return score
 
 
@@ -990,7 +1005,7 @@ cdef class MTDf(SearchAlgorithm):
         assert self.context.max_depth() == self.depth
         self.context._ctxt._algorithm = MTDF
         with nogil:
-            score = mtdf(self.context._ctxt, 0, table)
+            score = mtdf(deref(self.context._ctxt), 0, table)
         return score
 
 

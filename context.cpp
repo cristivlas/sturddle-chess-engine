@@ -159,12 +159,12 @@ namespace search
     std::string (*Context::_epd)(const State&) = nullptr;
     void (*Context::_log_message)(int, const std::string&, bool) = nullptr;
 
-    void (*Context::_on_iter)(PyObject*, const Context*, score_t) = nullptr;
+    void (*Context::_on_iter)(PyObject*, Context*, score_t) = nullptr;
     void (*Context::_on_next)(PyObject*, int64_t) = nullptr;
 
-    std::string(*Context::_pgn)(const Context*) = nullptr;
+    std::string(*Context::_pgn)(Context*) = nullptr;
     void (*Context::_print_state)(const State&) = nullptr;
-    void (*Context::_report)(PyObject*, std::vector<const Context*>&) = nullptr;
+    void (*Context::_report)(PyObject*, std::vector<Context*>&) = nullptr;
 
     size_t (*Context::_vmem_avail)() = nullptr;
 

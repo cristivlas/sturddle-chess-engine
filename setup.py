@@ -22,14 +22,14 @@ args = []
 link = []
 
 # Debug build
-if platform.startswith('win'):
-     args = [ '/Od', '/Zi' ]
-     link = ['/DEBUG']
-else:
-     args = [ '-O0', '-D_DEBUG' ]
+# if platform.startswith('win'):
+#      args = [ '/Od', '/Zi' ]
+#      link = ['/DEBUG']
+# else:
+#      args = [ '-O0', '-D_DEBUG' ]
 
 # Release build
-# args = ['-DNO_ASSERT']
+args = ['-DNO_ASSERT']
 
 if platform.startswith('win'):
     args.append('/std:c++17')
