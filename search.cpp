@@ -433,10 +433,16 @@ void TranspositionTable::get_pv_from_table(
     /* keep track of state hashes, to detect cycles */
     std::unordered_set<size_t> visited;
 
-    auto move = ctxt._tt_entry._hash_move;
+    auto move = ctxt._best_move;
+
+    if (!move)
+        move = ctxt._tt_entry._hash_move;
+
+#if 0
     if (!move) /* try the hash table */
         if (auto p = _table->lookup(state, Acquire::Read))
             move = p->_hash_move;
+#endif /* 0 */
 
     while (move)
     {

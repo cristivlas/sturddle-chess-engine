@@ -537,9 +537,14 @@ cdef class NodeContext:
     cdef ContextPtr _own
     cdef public BoardState state
 
+
     def __init__(self, board: chess.Board=None):
         if board:
             self.create_from(board)
+
+
+    def __eq__(self, other: NodeContext):
+        return self._ctxt == other._ctxt
 
 
     cdef void create_from(self, board: chess.Board):
@@ -770,7 +775,6 @@ def clear_hashtable():
 
 cdef class SearchAlgorithm:
     cdef TranspositionTable _table
-    cdef __trace
     cdef public fail_high_cb, move_cb, node_cb, prune_cb, alpha_cb, report_cb
     cdef public best_move
     cdef public NodeContext context # important to use the type here
@@ -784,11 +788,6 @@ cdef class SearchAlgorithm:
         self.context = NodeContext(board)
         self.node_cb = kwargs.get('callback', None)
         self.report_cb = kwargs.get('threads_report', None)
-
-
-
-    def __eq__(self, other):
-        return self._ctxt == other._ctxt
 
 
     cdef set_context_callbacks(self):
@@ -932,14 +931,7 @@ cdef class SearchAlgorithm:
 
         self.context._ctxt.check_time_and_update_nps()
 
-        # for compatibility with pre v.0.95 scripts
-        self.__trace = self.context.get_pv()
-
         return (self.best_move, score)
-
-
-    def trace(self):
-        return self.__trace
 
 
 cdef class IterativeDeepening(SearchAlgorithm):
