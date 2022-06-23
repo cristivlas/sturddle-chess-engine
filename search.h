@@ -174,10 +174,10 @@ namespace search
 
     #if USE_BUTTERFLY_TABLES
         using HistoryCounters = MoveTable<std::pair<int, int>>;
-        using IndexedMoves = MoveTable<Move>;
+        using IndexedMoves = MoveTable<BaseMove>;
     #else
         using HistoryCounters = PieceMoveTable<std::pair<int, int>>;
-        using IndexedMoves = PieceMoveTable<Move>;
+        using IndexedMoves = PieceMoveTable<BaseMove>;
     #endif /* USE_BUTTERFLY_TABLES */
 
         using PlyHistoryCounters = std::array<MoveTable<float>, 2>;

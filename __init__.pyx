@@ -405,7 +405,7 @@ cdef extern from 'context.h' namespace 'search':
 
     ctypedef intrusive_ptr[Context] ContextPtr
     ctypedef unique_ptr[History] HistoryPtr
-
+    ctypedef vector[BaseMove] PV
 
     cdef cppclass Context:
         Algorithm       _algorithm
@@ -455,7 +455,7 @@ cdef extern from 'context.h' namespace 'search':
         void            set_tt(TranspositionTable*)
         TranspositionTable* get_tt() const
 
-        const vector[BaseMove]& get_pv() nogil const
+        const PV&       get_pv() nogil const
 
         # perft-only
         ContextPtr      next(bool, bool, score_t)
