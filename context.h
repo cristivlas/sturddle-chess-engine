@@ -380,7 +380,7 @@ namespace search
         State               _statebuf;
         bool                _leftmost = false;
         mutable int         _repetitions = -1;
-        Move                _counter_move;
+        BaseMove            _counter_move;
         MoveMaker           _move_maker;
 
         TranspositionTable* _tt = nullptr;
@@ -1049,7 +1049,7 @@ namespace search
              */
             auto capture_gain = move._state->capture_value;
 
-            const auto other = eval_exchanges<STATIC_EXCHANGES>(move);
+            const auto other = eval_exchanges<true>(move);
 
             if (other < MATE_LOW)
             {

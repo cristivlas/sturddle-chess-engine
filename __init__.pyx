@@ -404,6 +404,7 @@ cdef extern from 'context.h' namespace 'search':
 
     ctypedef intrusive_ptr[Context] ContextPtr
     ctypedef intrusive_ptr[History] HistoryPtr
+    ctypedef vector[BaseMove] PV
 
 
     cdef cppclass Context:
@@ -452,9 +453,8 @@ cdef extern from 'context.h' namespace 'search':
         void            set_tt(TranspositionTable*)
         TranspositionTable* get_tt() const
 
-        const vector[BaseMove]& get_pv() nogil const
+        const PV&       get_pv() nogil const
 
-        # perft-only
         ContextPtr      next(bool, bool, score_t)
 
         int             rewind(int where, bool reorder)
@@ -683,12 +683,8 @@ cdef class NodeContext:
 
 
     # perft3
-    def has_next(self):
+    cdef has_next(self):
         return deref(self._ctxt).next(False, False, 0).get() != NULL
-
-
-    def next(self):
-        return NodeContext.from_cxx_context(deref(self._ctxt).next(False, False, 0))
 
 
     def is_repeated(self):
