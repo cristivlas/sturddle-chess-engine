@@ -989,12 +989,16 @@ namespace chess
             Bitboard to_mask = BB_ALL,
             Bitboard from_mask = BB_ALL) const;
 
+        /* perft */
+        size_t make_pseudo_legal_moves(MovesList&) const;
+
         void generate_moves(MovesList& out, MovesList& buffer) const;
 
         void generate_castling_moves(MovesList& moves, Bitboard to_mask = BB_ALL) const;
 
         void eval_apply_delta(const BaseMove&, const State& previous);
 
+        /* indirection point for future ideas (dynamic piece weights) */
         static INLINE constexpr int weight(PieceType piece_type)
         {
             return WEIGHT[piece_type];
@@ -1044,7 +1048,8 @@ namespace chess
         ASSERT(move);
         ASSERT(piece_type_at(move.to_square()) != PieceType::KING);
 
-        _check = {-1, -1};
+        ASSERT(_check[0] == -1);
+        ASSERT(_check[1] == -1);
 
         this->capture_value = weight(piece_type_at(move.to_square()));
         this->promotion = move.promotion();
@@ -1333,7 +1338,7 @@ namespace chess
         if ((castling_rights != BB_EMPTY) && (kings & BB_SQUARES[move.from_square()]))
         {
             const auto diff = square_file(move.from_square()) - square_file(move.to_square());
-            return abs(diff) > 1 || (rooks & occupied_co(turn) & BB_SQUARES[move.to_square()]) != 0;
+            return abs(diff) > 1 /* || (rooks & occupied_co(turn) & BB_SQUARES[move.to_square()]) != 0 */;
         }
         return false;
     }

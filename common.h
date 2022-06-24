@@ -136,7 +136,6 @@ using score_t = int32_t;
 /* Half-baked hack */
 #define USE_MOVES_CACHE                     false
 
-#define USE_THREAD_POOL                     true
 
 /*
  * Number of processed nodes after which the search code checks

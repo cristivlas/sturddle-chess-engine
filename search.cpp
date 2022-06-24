@@ -33,6 +33,7 @@
 #include <utility>
 #include "context.h"
 #include "search.h"
+#include "thread_pool.hpp"
 #include "utility.h"
 
 #if HAVE_INT128
@@ -427,7 +428,7 @@ void TranspositionTable::get_pv_from_table(
 {
     auto state = ctxt.state().clone();
 
-    ASSERT(Context::_epd(state) == ctxt.epd());
+    ASSERT(Context::epd(state) == ctxt.epd());
     ASSERT(state.hash() == ctxt.state().hash());
 
     /* keep track of state hashes, to detect cycles */
@@ -493,7 +494,8 @@ void TranspositionTable::store_pv(Context& start, bool print)
 
         if (ctxt->_best_move && ctxt->_ply + 1 < PLY_MAX)
         {
-            auto next = ctxt->next_context();
+            auto next = ctxt->next_ply();
+
             if (next->_move == ctxt->_best_move)
             {
                 ctxt = next;
@@ -806,7 +808,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                      * Hack: use ply + 2 for the singular search to avoid clobbering
                      * _move_maker's _moves / _states stacks for the current context.
                      */
-                    auto s_ctxt = ctxt.clone(ctxt._ply + 2);
+                    auto s_ctxt = ctxt.clone(ctxt.next_ply(false, 1), ctxt._ply + 2);
 
                     s_ctxt->set_initial_moves(ctxt.get_moves());
                     s_ctxt->_excluded = next_ctxt->_move;
@@ -1106,17 +1108,17 @@ static score_t search_iteration(Context& ctxt, TranspositionTable& table, score_
 /****************************************************************************
  * Lazy SMP. https://www.chessprogramming.org/Lazy_SMP
  ****************************************************************************/
-static std::unique_ptr<ThreadGroup> threads;
+static std::unique_ptr<thread_pool> threads;
 
 
 static size_t start_pool()
 {
-    if (!threads || threads->get_thread_count() + 1 != size_t(Context::cpu_cores()))
+    if (!threads || threads->get_thread_count() + 1 != size_t(SMP_CORES))
     {
-        if (Context::cpu_cores() <= 1)
+        if (SMP_CORES <= 1)
             return 0;
 
-        threads = std::make_unique<ThreadGroup>(Context::cpu_cores() - 1);
+        threads = std::make_unique<thread_pool>(SMP_CORES - 1);
     }
 
     return threads->get_thread_count();
@@ -1129,6 +1131,9 @@ struct TaskData
 };
 
 
+/*
+ * Ctor and dtor set up / clean up a multi-threaded search iteration.
+ */
 class SMPTasks
 {
     SMPTasks(const SMPTasks&) = delete;
@@ -1136,9 +1141,10 @@ class SMPTasks
 
     Context& _root;
 
-public:
+    /* static, preserve TTs between iterations */
     static std::vector<TaskData> _tables;
 
+public:
     SMPTasks(Context& ctxt, TranspositionTable& table, score_t score)
         : _root(ctxt)
     {
@@ -1147,7 +1153,9 @@ public:
 
         if (table._iteration == 1)
         {
-            std::vector<TaskData>(thread_count, { ContextPtr(), table }).swap(_tables);
+            _tables.resize(thread_count);
+            for (size_t i = 0; i != thread_count; ++i)
+                _tables[i]._tt = table;
 
             /* run 1st iteration on one thread only */
             return;
@@ -1155,7 +1163,6 @@ public:
 
         for (size_t i = 0; i < thread_count; ++i)
         {
-            _tables[i]._tt._tid = int(_tables.size() - i);
             _tables[i]._tt._iteration = table._iteration;
 
             _tables[i]._tt._w_alpha = table._w_alpha;
@@ -1169,13 +1176,18 @@ public:
             t_ctxt->_max_depth += (i % 2) == 0;
             t_ctxt->set_initial_moves(_root.get_moves());
 
+            /* grab hash move from the previous iteration */
             if (_tables[i]._ctxt)
                 t_ctxt->_tt_entry._hash_move = _tables[i]._ctxt->_tt_entry._hash_move;
 
             _tables[i]._ctxt = t_ctxt;
+
+            /* pass TT pointer to thread task */
             auto* tt = &_tables[i]._tt;
 
             threads->push_task([t_ctxt, tt, score]() mutable {
+
+                tt->_tid = thread_pool::thread_id();
                 try
                 {
                     search_iteration(*t_ctxt, *tt, score);
@@ -1211,11 +1223,15 @@ public:
 
             cython_wrapper::call(Context::_report, Context::_engine, ctxts);
         }
+
+        for (auto& table : _tables)
+            table._ctxt.reset();
     }
 };
 
 
 std::vector<TaskData> SMPTasks::_tables;
+
 
 #else
 struct SMPTasks /* dummy */

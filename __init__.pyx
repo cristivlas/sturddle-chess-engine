@@ -36,7 +36,7 @@ from cython.operator cimport address, dereference as deref
 
 from libcpp cimport bool
 from libcpp.map cimport map
-from libcpp.memory cimport shared_ptr, unique_ptr
+from libcpp.memory cimport unique_ptr
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libc cimport stdint
@@ -179,6 +179,7 @@ cdef extern from 'chess.h' namespace 'chess':
         void generate_moves(vector[Move]&, vector[Move]&) const
 
         vector[Move]& generate_pseudo_legal_moves(vector[Move]&, Bitboard, Bitboard) const
+        size_t make_pseudo_legal_moves(vector[Move]&) const
 
 
     cdef score_t estimate_static_exchanges(const State&, Color, int, PieceType)
@@ -200,7 +201,11 @@ cdef py_move(const BaseMove& m):
 
 """ Convert Py move object to C++ """
 cdef Move cxx_move(move: chess.Move):
-    cdef Move m = Move(move.from_square, move.to_square, move.promotion if move.promotion else PieceType.NONE)
+    cdef Move m = Move(
+        move.from_square,
+        move.to_square,
+        move.promotion if move.promotion else PieceType.NONE
+    )
     return m
 
 
@@ -395,7 +400,6 @@ cdef extern from 'context.h' namespace 'search':
         int     _fifty
 
 
-    ctypedef shared_ptr[Context] ContextPtr
     ctypedef unique_ptr[History] HistoryPtr
 
 
@@ -466,15 +470,15 @@ cdef board_from_cxx_state(const State& state):
     return board_from_state(board_state)
 
 
-cdef void print_state(const State& state) except* with gil:
+cdef void print_state(const State& state) except* :
     print_board(board_from_cxx_state(state))
 
 
-cdef void report(self, vector[Context*]& ctxts) except* with gil:
+cdef void report(self, vector[Context*]& ctxts) except* :
     self.report_cb(self, [NodeContext.from_cxx_context(c) for c in ctxts])
 
 
-cdef string pgn(Context* ctxt) except* with gil:
+cdef string pgn(Context* ctxt) except* :
     cdef NodeContext node = NodeContext.from_cxx_context(ctxt)
     moves = []
     while node.parent:
@@ -494,7 +498,7 @@ cdef string pgn(Context* ctxt) except* with gil:
     return game.accept(exporter).encode()
 
 
-cdef string epd(const State& state) except* with gil:
+cdef string epd(const State& state) except* :
     return board_from_cxx_state(state).epd().encode()
 
 
@@ -510,7 +514,7 @@ __log = {
     4: (logging.ERROR, logging.error),
 }
 
-cdef void log_message(int level, const string& message, bool forceLevel) except* with gil:
+cdef void log_message(int level, const string& message, bool forceLevel) except* :
     logLevel = logging.getLogger().level
     try:
         _level, _func = __log[level]
@@ -530,15 +534,25 @@ cdef size_t vmem_avail():
 
 
 # ---------------------------------------------------------------------
-# Python wrapper for C++ Context
+# Python wrappers for C++ Context
 # ---------------------------------------------------------------------
+cdef class ContextValue:
+    cdef Context _ctxt
+
+
 cdef class NodeContext:
+    '''
+    Can be either a pointer into the C++ layer, or own value.
+    '''
     cdef Context* _ctxt
-    cdef ContextPtr _own
+    cdef ContextValue _value
     cdef public BoardState state
 
 
-    def __init__(self, board: chess.Board=None):
+    def __cinit__(self, board: chess.Board=None):
+        self._ctxt = NULL
+        self._value = None
+
         if board:
             self.create_from(board)
 
@@ -548,8 +562,8 @@ cdef class NodeContext:
 
 
     cdef void create_from(self, board: chess.Board):
-        self._own.reset(new Context())
-        self._ctxt = self._own.get()
+        self._value = ContextValue()
+        self._ctxt = address(self._value._ctxt)
 
         self._ctxt._epd = <string (*)(const State&)> epd
         self._ctxt._log_message = <void (*)(int, const string&, bool)> log_message
@@ -671,15 +685,6 @@ cdef class NodeContext:
     def top(self):
         parent = self.parent
         return self if not parent else parent.top
-
-
-    # perft3
-    cdef has_next(self):
-        return self._ctxt.next(False, 0) != NULL
-
-
-    # def next(self):
-    #     return NodeContext.from_cxx_context(self._ctxt.next(False, 0)
 
 
     def is_repeated(self):
@@ -887,7 +892,7 @@ cdef class SearchAlgorithm:
     #
     # Callback wrappers
     #
-    cdef void on_iter(self, Context* ctxt, score_t score) except* with gil:
+    cdef void on_iter(self, Context* ctxt, score_t score) except* :
         self.current_depth = self.context.max_depth()
         # self.best_move = py_move(deref(ctxt)._best_move)
 
@@ -895,7 +900,7 @@ cdef class SearchAlgorithm:
            self.iteration_callback(self, NodeContext.from_cxx_context(ctxt), score)
 
 
-    cdef void on_next(self, int64_t milliseconds) except* with gil:
+    cdef void on_next(self, int64_t milliseconds) except* :
         self.node_cb(self, milliseconds)
 
 
@@ -1069,8 +1074,9 @@ def perft(fen, repeat=1):
     count = 0
     start = time.perf_counter()
     for i in range(0, repeat):
-        board._state.generate_pseudo_legal_moves(moves, BB_ALL, BB_ALL)
-        count += moves.size()
+        # board._state.generate_pseudo_legal_moves(moves, BB_ALL, BB_ALL)
+        # count += moves.size()
+        count += board._state.make_pseudo_legal_moves(moves)
     return count, time.perf_counter() - start
 
 
@@ -1095,7 +1101,7 @@ def perft3(fen, repeat=1):
 
     for i in range(0, repeat):
         node._ctxt._max_depth = i % 100
-        while node.has_next():
+        while node._ctxt.next(False, 0) != NULL:
             count += 1
         node._ctxt.rewind(0, True)
 

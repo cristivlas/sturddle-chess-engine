@@ -25,6 +25,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include "common.h"
 
 
 class thread_pool
@@ -33,8 +34,8 @@ public:
     explicit thread_pool(size_t thread_count) : _running(true)
     {
         for (size_t i = 0; i != thread_count; ++i)
-            _threads.emplace_back(std::thread([this]{
-                work();
+            _threads.emplace_back(std::thread([this, i] {
+                work(i + 1);
             }));
     }
 
@@ -74,9 +75,16 @@ public:
         }
     }
 
-private:
-    void work()
+    static size_t thread_id()
     {
+        return _tid;
+    }
+
+private:
+    void work(size_t index)
+    {
+        _tid = index;
+
         while (_running)
         {
             std::function<void()> task;
@@ -103,4 +111,9 @@ private:
     std::mutex _mutex;
     std::vector<std::function<void()>> _tasks;
     std::vector<std::thread> _threads;
+
+    static THREAD_LOCAL size_t _tid;
 };
+
+
+THREAD_LOCAL size_t thread_pool::_tid;

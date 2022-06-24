@@ -151,7 +151,7 @@ namespace search
     atomic_time Context::_time_start;
     size_t Context::_callback_count(0);
 
-    HistoryPtr Context::_history;
+    HistoryPtr Context::_history; /* moves played so far */
 
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
@@ -169,21 +169,45 @@ namespace search
     size_t (*Context::_vmem_avail)() = nullptr;
 
 
+    /*
+     * Context allocations should only happen on the main
+     * thread at the beginning of each search iteration.
+     */
+    static /* THREAD_LOCAL */ Free* free_list = nullptr;
+
+
+    void* Context::operator new(size_t size)
+    {
+        if (auto head = free_list)
+        {
+            free_list = head->_next;
+            head->_next = (Free*)Free::MAGIC;
+            return head;
+        }
+        return ::operator new(size);
+    }
+
+
+    void Context::operator delete(void* ptr, size_t) noexcept
+    {
+        auto ctxt = static_cast<Context*>(ptr);
+        ASSERT(ctxt->_next == (Free*)Free::MAGIC);
+        ctxt->_next = free_list;
+        free_list = ctxt;
+    }
+
+
+    /* Init attack masks and other magic bitboards in chess.cpp */
     /* static */ void Context::init()
     {
         _init();
     }
 
 
+    /* Call into the Python logger */
     /* static */ void Context::log_message(LogLevel level, const std::string& msg, bool force)
     {
         cython_wrapper::call(_log_message, int(level), msg, force);
-    }
-
-
-    /* static */ int Context::cpu_cores()
-    {
-        return SMP_CORES;
     }
 
 
@@ -192,40 +216,62 @@ namespace search
      * 1) clone root at the beginning of SMP searches, and
      * 2) create a temporary context for singularity search.
      */
-    ContextPtr Context::clone(int ply) const
+    void Context::clone(Context* ctxt) const
     {
-        ContextPtr ctxt(new Context);
-
         ctxt->_algorithm = _algorithm;
         ctxt->_alpha = _alpha;
         ctxt->_beta = _beta;
         ctxt->_score = _score;
         ctxt->_max_depth = _max_depth;
         ctxt->_parent = _parent;
-        ctxt->_ply = ply;
+        ctxt->_ply = _ply;
         ctxt->_prev = _prev;
         ctxt->_statebuf = state();
         ctxt->_state = &ctxt->_statebuf;
         ctxt->_move = _move;
         ctxt->_excluded = _excluded;
         ctxt->_tt_entry = _tt_entry;
-        ctxt->_move_maker.set_ply(ply);
+        ctxt->_move_maker.set_ply(_ply);
         ctxt->_counter_move = _counter_move;
+    }
+
+
+    ContextPtr Context::clone() const
+    {
+        ContextPtr ctxt(new Context, [](Context *p) {
+            delete p;
+        });
+        clone(ctxt.get());
+        return ctxt;
+    }
+
+
+    ContextPtr Context::clone(Context* buffer, int ply) const
+    {
+        ContextPtr ctxt(new (buffer) Context, [] (Context* p) {
+            p->~Context(); /* cleanup initial moves */
+        });
+
+        clone(ctxt.get());
+        ctxt->_ply = ply;
+        ctxt->_move_maker.set_ply(ply);
 
         return ctxt;
     }
 
 
-    using ContextStack = std::array<std::array<uint8_t, sizeof(Context)>, PLY_MAX>;
-    static THREAD_LOCAL ContextStack context_stack;
+    using ContextStack = std::array<Context, PLY_MAX>;
+    static THREAD_LOCAL ContextStack stack;
 
 
-    Context* Context::next_context(bool init) const
+    Context* Context::next_ply(bool init, int offset) const
     {
+        auto* buffer = &stack[_ply + offset];
+
         if (init)
-            return new (&context_stack[_ply + 1]) Context;
+            return new (buffer) Context;
         else
-            return reinterpret_cast<Context*>(&context_stack[_ply + 1]);
+            return buffer;
     }
 
 
@@ -406,7 +452,7 @@ namespace search
         if constexpr(Debug)
         {
             std::ostringstream out;
-            out << "\tdo_exchanges (" << Context::_epd(state) << ") gain=" << gain << " ";
+            out << "\tdo_exchanges (" << Context::epd(state) << ") gain=" << gain << " ";
             for (const auto& move : moves)
                 out << move.uci() << "(" << move._score << ") ";
             Context::log_message(LogLevel::DEBUG, out.str());
@@ -561,7 +607,7 @@ namespace search
         if constexpr(DEBUG_CAPTURES)
         {
             std::ostringstream out;
-            out << "do_captures (" << Context::_epd(state) << ") ";
+            out << "do_captures (" << Context::epd(state) << ") ";
             for (const auto& move : moves)
                 out << move.uci() << "(" << move._score << ") ";
 
@@ -849,7 +895,7 @@ namespace search
             if (DEBUG_MATERIAL && score)
             {
                 std::ostringstream out;
-                out << "rook: " << Context::_epd(state) << ": " << score << ", mat: " << mat_eval;
+                out << "rook: " << Context::epd(state) << ": " << score << ", mat: " << mat_eval;
                 Context::log_message(LogLevel::DEBUG, out.str());
             }
         }
@@ -1558,9 +1604,9 @@ namespace search
     /*
      * https://en.wikipedia.org/wiki/Extended_Position_Description
      */
-    std::string Context::epd() const
+    std::string Context::epd(const State& state)
     {
-        return cython_wrapper::call(_epd, state());
+        return cython_wrapper::call(_epd, state);
     }
 
 

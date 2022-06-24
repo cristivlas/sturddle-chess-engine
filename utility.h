@@ -21,14 +21,8 @@
 #pragma once
 
 #include <stdexcept>
-#include <thread>
-#include <vector>
-
 #include "Python.h"
 
-#if USE_THREAD_POOL
-  #include "thread_pool.hpp"
-#endif
 
 enum class CancelReason
 {
@@ -49,11 +43,13 @@ namespace
         class GIL_State
         {
             PyGILState_STATE state;
+
         public:
-            GIL_State() : state(PyGILState_Ensure())
+            INLINE GIL_State() : state(PyGILState_Ensure())
             {
             }
-            ~GIL_State()
+
+            INLINE ~GIL_State()
             {
                 if (PyErr_CheckSignals() != 0)
                 {
@@ -66,8 +62,9 @@ namespace
                 PyGILState_Release(state);
             }
         };
+
         template <typename R, typename... Params, typename... Args>
-        static R call(R (*fn)(Params...), Args&&... args)
+        static INLINE R call(R (*fn)(Params...), Args&&... args)
         {
             GIL_State gil_state;
             ASSERT(fn);
@@ -81,7 +78,7 @@ namespace
      * Sorting Move objects takes advantage of the XOR swap hack on 64 bit.
      */
     template<typename Iterator, typename Compare>
-    inline void insertion_sort(Iterator first, Iterator last, Compare comp)
+    INLINE void insertion_sort(Iterator first, Iterator last, Compare comp)
     {
         using std::swap;
 
@@ -97,7 +94,7 @@ namespace
         }
     }
 
-    template<typename  I> inline void shift_left_2(I first, I last)
+    template<typename  I> INLINE void shift_left_2(I first, I last)
     {
     #if 0
         /* need C++20 */
@@ -109,48 +106,4 @@ namespace
         *i++ = V(); *i = V();
     #endif
     }
-
-#if USE_THREAD_POOL
-    using ThreadGroup = thread_pool;
-#else
-    /*
-     * Utility for starting threads.
-     *
-     * Interface is compatible with thread_pool, but with a much simpler
-     * implementation since the Lazy SMP search starts a fixed number of
-     * tasks. A real thread pool may be overkill.
-     */
-    class ThreadGroup
-    {
-        const size_t _thread_count;
-        std::vector<std::thread> _threads;
-
-    public:
-        explicit ThreadGroup(size_t count) : _thread_count(count)
-        {
-        }
-
-        size_t get_thread_count() const
-        {
-            return _thread_count;
-        }
-
-        template<typename F> void push_task(F f)
-        {
-            if (_threads.size() >= _thread_count)
-                throw std::logic_error("number of tasks exceeds max thread count");
-
-            _threads.emplace_back(std::thread(f));
-        }
-
-        void wait_for_tasks()
-        {
-            for (auto& thread : _threads)
-                thread.join();
-
-            _threads.clear();
-        }
-    };
-#endif /* !USE_THREAD_POOL */
-
 } /* namespace */

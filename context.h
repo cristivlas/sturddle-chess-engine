@@ -174,13 +174,20 @@ namespace search
     };
 
 
+    struct Free
+    {
+        static constexpr size_t MAGIC = 0xC0FFEFFE;
+        Free* _next = (Free*)MAGIC;
+    };
+
+
     using ContextPtr = std::shared_ptr<struct Context>;
 
 
     /*
      * The context of a searched node.
      */
-    struct Context
+    struct Context : public Free
     {
         friend class MoveMaker;
 
@@ -189,6 +196,10 @@ namespace search
 
         Context(const Context&) = delete;
         Context& operator=(const Context&) = delete;
+
+        static void* operator new(size_t, void* p) { return p; }
+        static void* operator new(size_t);
+        static void operator delete(void*, size_t) noexcept;
 
         /* parent move in the graph */
         Context*    _parent = nullptr;
@@ -230,9 +241,10 @@ namespace search
         Square      _capture_square = Square::UNDEFINED;
 
         static void cancel();
-        static int  cpu_cores();
 
-        ContextPtr  clone(int ply = 0) const;
+        ContextPtr  clone() const;
+        ContextPtr  clone(Context*, int ply) const;
+        void        clone(Context*) const;
 
         bool        can_forward_prune() const;
         bool        can_prune() const;
@@ -244,7 +256,8 @@ namespace search
 
         int         depth() const { return _max_depth - _ply; }
 
-        std::string epd() const;
+        std::string epd() const { return epd(state()); }
+        static std::string epd(const State&);
 
         /* Static evaluation */
         score_t     _evaluate();    /* no repetitions, no fifty-moves rule */
@@ -253,7 +266,6 @@ namespace search
         score_t     evaluate_material(bool with_piece_squares = true) const;
         int         eval_king_safety(int piece_count);
         int         eval_threats(int piece_count);
-
         void        extend();       /* fractional extensions */
         const Move* first_valid_move();
         score_t     futility_margin();
@@ -298,7 +310,7 @@ namespace search
         int64_t     nanosleep(int nanosec);
 
         Context*    next(bool null_move = false, score_t = 0);
-        Context*    next_context(bool init = false) const;
+        Context*    next_ply(bool init = false, int offset = 0) const;
 
         int         next_move_index() { return _move_maker.current(*this); }
         bool        on_next();
@@ -480,7 +492,7 @@ namespace search
 
     INLINE bool is_quiet(const State& state, const Context* ctxt = nullptr)
     {
-    #if 0
+    #if 1
         return state.promotion != chess::PieceType::QUEEN /* ignore under-promotions */
     #else
         return state.promotion == chess::PieceType::NONE
@@ -728,7 +740,7 @@ namespace search
         ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
         ASSERT(null_move || move->_group < MoveOrder::UNORDERED_MOVES);
 
-        auto ctxt = next_context(true);
+        auto ctxt = next_ply(true);
 
         if (move)
         {

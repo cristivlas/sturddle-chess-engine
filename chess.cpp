@@ -552,4 +552,17 @@ namespace chess
 
         return true;
     }
+
+
+    size_t State::make_pseudo_legal_moves(MovesList& moves) const
+    {
+        generate_pseudo_legal_moves(moves);
+        for (const auto& move : moves)
+        {
+            State state = clone();
+            state.apply_move(move);
+        }
+
+        return moves.size();
+    }
 }
