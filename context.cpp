@@ -169,39 +169,6 @@ namespace search
     size_t (*Context::_vmem_avail)() = nullptr;
 
 
-    static const auto main_thread = std::this_thread::get_id();
-    static /* THREAD_LOCAL */ Free* free_list = nullptr;
-
-
-    void* Context::operator new(size_t size)
-    {
-        if (auto head = free_list)
-        {
-            free_list = head->_next;
-            head->_next = (Free*)Free::MAGIC;
-            return head;
-        }
-        return ::operator new(size);
-    }
-
-
-    void Context::operator delete(void* ptr, size_t) noexcept
-    {
-        /*
-         * Context allocations should only happen on the main
-         * thread at the beginning of each search iteration.
-         * Deallocation should also happen on main thread only.
-         */
-        ASSERT_ALWAYS(std::this_thread::get_id() == main_thread);
-
-        auto ctxt = static_cast<Context*>(ptr);
-        ASSERT_ALWAYS(ctxt->_next == (Free*)Free::MAGIC);
-
-        ctxt->_next = free_list;
-        free_list = ctxt;
-    }
-
-
     /* Init attack masks and other magic bitboards in chess.cpp */
     /* static */ void Context::init()
     {
@@ -221,43 +188,25 @@ namespace search
      * 1) clone root at the beginning of SMP searches, and
      * 2) create a temporary context for singularity search.
      */
-    void Context::clone(Context* ctxt) const
+    Context* Context::clone(Context* buffer, int ply) const
     {
+        Context* ctxt = new (buffer) Context;
+
         ctxt->_algorithm = _algorithm;
         ctxt->_alpha = _alpha;
         ctxt->_beta = _beta;
         ctxt->_score = _score;
         ctxt->_max_depth = _max_depth;
         ctxt->_parent = _parent;
-        ctxt->_ply = _ply;
+        ctxt->_ply = ply;
         ctxt->_prev = _prev;
         ctxt->_statebuf = state();
         ctxt->_state = &ctxt->_statebuf;
         ctxt->_move = _move;
         ctxt->_excluded = _excluded;
         ctxt->_tt_entry = _tt_entry;
-        ctxt->_move_maker.set_ply(_ply);
-        ctxt->_counter_move = _counter_move;
-    }
-
-
-    ContextPtr Context::clone() const
-    {
-        ContextPtr ctxt(new Context, [](Context *p) {
-            delete p;
-        });
-        clone(ctxt.get());
-        return ctxt;
-    }
-
-
-    Context* Context::clone(Context* buffer, int ply) const
-    {
-        Context* ctxt = new (buffer) Context;
-
-        clone(ctxt);
-        ctxt->_ply = ply;
         ctxt->_move_maker.set_ply(ply);
+        ctxt->_counter_move = _counter_move;
 
         return ctxt;
     }

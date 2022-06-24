@@ -174,20 +174,10 @@ namespace search
     };
 
 
-    struct Free
-    {
-        static constexpr size_t MAGIC = 0xC0FFEFFE;
-        Free* _next = (Free*)MAGIC;
-    };
-
-
-    using ContextPtr = std::shared_ptr<struct Context>;
-
-
     /*
      * The context of a searched node.
      */
-    struct Context : public Free
+    struct Context
     {
         friend class MoveMaker;
 
@@ -198,8 +188,8 @@ namespace search
         Context& operator=(const Context&) = delete;
 
         static void* operator new(size_t, void* p) { return p; }
-        static void* operator new(size_t);
-        static void operator delete(void*, size_t) noexcept;
+        static void* operator new(size_t) = delete;
+        static void operator delete(void*, size_t) noexcept = delete;
 
         /* parent move in the graph */
         Context*    _parent = nullptr;
@@ -242,9 +232,7 @@ namespace search
 
         static void cancel();
 
-        ContextPtr  clone() const;
-        Context*    clone(Context*, int ply) const;
-        void        clone(Context*) const;
+        Context*    clone(Context*, int ply = 0) const;
 
         bool        can_forward_prune() const;
         bool        can_prune() const;

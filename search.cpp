@@ -1128,8 +1128,9 @@ static size_t start_pool()
 
 struct TaskData
 {
-    ContextPtr _ctxt;
+    Context* _ctxt = nullptr;
     TranspositionTable _tt;
+    uint8_t _raw_mem[sizeof (Context)] = { 0 };
 };
 
 
@@ -1174,20 +1175,23 @@ public:
             if (_tables[i]._tt._pv.empty())
                 _tables[i]._tt._pv = table._pv;
 
-            auto t_ctxt = _root.clone();
-
-            t_ctxt->_max_depth += (i % 2) == 0;
-            t_ctxt->set_tt(&_tables[i]._tt);
-            t_ctxt->set_initial_moves(_root.get_moves());
-
-            /* grab hash move from the previous iteration */
+            /* get the previous hash move before clobbering the Context */
+            BaseMove hash_move;
             if (_tables[i]._ctxt)
-                t_ctxt->_tt_entry._hash_move = _tables[i]._ctxt->_tt_entry._hash_move;
+                hash_move = _tables[i]._ctxt->_tt_entry._hash_move;
 
-            _tables[i]._ctxt = t_ctxt;
+            _tables[i]._ctxt = _root.clone(reinterpret_cast<Context*>(&_tables[i]._raw_mem[0]));
 
-            /* pass TT pointer to thread task */
-            auto* tt = &_tables[i]._tt;
+            _tables[i]._ctxt->_max_depth += (i % 2) == 0;
+
+            _tables[i]._ctxt->set_tt(&_tables[i]._tt);
+            _tables[i]._ctxt->set_initial_moves(_root.get_moves());
+
+            _tables[i]._ctxt->_tt_entry._hash_move = hash_move;
+
+            /* pass context and TT pointers to thread task */
+            auto t_ctxt = _tables[i]._ctxt;
+            auto tt = &_tables[i]._tt;
 
             threads->push_task([t_ctxt, tt, score]() mutable {
 
@@ -1220,7 +1224,7 @@ public:
             {
                 if (table._ctxt && table._ctxt->get_tt())
                 {
-                    ctxts.emplace_back(table._ctxt.get());
+                    ctxts.emplace_back(table._ctxt);
                     ASSERT(ctxts.back()->get_tt() == &table._tt);
                 }
             }
@@ -1229,7 +1233,7 @@ public:
         }
 
         for (auto& table : _tables)
-            table._ctxt.reset();
+            table._ctxt = nullptr;
     }
 };
 
