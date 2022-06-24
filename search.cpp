@@ -1115,6 +1115,8 @@ static std::unique_ptr<ThreadPool> threads;
 
 static size_t start_pool()
 {
+    Context::ensure_stacks();
+
     if (!threads || threads->get_thread_count() + 1 != size_t(SMP_CORES))
     {
         if (SMP_CORES <= 1)

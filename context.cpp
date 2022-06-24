@@ -205,25 +205,62 @@ namespace search
         ctxt->_move = _move;
         ctxt->_excluded = _excluded;
         ctxt->_tt_entry = _tt_entry;
-        ctxt->_move_maker.set_ply(ply);
         ctxt->_counter_move = _counter_move;
 
         return ctxt;
     }
 
 
-    using ContextStack = std::array<Context, PLY_MAX>;
-    static THREAD_LOCAL ContextStack stack;
+    using ContextBuffer = std::array<uint8_t, sizeof(Context)>;
+    using ContextStack = std::array<ContextBuffer, PLY_MAX>;
+
+    /* Note: top-half of the moves buffers is reserved for do_exchanges. */
+    static constexpr size_t MAX_MOVE = 2 * PLY_MAX;
+    using MoveStack = std::array<MovesList, MAX_MOVE>;
+
+    using StateStack = std::array<std::vector<State>, PLY_MAX>;
+
+    static std::vector<ContextStack> context_stacks(SMP_CORES);
+    static std::vector<MoveStack> move_stacks(SMP_CORES);
+    static std::vector<StateStack> state_stacks(SMP_CORES);
+
+
+    /* static */ void Context::ensure_stacks()
+    {
+        const size_t n_threads(SMP_CORES);
+        if (context_stacks.size() < n_threads)
+        {
+            context_stacks.resize(n_threads);
+            move_stacks.resize(n_threads);
+            state_stacks.resize(n_threads);
+        }
+    }
 
 
     Context* Context::next_ply(bool init, int offset) const
     {
-        auto* buffer = &stack[_ply + offset];
+        auto* buffer = reinterpret_cast<Context*>(&context_stacks[tid()][_ply + offset][0]);
 
         if (init)
             return new (buffer) Context;
         else
             return buffer;
+    }
+
+
+    /* static */ MovesList& Context::moves(int tid, int ply)
+    {
+        ASSERT_ALWAYS(ply >= 0);
+        ASSERT_ALWAYS(size_t(ply) < MAX_MOVE);
+        return move_stacks[tid][ply];
+    }
+
+
+    /* static */ std::vector<State>& Context::states(int tid, int ply)
+    {
+        ASSERT_ALWAYS(ply >= 0);
+        ASSERT_ALWAYS(size_t(ply) < PLY_MAX);
+        return state_stacks[tid][ply];
     }
 
 
@@ -376,17 +413,17 @@ namespace search
      * NOTE: uses top half of MoveMaker's moves buffers to minimize memory allocations.
      */
     template<bool Debug>
-    int do_exchanges(const State& state, Bitboard mask, score_t gain, int ply)
+    int do_exchanges(const State& state, Bitboard mask, score_t gain, int tid, int ply)
     {
         ASSERT(popcount(mask) == 1);
         ASSERT(gain >= 0);
 
-        if (size_t(ply) >= MoveMaker::MAX_MOVE)
+        if (size_t(ply) >= MAX_MOVE)
             return 0;
 
         mask &= ~state.kings;
 
-        MovesList& moves = MoveMaker::_moves[ply];
+        auto& moves = Context::moves(tid, ply);
         state.generate_pseudo_legal_moves(moves, mask);
 
         /* sort moves by piece type */
@@ -480,6 +517,7 @@ namespace search
                     next_state,
                     mask,
                     next_state.capture_value - gain,
+                    tid,
                     ply + 1);
             }
             /*****************************************************************/
@@ -523,7 +561,7 @@ namespace search
      * Skip the exchanges when the value of the captured piece exceeds
      * the value of the capturer.
      */
-    static score_t do_captures(const State& state, Bitboard from_mask, Bitboard to_mask)
+    static score_t do_captures(int tid, const State& state, Bitboard from_mask, Bitboard to_mask)
     {
         static constexpr auto ply = FIRST_EXCHANGE_PLY;
         const auto mask = to_mask & state.occupied_co(!state.turn) & ~state.kings;
@@ -533,7 +571,7 @@ namespace search
          * buffers declared in the MoveMaker class to keep memory allocations down to a
          * minimum. NOTE: generate... function takes masks in reverse: to, from.
          */
-        MovesList& moves = MoveMaker::_moves[ply];
+        auto& moves = Context::moves(tid, ply);
         if (state.generate_pseudo_legal_moves(moves, mask, from_mask).empty())
         {
             return 0;
@@ -637,6 +675,7 @@ namespace search
                 next_state,
                 BB_SQUARES[move.to_square()],
                 next_state.capture_value,
+                tid,
                 ply + 1);
             /****************************************************************/
 
@@ -681,7 +720,7 @@ namespace search
 
         const auto result = STATIC_EXCHANGES
             ? estimate_captures(*state)
-            : do_captures(*state, BB_ALL, BB_ALL);
+            : do_captures(ctxt.tid(), *state, BB_ALL, BB_ALL);
 
         ASSERT(result >= 0);
 
@@ -1676,10 +1715,6 @@ namespace search
     /*---------------------------------------------------------------------
      * MoveMaker
      *---------------------------------------------------------------------*/
-    THREAD_LOCAL std::vector<State> MoveMaker::_states[MAX_MOVE];
-    THREAD_LOCAL MovesList MoveMaker::_moves[MAX_MOVE];
-
-
     int MoveMaker::rewind(Context& ctxt, int where, bool force_reorder)
     {
         ensure_moves(ctxt);
@@ -1695,7 +1730,7 @@ namespace search
 
             for (int i = 0; i != _count; ++i)
             {
-                auto& move = moves()[i];
+                auto& move = ctxt.get_moves()[i];
 
                 if (move._state == nullptr)
                 {
@@ -1789,7 +1824,7 @@ namespace search
         ASSERT(_state_index == 0);
         ASSERT(_ply == ctxt._ply);
 
-        auto& moves_list = moves();
+        auto& moves_list = ctxt.get_moves();
         moves_list.clear();
 
         if (ctxt.get_tt()->_initial_moves.empty())
@@ -1827,7 +1862,7 @@ namespace search
         _current = 0;
 
         /* Initialize scratch buffers for making the moves. */
-        states().resize(_count);
+        Context::states(ctxt.tid(), ctxt._ply).resize(_count);
 
         /*
          * In quiescent search, only quiet moves are interesting.
@@ -1907,7 +1942,7 @@ namespace search
             /********************************************************************/
             /* iterate over pseudo-legal moves                                  */
             /********************************************************************/
-            auto& moves_list = moves();
+            auto& moves_list = ctxt.get_moves();
             const auto n = moves_list.size();
 
             for (size_t i = start_at; i < n; ++i)
