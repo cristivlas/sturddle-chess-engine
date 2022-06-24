@@ -90,6 +90,7 @@ namespace search
 
         const Move* get_next_move(Context& ctxt, score_t futility = 0);
 
+        int count() const { return _count; }
         int current(Context&);
 
         bool has_moves(Context&);
@@ -98,9 +99,6 @@ namespace search
         bool is_singleton(Context&);
 
         int rewind(Context&, int where, bool reorder);
-
-        /* SMP: copy the root moves from the main thread to the other workers. */
-        void set_initial_moves(const MovesList& moves);
 
     private:
         void ensure_moves(Context&);
@@ -151,6 +149,14 @@ namespace search
      */
     struct Context
     {
+        using ContextStack = std::array<struct ContextBuffer, PLY_MAX>;
+
+        /* Note: half of the moves stack are reserved for do_exchanges. */
+        static constexpr size_t MAX_MOVE = 2 * PLY_MAX;
+        using MoveStack = std::array<MovesList, MAX_MOVE>;
+
+        using StateStack = std::array<std::vector<State>, PLY_MAX>;
+
         friend class MoveMaker;
 
         Context() = default;
@@ -297,15 +303,16 @@ namespace search
         const State& state() const { ASSERT(_state); return *_state; }
         TranspositionTable* get_tt() const { return _tt; }
 
-        const MovesList& get_moves() const { return moves(tid(), _ply); }
-        MovesList& get_moves() { return moves(tid(), _ply); }
+        const MovesList& moves() const { return moves(tid(), _ply); }
+        MovesList& moves() { return moves(tid(), _ply); }
 
-        void set_initial_moves(const MovesList& moves)
+        void set_initial_moves(const Context& from_ctxt)
         {
             ASSERT(_tt->_initial_moves.empty());
-            _tt->_initial_moves.assign(moves.begin(), moves.end());
+            auto first = from_ctxt.moves().begin();
+            auto last = first + std::max(0, from_ctxt._move_maker.count());
 
-            _move_maker.set_initial_moves(moves);
+            _tt->_initial_moves.assign(first, last);
         }
 
         /* retrieve PV from TT */
@@ -352,10 +359,21 @@ namespace search
         static size_t       _callback_count;
         static atomic_int   _time_limit; /* milliseconds */
         static atomic_time  _time_start;
+
+        static std::vector<ContextStack>    _context_stacks;
+        static std::vector<MoveStack>       _move_stacks;
+        static std::vector<StateStack>      _state_stacks;
     };
 
 
     static_assert(std::is_trivially_destructible<Context>::value);
+
+    struct ContextBuffer
+    {
+        std::array<uint8_t, sizeof(Context)> _mem;
+
+        Context* as_context() { return reinterpret_cast<Context*>(&_mem[0]); }
+    };
 
 
     /*
@@ -375,7 +393,7 @@ namespace search
      * Evaluate same square exchanges
      */
     template<bool StaticExchangeEvaluation>
-    score_t eval_exchanges(const Move& move, int tid)
+    score_t eval_exchanges(int tid, const Move& move)
     {
         score_t val = 0;
 
@@ -861,6 +879,38 @@ namespace search
     }
 
 
+    INLINE Context* Context::next_ply(bool init, int offset) const
+    {
+        auto* buffer = _context_stacks[tid()][_ply + offset].as_context();
+
+        if (init)
+            return new (buffer) Context;
+        else
+            return buffer;
+    }
+
+
+    /* static */ INLINE MovesList& Context::moves(int tid, int ply)
+    {
+        ASSERT(ply >= 0);
+        ASSERT(size_t(ply) < MAX_MOVE);
+
+        return _move_stacks[tid][ply];
+    }
+
+
+    /* static */ INLINE std::vector<State>& Context::states(int tid, int ply)
+    {
+        ASSERT(ply >= 0);
+        ASSERT(size_t(ply) < PLY_MAX);
+
+        return _state_stacks[tid][ply];
+    }
+
+
+    /*
+     * MoveMaker Helper Class
+     */
     INLINE int MoveMaker::current(Context& ctxt)
     {
         ensure_moves(ctxt);
@@ -870,8 +920,6 @@ namespace search
 
     INLINE void MoveMaker::ensure_moves(Context& ctxt)
     {
-        ASSERT(!moves().empty() || _count <= 0);
-
         if (_count < 0)
         {
             ASSERT(_current < 0);
@@ -915,7 +963,7 @@ namespace search
             return nullptr;
         }
 
-        const auto& moves_list = ctxt.get_moves();
+        const auto& moves_list = ctxt.moves();
         ASSERT(!moves_list.empty());
 
         const Move* move = &moves_list[index];
@@ -977,7 +1025,7 @@ namespace search
         {
         #if !defined(NO_ASSERT)
             /* checked for skipped moves above, make sure there aren't any */
-            const auto& all_moves = moves();
+            const auto& all_moves = ctxt.moves();
             for (const auto& move : all_moves)
             {
                 ASSERT(move._group != MoveOrder::QUIET_MOVES);
@@ -1014,7 +1062,7 @@ namespace search
             auto other = ctxt.state().weight(ctxt.state().piece_type_at(move.from_square()));
             if (other >= capture_gain)
             {
-                other = eval_exchanges<true>(move, ctxt.tid());
+                other = eval_exchanges<true>(ctxt.tid(), move);
 
                 if (EXCHANGES_DETECT_CHECKMATE && other < MATE_LOW)
                 {
@@ -1056,7 +1104,7 @@ namespace search
         if (move._state == nullptr)
         {
             /* assign state buffer */
-            ASSERT(_state_index < states().size());
+            ASSERT(_state_index < Context::states(ctxt.tid(), ctxt._ply).size());
             move._state = &Context::states(ctxt.tid(), ctxt._ply)[_state_index++];
         }
         else
@@ -1169,26 +1217,11 @@ namespace search
     }
 
 
-    /*
-     * SMP: copy the root moves from the main thread to the other
-     * workers at the beginning of the iteration; also used in the
-     * singular extension heuristic.
-     */
-    INLINE void MoveMaker::set_initial_moves(const MovesList& moves)
-    {
-        /* Expect initial state */
-        ASSERT(_count < 0);
-        ASSERT(_current == -1);
-        ASSERT(_phase == 0);
-        ASSERT(_state_index == 0);
-    }
-
-
     INLINE void MoveMaker::sort_moves(Context& ctxt, size_t start_at)
     {
-        ASSERT(start_at < ctxt.get_moves().size());
+        ASSERT(start_at < ctxt.moves().size());
 
-        auto& moves_list = ctxt.get_moves();
+        auto& moves_list = ctxt.moves();
         const auto last = moves_list.end();
         const auto first = moves_list.begin() + start_at;
 

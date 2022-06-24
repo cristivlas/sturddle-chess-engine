@@ -153,6 +153,10 @@ namespace search
 
     HistoryPtr Context::_history; /* moves played so far */
 
+    std::vector<Context::ContextStack> Context::_context_stacks(SMP_CORES);
+    std::vector<Context::MoveStack> Context::_move_stacks(SMP_CORES);
+    std::vector<Context::StateStack> Context::_state_stacks(SMP_CORES);
+
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
 
@@ -211,56 +215,16 @@ namespace search
     }
 
 
-    using ContextBuffer = std::array<uint8_t, sizeof(Context)>;
-    using ContextStack = std::array<ContextBuffer, PLY_MAX>;
-
-    /* Note: top-half of the moves buffers is reserved for do_exchanges. */
-    static constexpr size_t MAX_MOVE = 2 * PLY_MAX;
-    using MoveStack = std::array<MovesList, MAX_MOVE>;
-
-    using StateStack = std::array<std::vector<State>, PLY_MAX>;
-
-    static std::vector<ContextStack> context_stacks(SMP_CORES);
-    static std::vector<MoveStack> move_stacks(SMP_CORES);
-    static std::vector<StateStack> state_stacks(SMP_CORES);
-
 
     /* static */ void Context::ensure_stacks()
     {
         const size_t n_threads(SMP_CORES);
-        if (context_stacks.size() < n_threads)
+        if (_context_stacks.size() < n_threads)
         {
-            context_stacks.resize(n_threads);
-            move_stacks.resize(n_threads);
-            state_stacks.resize(n_threads);
+            _context_stacks.resize(n_threads);
+            _move_stacks.resize(n_threads);
+            _state_stacks.resize(n_threads);
         }
-    }
-
-
-    Context* Context::next_ply(bool init, int offset) const
-    {
-        auto* buffer = reinterpret_cast<Context*>(&context_stacks[tid()][_ply + offset][0]);
-
-        if (init)
-            return new (buffer) Context;
-        else
-            return buffer;
-    }
-
-
-    /* static */ MovesList& Context::moves(int tid, int ply)
-    {
-        ASSERT_ALWAYS(ply >= 0);
-        ASSERT_ALWAYS(size_t(ply) < MAX_MOVE);
-        return move_stacks[tid][ply];
-    }
-
-
-    /* static */ std::vector<State>& Context::states(int tid, int ply)
-    {
-        ASSERT_ALWAYS(ply >= 0);
-        ASSERT_ALWAYS(size_t(ply) < PLY_MAX);
-        return state_stacks[tid][ply];
     }
 
 
@@ -409,16 +373,16 @@ namespace search
     }
 
 
-    /*
-     * NOTE: uses top half of MoveMaker's moves buffers to minimize memory allocations.
-     */
     template<bool Debug>
     int do_exchanges(const State& state, Bitboard mask, score_t gain, int tid, int ply)
     {
         ASSERT(popcount(mask) == 1);
         ASSERT(gain >= 0);
 
-        if (size_t(ply) >= MAX_MOVE)
+        /* use top half of moves stacks */
+        ASSERT(ply >= PLY_MAX);
+
+        if (size_t(ply) >= Context::MAX_MOVE)
             return 0;
 
         mask &= ~state.kings;
@@ -714,7 +678,7 @@ namespace search
         auto state = ctxt._state;
 
     #if NO_ASSERT
-        if (ctxt.tid() == 0 && ctxt._tt_entry._capt != SCORE_MIN)
+        if (/* ctxt.tid() == 0 && */ ctxt._tt_entry._capt != SCORE_MIN)
             return ctxt._tt_entry._capt;
     #endif /* NO_ASSERT */
 
@@ -1730,7 +1694,7 @@ namespace search
 
             for (int i = 0; i != _count; ++i)
             {
-                auto& move = ctxt.get_moves()[i];
+                auto& move = ctxt.moves()[i];
 
                 if (move._state == nullptr)
                 {
@@ -1822,9 +1786,8 @@ namespace search
         ASSERT(_current < 0);
         ASSERT(_phase == 0);
         ASSERT(_state_index == 0);
-        ASSERT(_ply == ctxt._ply);
 
-        auto& moves_list = ctxt.get_moves();
+        auto& moves_list = ctxt.moves();
         moves_list.clear();
 
         if (ctxt.get_tt()->_initial_moves.empty())
@@ -1923,7 +1886,7 @@ namespace search
 
         ASSERT(_phase <= MAX_PHASE);
         ASSERT(ctxt._tt);
-        ASSERT(moves()[start_at]._group == MoveOrder::UNORDERED_MOVES);
+        ASSERT(ctxt.moves()[start_at]._group == MoveOrder::UNORDERED_MOVES);
 
         const KillerMoves* killer_moves = nullptr;
 
@@ -1942,7 +1905,7 @@ namespace search
             /********************************************************************/
             /* iterate over pseudo-legal moves                                  */
             /********************************************************************/
-            auto& moves_list = ctxt.get_moves();
+            auto& moves_list = ctxt.moves();
             const auto n = moves_list.size();
 
             for (size_t i = start_at; i < n; ++i)
@@ -2037,7 +2000,7 @@ namespace search
 
         if (size_t(_count) <= start_at)
         {
-            ASSERT(moves()[start_at]._group >= MoveOrder::QUIET_MOVES);
+            ASSERT(ctxt.moves()[start_at]._group >= MoveOrder::QUIET_MOVES);
             _need_sort = false;
         }
         else if (_need_sort)
@@ -2046,9 +2009,9 @@ namespace search
         }
 
     #if !defined(NO_ASSERT)
-        for (size_t i = _count; i < moves().size(); ++i)
+        for (size_t i = _count; i < ctxt.moves().size(); ++i)
         {
-            ASSERT(moves()[i]._group >= MoveOrder::QUIET_MOVES);
+            ASSERT(ctxt.moves()[i]._group >= MoveOrder::QUIET_MOVES);
         }
     #endif /* NO_ASSERT */
     }

@@ -1048,8 +1048,7 @@ namespace chess
         ASSERT(move);
         ASSERT(piece_type_at(move.to_square()) != PieceType::KING);
 
-        ASSERT(_check[0] == -1);
-        ASSERT(_check[1] == -1);
+        _check = { -1, -1 };
 
         this->capture_value = weight(piece_type_at(move.to_square()));
         this->promotion = move.promotion();

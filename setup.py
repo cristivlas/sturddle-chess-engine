@@ -18,7 +18,7 @@ Compiler args.
 inc_dirs = ['-I./libpopcnt', '-I./magic-bits/include']
 
 # Assert-enabled build (requires TUNING_ENABLED)
-args = []
+# args = ['-DTUNING_ENABLED=true']
 link = []
 
 # Debug build
@@ -30,6 +30,7 @@ link = []
 
 # Release build
 args = ['-DNO_ASSERT']
+
 
 if platform.startswith('win'):
     args.append('/std:c++17')
@@ -50,7 +51,9 @@ else:
     cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
     if cc and cc.startswith('clang'):
         args.append('-Wno-deprecated-declarations')
-
+"""
+end of compiler args.
+"""
 
 extensions = [
     Extension(

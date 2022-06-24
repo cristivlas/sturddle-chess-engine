@@ -811,7 +811,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     auto s_ctxt = ctxt.clone(ctxt.next_ply(false, 1), ctxt._ply + 2);
 
                     s_ctxt->set_tt(ctxt.get_tt());
-                    s_ctxt->set_initial_moves(ctxt.get_moves());
+                    s_ctxt->set_initial_moves(ctxt);
                     s_ctxt->_excluded = next_ctxt->_move;
                     s_ctxt->_max_depth = s_ctxt->_ply + (ctxt.depth() - 1) / 2;
                     s_ctxt->_alpha = s_beta - 1;
@@ -1154,7 +1154,7 @@ public:
         : _root(ctxt)
     {
         const auto thread_count = start_pool();
-        ASSERT(thread_count + 1 == size_t(Context::cpu_cores()));
+        ASSERT(thread_count + 1 == size_t(SMP_CORES));
 
         if (table._iteration == 1)
         {
@@ -1187,7 +1187,7 @@ public:
             _tables[i]._ctxt->_max_depth += (i % 2) == 0;
 
             _tables[i]._ctxt->set_tt(&_tables[i]._tt);
-            _tables[i]._ctxt->set_initial_moves(_root.get_moves());
+            _tables[i]._ctxt->set_initial_moves(_root);
 
             _tables[i]._ctxt->_tt_entry._hash_move = hash_move;
 
@@ -1235,7 +1235,12 @@ public:
         }
 
         for (auto& table : _tables)
+        {
             table._ctxt = nullptr;
+            
+            /* in case the thread never made it to move generation... */
+            table._tt._initial_moves.clear();
+        }
     }
 };
 
