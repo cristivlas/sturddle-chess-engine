@@ -25,16 +25,19 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include "common.h"
 
 
-class thread_pool
+template<typename I> class thread_pool
 {
 public:
+    using thread_id_type = I;
+
     explicit thread_pool(size_t thread_count) : _running(true)
     {
         for (size_t i = 0; i != thread_count; ++i)
-            _threads.emplace_back(std::thread([this]{
-                work();
+            _threads.emplace_back(std::thread([this, i] {
+                work(i + 1);
             }));
     }
 
@@ -64,6 +67,11 @@ public:
         _cv.notify_all();
     }
 
+    static thread_id_type thread_id()
+    {
+        return _tid;
+    }
+
     void wait_for_tasks()
     {
         std::unique_lock<std::mutex> lock(_mutex);
@@ -72,11 +80,15 @@ public:
             _cv.notify_all();
             _cv.wait(lock);
         }
+        while (_tasks_pending)
+            std::this_thread::yield();
     }
 
 private:
-    void work()
+    void work(size_t index)
     {
+        _tid = index;
+
         while (_running)
         {
             std::function<void()> task;
@@ -88,19 +100,33 @@ private:
                         return;
                     _cv.wait(lock);
                 }
-
                 task.swap(_tasks.back());
+
+                ++_tasks_pending;
                 _tasks.pop_back();
             }
 
             task();
+
+            /* if task wraps a lambda, ensure that all variables captured
+             * by value go out of scope before decrementing _tasks_pending
+             */
+            task = nullptr;
+
+            --_tasks_pending;
             _cv.notify_all();
         }
     }
 
     std::atomic_bool _running;
+    std::atomic_int _tasks_pending;
     std::condition_variable _cv;
     std::mutex _mutex;
     std::vector<std::function<void()>> _tasks;
     std::vector<std::thread> _threads;
+
+    static THREAD_LOCAL thread_id_type _tid;
 };
+
+
+template<typename T> THREAD_LOCAL T thread_pool<T>::_tid;

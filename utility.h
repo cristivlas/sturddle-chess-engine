@@ -111,7 +111,7 @@ namespace
     }
 
 #if USE_THREAD_POOL
-    using ThreadGroup = thread_pool;
+    using ThreadGroup = thread_pool<int>;
 #else
     /*
      * Utility for starting threads.
