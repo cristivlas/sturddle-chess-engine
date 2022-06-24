@@ -33,7 +33,9 @@ template<typename I> class thread_pool
 public:
     using thread_id_type = I;
 
-    explicit thread_pool(size_t thread_count) : _running(true)
+    explicit thread_pool(size_t thread_count)
+        : _running(true)
+        , _tasks_pending(0)
     {
         for (size_t i = 0; i != thread_count; ++i)
             _threads.emplace_back(std::thread([this, i] {
