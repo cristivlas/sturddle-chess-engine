@@ -25,6 +25,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <unordered_set> /* unordered_multiset */
 #include "Python.h"
 #include "config.h"
@@ -152,7 +153,6 @@ namespace search
         bool        _have_pruned_moves = false;
         bool        _need_sort = false;
         size_t      _state_index = 0;
-        MovesList   _initial_moves;
 
         static THREAD_LOCAL std::vector<State> _states[MAX_MOVE];
     };
@@ -243,7 +243,7 @@ namespace search
         static void cancel();
 
         ContextPtr  clone() const;
-        ContextPtr  clone(Context*, int ply) const;
+        Context*    clone(Context*, int ply) const;
         void        clone(Context*) const;
 
         bool        can_forward_prune() const;
@@ -342,6 +342,9 @@ namespace search
 
         void set_initial_moves(const MovesList& moves)
         {
+            ASSERT(_tt->_initial_moves.empty());
+            _tt->_initial_moves.assign(moves.begin(), moves.end());
+
             _move_maker.set_initial_moves(moves);
         }
 
@@ -386,6 +389,9 @@ namespace search
         static atomic_int   _time_limit; /* milliseconds */
         static atomic_time  _time_start;
     };
+
+
+    static_assert(std::is_trivially_destructible<Context>::value);
 
 
     /*
@@ -1197,6 +1203,21 @@ namespace search
 
         ASSERT(_count > 0);
         --_count;
+    }
+
+
+    /*
+     * SMP: copy the root moves from the main thread to the other
+     * workers at the beginning of the iteration; also used in the
+     * singular extension heuristic.
+     */
+    INLINE void MoveMaker::set_initial_moves(const MovesList& moves)
+    {
+        /* Expect initial state */
+        ASSERT(_count < 0);
+        ASSERT(_current == -1);
+        ASSERT(_phase == 0);
+        ASSERT(_state_index == 0);
     }
 
 

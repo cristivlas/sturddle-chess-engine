@@ -169,10 +169,7 @@ namespace search
     size_t (*Context::_vmem_avail)() = nullptr;
 
 
-    /*
-     * Context allocations should only happen on the main
-     * thread at the beginning of each search iteration.
-     */
+    static const auto main_thread = std::this_thread::get_id();
     static /* THREAD_LOCAL */ Free* free_list = nullptr;
 
 
@@ -190,8 +187,16 @@ namespace search
 
     void Context::operator delete(void* ptr, size_t) noexcept
     {
+        /*
+         * Context allocations should only happen on the main
+         * thread at the beginning of each search iteration.
+         * Deallocation should also happen on main thread only.
+         */
+        ASSERT_ALWAYS(std::this_thread::get_id() == main_thread);
+
         auto ctxt = static_cast<Context*>(ptr);
-        ASSERT(ctxt->_next == (Free*)Free::MAGIC);
+        ASSERT_ALWAYS(ctxt->_next == (Free*)Free::MAGIC);
+
         ctxt->_next = free_list;
         free_list = ctxt;
     }
@@ -246,13 +251,11 @@ namespace search
     }
 
 
-    ContextPtr Context::clone(Context* buffer, int ply) const
+    Context* Context::clone(Context* buffer, int ply) const
     {
-        ContextPtr ctxt(new (buffer) Context, [] (Context* p) {
-            p->~Context(); /* cleanup initial moves */
-        });
+        Context* ctxt = new (buffer) Context;
 
-        clone(ctxt.get());
+        clone(ctxt);
         ctxt->_ply = ply;
         ctxt->_move_maker.set_ply(ply);
 
@@ -1840,7 +1843,7 @@ namespace search
         auto& moves_list = moves();
         moves_list.clear();
 
-        if (_initial_moves.empty())
+        if (ctxt.get_tt()->_initial_moves.empty())
         {
             if (!USE_MOVES_CACHE || ctxt.state()._hash == 0)
             {
@@ -1861,7 +1864,7 @@ namespace search
         }
         else
         {
-            moves_list.swap(_initial_moves);
+            moves_list.swap(ctxt.get_tt()->_initial_moves);
 
             for (auto& move : moves_list)
             {
@@ -2064,24 +2067,6 @@ namespace search
             ASSERT(moves()[i]._group >= MoveOrder::QUIET_MOVES);
         }
     #endif /* NO_ASSERT */
-    }
-
-
-    /*
-     * SMP: copy the root moves from the main thread to the other
-     * workers at the beginning of the iteration; also used in the
-     * singular extension heuristic.
-     */
-    void MoveMaker::set_initial_moves(const MovesList& moves)
-    {
-        /* Expect initial state */
-        ASSERT(_initial_moves.empty());
-        ASSERT(_count < 0);
-        ASSERT(_current == -1);
-        ASSERT(_phase == 0);
-        ASSERT(_state_index == 0);
-
-        _initial_moves.assign(moves.begin(), moves.end());
     }
 } /* namespace */
 

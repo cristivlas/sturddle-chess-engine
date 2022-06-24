@@ -201,9 +201,10 @@ namespace search
         int _tid = 0;
         int _iteration = 0;
         int _eval_depth = 0;
-
         BaseMovesList _pv; /* principal variation */
         PlyHistory _plyHistory;
+
+        MovesList _initial_moves;
 
         /* search window bounds */
         score_t _w_alpha = SCORE_MIN;

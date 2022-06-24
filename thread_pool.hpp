@@ -28,9 +28,11 @@
 #include "common.h"
 
 
-class thread_pool
+template<typename I> class thread_pool
 {
 public:
+    using thread_id_type = I;
+
     explicit thread_pool(size_t thread_count) : _running(true)
     {
         for (size_t i = 0; i != thread_count; ++i)
@@ -65,6 +67,11 @@ public:
         _cv.notify_all();
     }
 
+    static thread_id_type thread_id()
+    {
+        return _tid;
+    }
+
     void wait_for_tasks()
     {
         std::unique_lock<std::mutex> lock(_mutex);
@@ -73,11 +80,8 @@ public:
             _cv.notify_all();
             _cv.wait(lock);
         }
-    }
-
-    static size_t thread_id()
-    {
-        return _tid;
+        while (_tasks_pending)
+            std::this_thread::yield();
     }
 
 private:
@@ -96,24 +100,33 @@ private:
                         return;
                     _cv.wait(lock);
                 }
-
                 task.swap(_tasks.back());
+
+                ++_tasks_pending;
                 _tasks.pop_back();
             }
 
             task();
+
+            /* if task wraps a lambda, ensure that all variables captured
+             * by value go out of scope before decrementing _tasks_pending
+             */
+            task = nullptr;
+
+            --_tasks_pending;
             _cv.notify_all();
         }
     }
 
     std::atomic_bool _running;
+    std::atomic_int _tasks_pending;
     std::condition_variable _cv;
     std::mutex _mutex;
     std::vector<std::function<void()>> _tasks;
     std::vector<std::thread> _threads;
 
-    static THREAD_LOCAL size_t _tid;
+    static THREAD_LOCAL thread_id_type _tid;
 };
 
 
-THREAD_LOCAL size_t thread_pool::_tid;
+template<typename T> THREAD_LOCAL T thread_pool<T>::_tid;

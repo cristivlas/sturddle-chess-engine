@@ -810,6 +810,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                      */
                     auto s_ctxt = ctxt.clone(ctxt.next_ply(false, 1), ctxt._ply + 2);
 
+                    s_ctxt->set_tt(ctxt.get_tt());
                     s_ctxt->set_initial_moves(ctxt.get_moves());
                     s_ctxt->_excluded = next_ctxt->_move;
                     s_ctxt->_max_depth = s_ctxt->_ply + (ctxt.depth() - 1) / 2;
@@ -1108,7 +1109,8 @@ static score_t search_iteration(Context& ctxt, TranspositionTable& table, score_
 /****************************************************************************
  * Lazy SMP. https://www.chessprogramming.org/Lazy_SMP
  ****************************************************************************/
-static std::unique_ptr<thread_pool> threads;
+ using ThreadPool = thread_pool<int>;
+static std::unique_ptr<ThreadPool> threads;
 
 
 static size_t start_pool()
@@ -1118,7 +1120,7 @@ static size_t start_pool()
         if (SMP_CORES <= 1)
             return 0;
 
-        threads = std::make_unique<thread_pool>(SMP_CORES - 1);
+        threads = std::make_unique<ThreadPool>(SMP_CORES - 1);
     }
 
     return threads->get_thread_count();
@@ -1173,7 +1175,9 @@ public:
                 _tables[i]._tt._pv = table._pv;
 
             auto t_ctxt = _root.clone();
+
             t_ctxt->_max_depth += (i % 2) == 0;
+            t_ctxt->set_tt(&_tables[i]._tt);
             t_ctxt->set_initial_moves(_root.get_moves());
 
             /* grab hash move from the previous iteration */
@@ -1187,7 +1191,7 @@ public:
 
             threads->push_task([t_ctxt, tt, score]() mutable {
 
-                tt->_tid = thread_pool::thread_id();
+                tt->_tid = ThreadPool::thread_id();
                 try
                 {
                     search_iteration(*t_ctxt, *tt, score);
