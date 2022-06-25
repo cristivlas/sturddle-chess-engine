@@ -48,7 +48,7 @@ using namespace chess;
 using namespace search;
 
 
-void log_pv(const TranspositionTable& tt, const char* info)
+INLINE void log_pv(const TranspositionTable& tt, const char* info)
 {
 #if _DEBUG
     std::ostringstream out;
@@ -420,11 +420,8 @@ void TranspositionTable::store_killer_move(const Context& ctxt)
 }
 
 
-void TranspositionTable::get_pv_from_table(
-    Context& root,
-    const Context& ctxt,
-    BaseMovesList& pv,
-    bool print)
+template<bool Debug>
+void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, BaseMovesList& pv)
 {
     auto state = ctxt.state().clone();
 
@@ -447,7 +444,7 @@ void TranspositionTable::get_pv_from_table(
 
     while (move)
     {
-        if (print)
+        if constexpr(Debug)
             std::cout << "[" << move << "] ";
 
         /* Legality check, in case of a (low probability) hash collision. */
@@ -481,7 +478,8 @@ void TranspositionTable::get_pv_from_table(
 }
 
 
-void TranspositionTable::store_pv(Context& start, bool print)
+template<bool Debug>
+void TranspositionTable::store_pv(Context& start)
 {
     BaseMovesList pv;
 
@@ -489,8 +487,11 @@ void TranspositionTable::store_pv(Context& start, bool print)
     {
         pv.emplace_back(ctxt->_move);
 
-        if (print && ctxt->_ply)
-            std::cout << ctxt->_move.uci() << " ";
+        if constexpr(Debug)
+        {
+            if (ctxt->_ply)
+                std::cout << ctxt->_move.uci() << " ";
+        }
 
         if (ctxt->_best_move && ctxt->_ply + 1 < PLY_MAX)
         {
@@ -502,11 +503,11 @@ void TranspositionTable::store_pv(Context& start, bool print)
                 continue;
             }
         }
-        get_pv_from_table(start, *ctxt, pv, print);
+        get_pv_from_table<Debug>(start, *ctxt, pv);
         break;
     }
 
-    if (print)
+    if constexpr(Debug)
         std::cout << "\n";
 
     if (!pv.empty())
@@ -841,6 +842,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                      */
                     else if (s_beta >= ctxt._beta)
                     {
+                        ctxt._best_move = next_ctxt->_move;
+
                 #if CACHE_HEURISTIC_CUTOFFS
                         /* Store it in the TT as a cutoff move. */
                         ctxt._alpha = ctxt._score = s_beta;
@@ -849,6 +852,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                          * the move is updated in the TT when storing the result.
                          */
                         ctxt._cutoff_move = next_ctxt->_move;
+
                         break;
                 #else
                         return s_beta;
@@ -1101,6 +1105,12 @@ static score_t search_iteration(Context& ctxt, TranspositionTable& table, score_
         ASSERT_ALWAYS(false);
     }
 
+    if (ctxt._best_move)
+    {
+        ctxt._prev = ctxt._best_move; /* save for next iteration */
+        table.store_pv(ctxt);
+    }
+
     return score;
 }
 
@@ -1177,10 +1187,13 @@ public:
             if (_tables[i]._tt._pv.empty())
                 _tables[i]._tt._pv = table._pv;
 
-            /* get the previous hash move before clobbering the Context */
-            BaseMove hash_move;
+            /* get the previous moves before clobbering the Context */
+            BaseMove hash_move, prev_best;
             if (_tables[i]._ctxt)
+            {
                 hash_move = _tables[i]._ctxt->_tt_entry._hash_move;
+                prev_best = _tables[i]._ctxt->_prev;
+            }
 
             _tables[i]._ctxt = _root.clone(reinterpret_cast<Context*>(&_tables[i]._raw_mem[0]));
 
@@ -1190,6 +1203,9 @@ public:
             _tables[i]._ctxt->set_initial_moves(_root);
 
             _tables[i]._ctxt->_tt_entry._hash_move = hash_move;
+
+            if (prev_best)
+                _tables[i]._ctxt->_prev = prev_best;
 
             /* pass context and TT pointers to thread task */
             auto t_ctxt = _tables[i]._ctxt;
@@ -1237,7 +1253,7 @@ public:
         for (auto& table : _tables)
         {
             table._ctxt = nullptr;
-            
+
             /* in case the thread never made it to move generation... */
             table._tt._initial_moves.clear();
         }
@@ -1290,11 +1306,6 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
             }
         }   /* SMP scope end */
 
-        if (ctxt._best_move)
-        {
-            ctxt._prev = ctxt._best_move;
-            table.store_pv(ctxt);
-        }
         ASSERT(ctxt.iteration() == ctxt._max_depth);
 
         /* post iteration results to Cython */

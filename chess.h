@@ -72,7 +72,7 @@ namespace chess
     extern AttackMasks BB_DIAG_MASKS, BB_FILE_MASKS, BB_RANK_MASKS;
 
     template<std::size_t... I>
-    constexpr std::array<uint64_t, sizeof ... (I)> bb_squares(std::index_sequence<I...>)
+    static constexpr std::array<uint64_t, sizeof ... (I)> bb_squares(std::index_sequence<I...>)
     {
         return { 1ULL << I ... };
     }
@@ -812,7 +812,7 @@ namespace chess
         };
 
         template<std::size_t... I>
-        constexpr std::array<double, sizeof ... (I)> _exp_table(std::index_sequence<I...>)
+        static constexpr std::array<double, sizeof ... (I)> _exp_table(std::index_sequence<I...>)
         {
             return { _exp<I>::value ... };
         }

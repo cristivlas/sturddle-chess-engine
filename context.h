@@ -380,7 +380,7 @@ namespace search
      * Late-move pruning counts (initialization idea borrowed from Crafty)
      */
     template<std::size_t... I>
-    constexpr std::array<int, sizeof ... (I)> lmp(std::index_sequence<I...>)
+    static constexpr std::array<int, sizeof ... (I)> lmp(std::index_sequence<I...>)
     {
         return { static_cast<int>(LMP_BASE + pow(I + .5, 1.9)) ... };
     }
@@ -589,7 +589,7 @@ namespace search
     static constexpr double PHI = 1.61803398875;
 
     template<std::size_t... I>
-    constexpr std::array<int, sizeof ... (I)> margins(std::index_sequence<I...>)
+    static constexpr std::array<int, sizeof ... (I)> margins(std::index_sequence<I...>)
     {
         return { static_cast<int>(50 * I + pow(I + PHI, M_E)) ... };
     }
@@ -660,6 +660,30 @@ namespace search
     INLINE bool Context::is_mate_bound() const
     {
         return _tt_entry._value >= MATE_HIGH && _tt_entry._depth >= depth();
+    }
+
+
+    /*
+     * Ok to generate a null-move?
+     */
+    INLINE bool Context::is_null_move_ok()
+    {
+        if (_ply == 0
+            || _null_move_allowed[turn()] == false
+            || _excluded
+            || is_null_move() /* consecutive null moves are not allowed */
+            || is_singleton()
+            || is_qsearch()
+            || is_pv_node()
+            || is_mate_bound()
+            || is_repeated()
+            || is_check()
+            || state().just_king_and_pawns()
+           )
+            return false;
+
+        ASSERT(depth() >= 0);
+        return evaluate_material() >= _beta - NULL_MOVE_DEPTH_WEIGHT * depth() + NULL_MOVE_MARGIN;
     }
 
 
@@ -1059,7 +1083,10 @@ namespace search
              */
             auto capture_gain = move._state->capture_value;
 
-            auto other = ctxt.state().weight(ctxt.state().piece_type_at(move.from_square()));
+            auto other = chess::WEIGHT[ctxt.state().piece_type_at(move.from_square())];
+
+            /* skip exchange evaluation if the capturer is worth less than the captured */
+
             if (other >= capture_gain)
             {
                 other = eval_exchanges<true>(ctxt.tid(), move);
@@ -1076,6 +1103,7 @@ namespace search
                     return;
                 }
             }
+
             capture_gain -= other;
 
             if (capture_gain < 0)

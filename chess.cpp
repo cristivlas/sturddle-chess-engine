@@ -554,13 +554,19 @@ namespace chess
     }
 
 
+    /* for testing */
     size_t State::make_pseudo_legal_moves(MovesList& moves) const
     {
+        size_t count = 0;
         generate_pseudo_legal_moves(moves);
+
         for (const auto& move : moves)
         {
             State state = clone();
             state.apply_move(move);
+
+            if (!state.is_check(!state.turn))
+                ++count;
         }
 
         return moves.size();

@@ -154,6 +154,7 @@ DECLARE_VALUE(  KING_ATTACK_DIV,                     28,    1,     100)
 DECLARE_VALUE(  KING_OUT_PENALTY,                  -150, -500,       0)
 DECLARE_VALUE(  PAWN_SHIELD,                         22,    0,     100)
 DECLARE_VALUE(  REDUNDANT_ROOK,                    -119, -500,       0)
+DECLARE_VALUE(  TACTICAL_LOW_DEPTH,                  11,    0,     100)
 
 DECLARE_VALUE(  ENDGAME_CONNECTED_ROOKS,             13,    0,     100)
 DECLARE_VALUE(  ENDGAME_DEFENDED_PASSED,             15,    0,     100)

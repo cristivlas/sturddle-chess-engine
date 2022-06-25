@@ -678,13 +678,16 @@ namespace search
         auto state = ctxt._state;
 
     #if NO_ASSERT
-        if (/* ctxt.tid() == 0 && */ ctxt._tt_entry._capt != SCORE_MIN)
+        if (ctxt._tt_entry._capt != SCORE_MIN)
             return ctxt._tt_entry._capt;
     #endif /* NO_ASSERT */
 
-        const auto result = STATIC_EXCHANGES
-            ? estimate_captures(*state)
-            : do_captures(ctxt.tid(), *state, BB_ALL, BB_ALL);
+        score_t result;
+
+        if constexpr(STATIC_EXCHANGES)
+            result = estimate_captures(*state);
+        else
+            result = do_captures(ctxt.tid(), *state, BB_ALL, BB_ALL);
 
         ASSERT(result >= 0);
 
@@ -1179,8 +1182,8 @@ namespace search
                     }
                     _tt_entry._eval = eval;
                 }
-                /* 2. Tactical (skip in midgame at very low depth) */
-                else if (state().is_endgame() || depth() > 3)
+                /* 2. Tactical (skip in midgame at low depth) */
+                else if (state().is_endgame() || depth() > TACTICAL_LOW_DEPTH)
                 {
                     eval -= CHECK_BONUS * is_check();
                     eval += SIGN[turn] * eval_tactical(*this);
@@ -1430,30 +1433,6 @@ namespace search
 
 
     /*
-     * Ok to generate a null-move?
-     */
-    bool Context::is_null_move_ok()
-    {
-        if (_ply == 0
-            || _null_move_allowed[turn()] == false
-            || _excluded
-            || is_null_move() /* consecutive null moves are not allowed */
-            || is_singleton()
-            || is_qsearch()
-            || is_pv_node()
-            || is_mate_bound()
-            || is_repeated()
-            || is_check()
-            || state().just_king_and_pawns()
-           )
-            return false;
-
-        ASSERT(depth() >= 0);
-        return evaluate_material() >= _beta - NULL_MOVE_DEPTH_WEIGHT * depth() + NULL_MOVE_MARGIN;
-    }
-
-
-    /*
      * Late move reduction and pruning.
      * https://www.chessprogramming.org/Late_Move_Reductions
      */
@@ -1538,17 +1517,16 @@ namespace search
             || is_null_move()
             || is_retry()
             || state().promotion
-        #if 0
-            || (is_capture() && (_ply % 2) && !is_standing_pat(*this))
-        #endif
             || is_check()
-            /* last move to search from current node, with score close to mate?
-               extend the search as to not miss a possible mate in the next move */
+            /*
+             * last move to search from current node, with score close to mate?
+             * extend the search as to not miss a possible mate in the next move
+             */
             || (_parent->_score < MATE_LOW && _parent->_score > SCORE_MIN && is_last_move())
            )
             return false;
 
-        /* treat as leaf for now but retry and extend if it beats alpha */
+        /* treat it as leaf for now but retry and extend if it beats alpha */
         if (is_reduced())
             _retry_above_alpha = RETRY::Reduced;
 
@@ -1867,7 +1845,7 @@ namespace search
 
 
     template<std::size_t... I>
-    constexpr std::array<double, sizeof ... (I)> thresholds(std::index_sequence<I...>)
+    static constexpr std::array<double, sizeof ... (I)> thresholds(std::index_sequence<I...>)
     {
         auto logistic = [](int i) { return HISTORY_HIGH / (1 + exp(6 - i)); };
         return { logistic(I) ... };
