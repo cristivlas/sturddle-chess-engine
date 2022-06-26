@@ -513,7 +513,7 @@ void TranspositionTable::store_pv(Context& start)
     if constexpr(Debug)
         std::cout << "\n";
 
-    if (!pv.empty())
+    if (pv.size() > _pv.size() || !std::equal(pv.begin(), pv.end(), _pv.begin()))
         _pv.swap(pv);
 
     log_pv(*this, "store_pv");
