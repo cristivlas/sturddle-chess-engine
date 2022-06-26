@@ -229,7 +229,8 @@ namespace search
 
 
     /*
-     * Track the best score and move so far, return true if beta cutoff.
+     * Track the best score and move so far, return true if beta cutoff;
+     * called from search right after: score = -negamax(*next_ctxt).
      */
     bool Context::is_beta_cutoff(Context* next_ctxt, score_t score)
     {

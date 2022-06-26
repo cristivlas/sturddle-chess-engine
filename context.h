@@ -683,7 +683,10 @@ namespace search
             return false;
 
         ASSERT(depth() >= 0);
-        return evaluate_material() >= _beta - NULL_MOVE_DEPTH_WEIGHT * depth() + NULL_MOVE_MARGIN;
+        return evaluate_material() >= _beta
+            - NULL_MOVE_DEPTH_WEIGHT * depth()
+            + improvement() / NULL_MOVE_IMPROVEMENT_DIV
+            + NULL_MOVE_MARGIN;
     }
 
 

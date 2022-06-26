@@ -536,7 +536,7 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
     null_move_ctxt._alpha = ctxt._beta - 1;
     null_move_ctxt._beta  = ctxt._beta;
 
-    const auto score = negamax(null_move_ctxt, *ctxt.get_tt());
+    const auto score = negamax(null_move_ctxt, *null_move_ctxt.get_tt());
 
     if (score >= ctxt._beta)
         return true; /* verification successful */
@@ -547,8 +547,13 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
     /*
      * null move refuted? update capture_square and mate_detected
      */
-    if (null_move_ctxt._best_move)
+    if (const auto& counter_move = null_move_ctxt._best_move)
     {
+        ASSERT(score > SCORE_MIN);
+
+        if (null_move_ctxt.state().is_capture(counter_move))
+            ctxt._capture_square = counter_move.to_square();
+
         if (-score > MATE_HIGH)
         {
             ctxt._mate_detected = CHECKMATE + score + 1;
