@@ -246,7 +246,7 @@ namespace search
 
         score_t     improvement();
         static void init();
-        bool        is_beta_cutoff(Context*, score_t);
+        bool        is_beta_cutoff(Context*, score_t, BaseMove&);
         static bool is_cancelled() { return _cancel; }
         bool        is_capture() const { return state().capture_value != 0; }
         bool        is_check() const { return state().is_check(); }
@@ -278,7 +278,7 @@ namespace search
         int64_t     nanosleep(int nanosec);
 
         Context*    next(bool null_move = false, score_t = 0);
-        Context*    next_ply(bool init = false, int offset = 0) const;
+        Context*    next_ply(bool init = false) const;
 
         int         next_move_index() { return _move_maker.current(*this); }
         bool        on_next();
@@ -321,6 +321,8 @@ namespace search
         /* buffers for generating and making moves */
         static MovesList& moves(int tid, int ply);
         static std::vector<State>& states(int tid, int ply);
+
+        const ContextStack& stack() const { return _context_stacks[tid()]; }
 
         /*
          * Python callbacks
@@ -373,6 +375,7 @@ namespace search
         std::array<uint8_t, sizeof(Context)> _mem;
 
         Context* as_context() { return reinterpret_cast<Context*>(&_mem[0]); }
+        const Context* as_context() const { return reinterpret_cast<const Context*>(&_mem[0]); }
     };
 
 
@@ -906,9 +909,9 @@ namespace search
     }
 
 
-    INLINE Context* Context::next_ply(bool init, int offset) const
+    INLINE Context* Context::next_ply(bool init) const
     {
-        auto* buffer = _context_stacks[tid()][_ply + offset].as_context();
+        auto* buffer = _context_stacks[tid()][_ply].as_context();
 
         if (init)
             return new (buffer) Context;

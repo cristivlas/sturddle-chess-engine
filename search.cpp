@@ -48,17 +48,19 @@ using namespace chess;
 using namespace search;
 
 
-INLINE void log_pv(const TranspositionTable& tt, const char* info)
+template<bool Debug = false>
+static void log_pv(const TranspositionTable& tt, const char* info)
 {
-#if _DEBUG
-    std::ostringstream out;
+    if constexpr(Debug)
+    {
+        std::ostringstream out;
 
-    out << info << ": ";
-    for (const auto& move : tt._pv)
-        out << move << " ";
+        out << info << ": ";
+        for (const auto& move : tt._pv)
+            out << move << " ";
 
-    Context::log_message(LogLevel::DEBUG, out.str());
-#endif /* _DEBUG */
+        Context::log_message(LogLevel::DEBUG, out.str());
+    }
 }
 
 
@@ -503,6 +505,7 @@ void TranspositionTable::store_pv(Context& start)
                 continue;
             }
         }
+
         get_pv_from_table<Debug>(start, *ctxt, pv);
         break;
     }
@@ -635,7 +638,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
                 ctxt._alpha = ctxt._score;
 
                 /* Fix-up best move */
-                ctxt._best_move = best_move;
+                ctxt.next_ply()->_move = ctxt._best_move = best_move;
 
                 return true;
             }
@@ -759,6 +762,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     #endif /* EXTRA_STATS */
 
         int move_count = 0, futility = -1;
+        BaseMove next_best;
 
         /* iterate over moves */
         while (auto next_ctxt = ctxt.next(std::exchange(null_move, false), futility))
@@ -814,7 +818,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                      * Hack: use ply + 2 for the singular search to avoid clobbering
                      * _move_maker's _moves / _states stacks for the current context.
                      */
-                    auto s_ctxt = ctxt.clone(ctxt.next_ply(false, 1), ctxt._ply + 2);
+                    ContextBuffer buf;
+                    auto s_ctxt = ctxt.clone(buf.as_context(), ctxt._ply + 2);
 
                     s_ctxt->set_tt(ctxt.get_tt());
                     s_ctxt->set_initial_moves(ctxt);
@@ -847,21 +852,19 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                      */
                     else if (s_beta >= ctxt._beta)
                     {
-                        ctxt._best_move = next_ctxt->_move;
-
-                #if CACHE_HEURISTIC_CUTOFFS
+                    #if CACHE_HEURISTIC_CUTOFFS
                         /* Store it in the TT as a cutoff move. */
                         ctxt._alpha = ctxt._score = s_beta;
+
                         /*
                          * Same as with null move pruning below, make sure that
                          * the move is updated in the TT when storing the result.
                          */
-                        ctxt._cutoff_move = next_ctxt->_move;
-
+                        ctxt._cutoff_move = ctxt._best_move = next_ctxt->_move;
                         break;
-                #else
+                    #else
                         return s_beta;
-                #endif /* CACHE_HEURISTIC_CUTOFFS */
+                    #endif /* CACHE_HEURISTIC_CUTOFFS */
                     }
                     else if (ctxt._tt_entry._value >= ctxt._beta && next_ctxt->can_reduce())
                     {
@@ -893,7 +896,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 return ctxt._score;
             }
 
-            if (ctxt.is_beta_cutoff(next_ctxt, move_score))
+            if (ctxt.is_beta_cutoff(next_ctxt, move_score, next_best))
             {
                 ASSERT(ctxt._score == move_score);
                 ASSERT(ctxt._cutoff_move || next_ctxt->is_null_move());
@@ -928,7 +931,9 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                      * in between the current thread's probe time and store time.
                      */
                     if (ctxt._tt_entry.is_lower() && ctxt._tt_entry._hash_move)
-                        ctxt._cutoff_move = ctxt._tt_entry._hash_move;
+                    {
+                        ctxt._best_move = ctxt._cutoff_move = ctxt._tt_entry._hash_move;
+                    }
                 #else
                     return ctxt._score;
                 #endif /* CACHE_HEURISTIC_CUTOFFS */
@@ -995,6 +1000,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 return move_score;
             }
         }
+
+        /* link up the principal variation */
+        ctxt.next_ply()->_move = ctxt._best_move;
+        ctxt.next_ply()->_best_move = next_best;
+
         ASSERT(ctxt._score <= ctxt._alpha || ctxt._best_move);
 
         if (!ctxt.is_cancelled())

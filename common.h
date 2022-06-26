@@ -56,7 +56,12 @@ using score_t = int32_t;
 
 #define ADAPTIVE_NULL_MOVE                  true
 
-#define CACHE_HEURISTIC_CUTOFFS             true
+/*
+ * This could be a bad idea. Null-move and multicut should occur outside
+ * the principal variation. By caching results from these heuristics the
+ * line can become the new PV.
+ */
+#define CACHE_HEURISTIC_CUTOFFS             false
 
 /*
  * Count valid moves made as nodes if true, otherwise use effectively
