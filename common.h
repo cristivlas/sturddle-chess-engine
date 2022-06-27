@@ -56,10 +56,7 @@ using score_t = int32_t;
 
 #define ADAPTIVE_NULL_MOVE                  true
 
-/*
- * This could be a bad idea. Null-move and multicut occur outside the PV.
- */
-#define CACHE_HEURISTIC_CUTOFFS             false
+#define CACHE_HEURISTIC_CUTOFFS             true
 
 /*
  * Count valid moves made as nodes if true, otherwise use effectively
