@@ -438,16 +438,10 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, B
     if (!move)
         move = ctxt._tt_entry._hash_move;
 
-#if 0
-    if (!move) /* try the hash table */
-        if (auto p = _table->lookup(state, Acquire::Read))
-            move = p->_hash_move;
-#endif /* 0 */
-
     while (move)
     {
         if constexpr(Debug)
-            std::cout << "[" << move << "] ";
+            std::cout << move << " ";
 
         /* Legality check, in case of a (low probability) hash collision. */
         if (state.piece_type_at(move.to_square()) == PieceType::KING)
@@ -485,6 +479,8 @@ void TranspositionTable::store_pv(Context& start)
 {
     BaseMovesList pv;
 
+    ASSERT(start._best_move);
+
     for (auto ctxt = &start; true; )
     {
         pv.emplace_back(ctxt->_move);
@@ -492,19 +488,27 @@ void TranspositionTable::store_pv(Context& start)
         if constexpr(Debug)
         {
             if (ctxt->_ply)
-                std::cout << ctxt->_move.uci() << " ";
+                std::cout << ctxt->_move << " ";
         }
 
-        if (ctxt->_best_move && ctxt->_ply + 1 < PLY_MAX)
+        if (auto next = ctxt->next_ply())
         {
-            auto next = ctxt->next_ply();
-
-            if (next->_move == ctxt->_best_move)
+            if (next->is_null_move())
+            {
+                if (!_pv.empty())
+                    return;
+                else if constexpr(Debug)
+                    std::cout << "NULL ";
+            }
+            if (ctxt->_best_move && next->_move == ctxt->_best_move)
             {
                 ctxt = next;
                 continue;
             }
         }
+
+        if constexpr(Debug)
+            std::cout << ctxt->_score << " hash: ";
 
         get_pv_from_table<Debug>(start, *ctxt, pv);
         break;
@@ -514,9 +518,10 @@ void TranspositionTable::store_pv(Context& start)
         std::cout << "\n";
 
     if (pv.size() > _pv.size() || !std::equal(pv.begin(), pv.end(), _pv.begin()))
+    {
         _pv.swap(pv);
-
-    log_pv(*this, "store_pv");
+        log_pv<Debug>(*this, "store_pv");
+    }
 }
 
 
@@ -600,7 +605,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
     int move_count = 0, cutoffs = 0;
     const auto reduction = (ctxt.depth() - 1) / 2;
 
-    Move best_move;
+    BaseMove best_move, next_best;
     score_t best_score = SCORE_MIN;
 
     /*
@@ -626,8 +631,9 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
         {
             if (!best_move || score > best_score)
             {
-                best_move = next_ctxt->_best_move;
                 best_score = score;
+                best_move = next_ctxt->_move;
+                next_best = next_ctxt->_best_move;
             }
 
             if (++cutoffs >= min_cutoffs)
@@ -639,6 +645,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
 
                 /* Fix-up best move */
                 ctxt.next_ply()->_move = ctxt._best_move = best_move;
+                ctxt.next_ply()->_best_move = next_best;
 
                 return true;
             }

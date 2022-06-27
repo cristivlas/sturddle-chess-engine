@@ -911,6 +911,9 @@ namespace search
 
     INLINE Context* Context::next_ply(bool init) const
     {
+        if (_ply >= PLY_MAX)
+            return nullptr;
+
         auto* buffer = _context_stacks[tid()][_ply].as_context();
 
         if (init)
