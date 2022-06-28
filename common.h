@@ -47,7 +47,6 @@
 
 #include <cmath>
 
-using asize_t = std::atomic<size_t>;
 using score_t = int32_t;
 
 
@@ -84,9 +83,6 @@ using score_t = int32_t;
 
 #define MTDF_REORDER_MOVES                  true
 
-/* Context operators new & delete use thread_local free lists */
-#define RECYCLE_CONTEXTS                    true
-
 #define REVERSE_FUTILITY_PRUNING            true
 
 /* Use in SEE heuristic. -1 disables pin awareness */
@@ -108,7 +104,7 @@ using score_t = int32_t;
   #else
     #define THREAD_LOCAL thread_local
   #endif
-  using count_t = asize_t;
+  using count_t = std::atomic<size_t>;
 #else
   #define THREAD_LOCAL
   using count_t = size_t;
@@ -126,7 +122,9 @@ using score_t = int32_t;
 #define MOBILITY_TUNING_ENABLED             false
 
 /* Export parameters to Python scripts? */
-#define TUNING_ENABLED                      false
+#if !defined(TUNING_ENABLED)
+  #define TUNING_ENABLED                    false
+#endif
 
 /* if false, use piece-type/to-square tables */
 #define USE_BUTTERFLY_TABLES                false
@@ -140,7 +138,6 @@ using score_t = int32_t;
 /* Half-baked hack */
 #define USE_MOVES_CACHE                     false
 
-#define USE_THREAD_POOL                     true
 
 /*
  * Number of processed nodes after which the search code checks

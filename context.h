@@ -23,12 +23,12 @@
 #include <atomic>
 #include <chrono>
 #include <map>
-#include <mutex>
+#include <memory>
 #include <string>
+#include <type_traits>
 #include <unordered_set> /* unordered_multiset */
 #include "Python.h"
 #include "config.h"
-#include "intrusive.h"
 #include "search.h"
 #include "utility.h"
 
@@ -52,8 +52,7 @@ namespace search
     using Color = chess::Color;
     using Square = chess::Square;
 
-    using ContextPtr = intrusive_ptr<struct Context>;
-    using HistoryPtr = intrusive_ptr<struct History>;
+    using HistoryPtr = std::unique_ptr<struct History>;
 
     using atomic_bool = std::atomic<bool>;
     using atomic_int = std::atomic<int>;
@@ -69,7 +68,7 @@ namespace search
 
 
     /* For detecting repeated positions */
-    struct History : public RefCounted<History>
+    struct History
     {
         History() = default;
 
@@ -87,15 +86,11 @@ namespace search
     class MoveMaker
     {
     public:
-        static constexpr size_t MAX_MOVE = 2 * PLY_MAX;
-
-        /* Note: top-half of the _moves buffers is reserved for do_exchanges */
-        static THREAD_LOCAL MovesList _moves[MAX_MOVE];
-
         MoveMaker() = default;
 
         const Move* get_next_move(Context& ctxt, score_t futility = 0);
 
+        int count() const { return _count; }
         int current(Context&);
 
         bool has_moves(Context&);
@@ -103,18 +98,7 @@ namespace search
         bool is_last(Context&);
         bool is_singleton(Context&);
 
-        void set_ply(int ply) { _ply = ply; }
-
         int rewind(Context&, int where, bool reorder);
-
-        /* SMP: copy the root moves from the main thread to the other workers. */
-        void set_initial_moves(const MovesList& moves);
-
-        const MovesList& get_moves() const
-        {
-            ASSERT(_count >= 0);
-            return moves();
-        }
 
     private:
         void ensure_moves(Context&);
@@ -129,22 +113,9 @@ namespace search
         void order_moves(Context&, size_t start_at, score_t futility);
         void sort_moves(Context&, size_t start_at);
 
-        INLINE MovesList& moves() const
-        {
-            ASSERT(size_t(_ply) < MAX_MOVE);
-            return _moves[_ply];
-        }
-
-        INLINE std::vector<State>& states() const
-        {
-            ASSERT(size_t(_ply) < MAX_MOVE);
-            return _states[_ply];
-        }
-
         MoveMaker(const MoveMaker&) = delete;
         MoveMaker& operator=(const MoveMaker&) = delete;
 
-        int         _ply = 0;
         int         _count = -1;
         int         _current = -1;
         int         _phase = 0; /* move ordering phase */
@@ -154,9 +125,6 @@ namespace search
         bool        _have_pruned_moves = false;
         bool        _need_sort = false;
         size_t      _state_index = 0;
-        MovesList   _initial_moves;
-
-        static THREAD_LOCAL std::vector<State> _states[MAX_MOVE];
     };
 
 
@@ -176,38 +144,33 @@ namespace search
     };
 
 
-    struct Free
-    {
-        Free* _next = nullptr;
-    };
-
-
     /*
      * The context of a searched node.
      */
-    struct Context : public Free, public RefCounted<Context>
+    struct Context
     {
-        friend class MoveMaker;
-        friend class RefCounted<Context>;
+        using ContextStack = std::array<struct ContextBuffer, PLY_MAX>;
 
-    private:
+        /* Note: half of the moves stack are reserved for do_exchanges. */
+        static constexpr size_t MAX_MOVE = 2 * PLY_MAX;
+        using MoveStack = std::array<MovesList, MAX_MOVE>;
+
+        using StateStack = std::array<std::vector<State>, PLY_MAX>;
+
+        friend class MoveMaker;
+
+        Context() = default;
         ~Context() = default;
 
-    public:
-        Context() = default;
         Context(const Context&) = delete;
         Context& operator=(const Context&) = delete;
 
-    #if RECYCLE_CONTEXTS
-        static void* operator new(size_t);
-        static void operator delete(void*, size_t) noexcept;
-    #endif /* RECYCLE_CONTEXTS */
-
-        ContextPtr clone(int ply = 0) const;
+        static void* operator new(size_t, void* p) { return p; }
+        static void* operator new(size_t) = delete;
+        static void operator delete(void*, size_t) noexcept = delete;
 
         /* parent move in the graph */
         Context*    _parent = nullptr;
-        int         _tid = 0;
         int         _ply = 0;
         int         _max_depth = 0;
 
@@ -235,10 +198,9 @@ namespace search
         int         _mate_detected = 0;
         int         _pruned_count = 0;
 
-        HistoryPtr  _history;
-
-        Move        _cutoff_move;   /* from current state to the next */
         Move        _move;          /* from parent to current state */
+        BaseMove    _best_move;
+        BaseMove    _cutoff_move;   /* from current state to the next */
         BaseMove    _prev;          /* best move from previous iteration */
         BaseMove    _excluded;      /* singular extension search */
 
@@ -246,16 +208,9 @@ namespace search
         TT_Entry    _tt_entry;
         Square      _capture_square = Square::UNDEFINED;
 
-        const ContextPtr& best() const { return _best; }
-
-        void set_best(const ContextPtr& best)
-        {
-            best->_parent = this;
-            _best = best;
-        }
-
         static void cancel();
-        static int  cpu_cores();
+
+        Context*    clone(Context*, int ply = 0) const;
 
         bool        can_forward_prune() const;
         bool        can_prune() const;
@@ -267,7 +222,10 @@ namespace search
 
         int         depth() const { return _max_depth - _ply; }
 
-        std::string epd() const;
+        static void ensure_stacks();
+
+        std::string epd() const { return epd(state()); }
+        static std::string epd(const State&);
 
         /* Static evaluation */
         score_t     _evaluate();    /* no repetitions, no fifty-moves rule */
@@ -276,9 +234,8 @@ namespace search
         score_t     evaluate_material(bool with_piece_squares = true) const;
         int         eval_king_safety(int piece_count);
         int         eval_threats(int piece_count);
-
         void        extend();       /* fractional extensions */
-        ContextPtr  first_move();
+        const Move* first_valid_move();
         score_t     futility_margin();
 
         bool        has_improved(score_t margin = 0) { return improvement() > margin; }
@@ -289,8 +246,7 @@ namespace search
 
         score_t     improvement();
         static void init();
-
-        bool        is_beta_cutoff(const ContextPtr&, score_t);
+        bool        is_beta_cutoff(Context*, score_t, BaseMove&);
         static bool is_cancelled() { return _cancel; }
         bool        is_capture() const { return state().capture_value != 0; }
         bool        is_check() const { return state().is_check(); }
@@ -320,7 +276,10 @@ namespace search
         static void log_message(LogLevel, const std::string&, bool force = true);
 
         int64_t     nanosleep(int nanosec);
-        ContextPtr  next(bool null_move = false, bool = false, score_t = 0);
+
+        Context*    next(bool null_move = false, score_t = 0);
+        Context*    next_ply(bool init = false) const;
+
         int         next_move_index() { return _move_maker.current(*this); }
         bool        on_next();
 
@@ -337,23 +296,33 @@ namespace search
         bool        should_verify_null_move() const;
         int         singular_margin() const;
 
+        int         tid() const { return _tt->_tid; }
+
         Color       turn() const { return state().turn; }
 
         const State& state() const { ASSERT(_state); return *_state; }
         TranspositionTable* get_tt() const { return _tt; }
 
-        const MovesList& get_moves() const
-        {
-            return _move_maker.get_moves();
-        }
+        const MovesList& moves() const { return moves(tid(), _ply); }
+        MovesList& moves() { return moves(tid(), _ply); }
 
-        void set_initial_moves(const MovesList& moves)
+        void set_initial_moves(const Context& from_ctxt)
         {
-            _move_maker.set_initial_moves(moves);
+            ASSERT(_tt->_initial_moves.empty());
+            auto first = from_ctxt.moves().begin();
+            auto last = first + std::max(0, from_ctxt._move_maker.count());
+
+            _tt->_initial_moves.assign(first, last);
         }
 
         /* retrieve PV from TT */
         const BaseMovesList& get_pv() const { return get_tt()->get_pv(); }
+
+        /* buffers for generating and making moves */
+        static MovesList& moves(int tid, int ply);
+        static std::vector<State>& states(int tid, int ply);
+
+        const ContextStack& stack() const { return _context_stacks[tid()]; }
 
         /*
          * Python callbacks
@@ -362,12 +331,14 @@ namespace search
 
         static std::string  (*_epd)(const State&);
         static void         (*_log_message)(int, const std::string&, bool);
-        static void         (*_on_iter)(PyObject*, ContextPtr, score_t);
+        static void         (*_on_iter)(PyObject*, Context*, score_t);
         static void         (*_on_next)(PyObject*, int64_t);
-        static std::string  (*_pgn)(ContextPtr);
+        static std::string  (*_pgn)(Context*);
         static void         (*_print_state)(const State&);
-        static void         (*_report)(PyObject*, std::vector<ContextPtr>&);
+        static void         (*_report)(PyObject*, std::vector<Context*>&);
         static size_t       (*_vmem_avail)();
+
+        static HistoryPtr   _history;
 
     private:
         const Move* get_next_move(score_t);
@@ -375,12 +346,11 @@ namespace search
 
         int repeated_count(const State&) const;
 
-        ContextPtr          _best; /* best search result */
+        Move                _counter_move;
         mutable int         _can_prune = -1;
         State               _statebuf;
         bool                _leftmost = false;
         mutable int         _repetitions = -1;
-        BaseMove            _counter_move;
         MoveMaker           _move_maker;
 
         TranspositionTable* _tt = nullptr;
@@ -388,30 +358,45 @@ namespace search
         /* search can be cancelled from any thread */
         static atomic_bool  _cancel;
 
-        static asize_t      _callback_count;
+        static size_t       _callback_count;
         static atomic_int   _time_limit; /* milliseconds */
         static atomic_time  _time_start;
+
+        static std::vector<ContextStack>    _context_stacks;
+        static std::vector<MoveStack>       _move_stacks;
+        static std::vector<StateStack>      _state_stacks;
+    };
+
+
+    static_assert(std::is_trivially_destructible<Context>::value);
+
+    struct ContextBuffer
+    {
+        std::array<uint8_t, sizeof(Context)> _mem;
+
+        Context* as_context() { return reinterpret_cast<Context*>(&_mem[0]); }
+        const Context* as_context() const { return reinterpret_cast<const Context*>(&_mem[0]); }
     };
 
 
     /*
-    * Late-move pruning counts (initialization idea borrowed from Crafty)
-    */
+     * Late-move pruning counts (initialization idea borrowed from Crafty)
+     */
     template<std::size_t... I>
-    constexpr std::array<int, sizeof ... (I)> lmp(std::index_sequence<I...>)
+    static constexpr std::array<int, sizeof ... (I)> lmp(std::index_sequence<I...>)
     {
         return { static_cast<int>(LMP_BASE + pow(I + .5, 1.9)) ... };
     }
 
 
     template<bool Debug = false>
-    int do_exchanges(const State&, Bitboard, score_t = 0, int = FIRST_EXCHANGE_PLY);
+    int do_exchanges(const State&, Bitboard, score_t, int tid, int ply = FIRST_EXCHANGE_PLY);
 
     /*
      * Evaluate same square exchanges
      */
     template<bool StaticExchangeEvaluation>
-    score_t eval_exchanges(const Move& move)
+    score_t eval_exchanges(int tid, const Move& move)
     {
         score_t val = 0;
 
@@ -430,7 +415,7 @@ namespace search
             else
             {
                 auto mask = chess::BB_SQUARES[move.to_square()];
-                val = do_exchanges<DEBUG_CAPTURES != 0>(*move._state, mask);
+                val = do_exchanges<DEBUG_CAPTURES != 0>(*move._state, mask, 0, tid);
             }
         }
 
@@ -607,7 +592,7 @@ namespace search
     static constexpr double PHI = 1.61803398875;
 
     template<std::size_t... I>
-    constexpr std::array<int, sizeof ... (I)> margins(std::index_sequence<I...>)
+    static constexpr std::array<int, sizeof ... (I)> margins(std::index_sequence<I...>)
     {
         return { static_cast<int>(50 * I + pow(I + PHI, M_E)) ... };
     }
@@ -681,6 +666,33 @@ namespace search
     }
 
 
+    /*
+     * Ok to generate a null-move?
+     */
+    INLINE bool Context::is_null_move_ok()
+    {
+        if (_ply == 0
+            || _null_move_allowed[turn()] == false
+            || _excluded
+            || is_null_move() /* consecutive null moves are not allowed */
+            || is_singleton()
+            || is_qsearch()
+            || is_pv_node()
+            || is_mate_bound()
+            || is_repeated()
+            || is_check()
+            || state().just_king_and_pawns()
+           )
+            return false;
+
+        ASSERT(depth() >= 0);
+        return evaluate_material() >= _beta
+            - NULL_MOVE_DEPTH_WEIGHT * depth()
+            + improvement() / NULL_MOVE_IMPROVEMENT_DIV
+            + NULL_MOVE_MARGIN;
+    }
+
+
     INLINE bool Context::is_recapture() const
     {
         ASSERT(_parent);
@@ -721,28 +733,32 @@ namespace search
     /*
      * Get the next move and wrap it into a Context object.
      */
-    INLINE ContextPtr Context::next(bool null_move, bool first_move, score_t futility)
+    INLINE Context* Context::next(bool null_move, score_t futility /* margin */)
     {
-        ASSERT(first_move || _alpha < _beta);
+        ASSERT(_alpha < _beta);
 
         const bool retry = _retry_next;
         _retry_next = false;
 
-        if (!first_move && !_excluded && !on_next() && !is_check())
-            return ContextPtr();
+        if (!_excluded && !on_next() /* && !is_check() */)
+            return nullptr;
 
         /* null move must be tried before actual moves */
         ASSERT(!null_move || next_move_index() == 0);
 
-        const auto move = null_move ? nullptr : get_next_move(futility);
-        if (!move && !null_move)
-            return ContextPtr();
+        const Move* move;
+
+        if (null_move)
+            move = nullptr;
+        else
+            if ((move = get_next_move(futility)) == nullptr)
+                return nullptr;
 
         ASSERT(null_move || move->_state);
         ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
         ASSERT(null_move || move->_group < MoveOrder::UNORDERED_MOVES);
 
-        auto ctxt = intrusive_ptr<Context>(new Context);
+        auto ctxt = next_ply(true);
 
         if (move)
         {
@@ -766,21 +782,19 @@ namespace search
 
             state().clone_into(ctxt->_statebuf);
             ctxt->_state = &ctxt->_statebuf;
+            ctxt->_state->_check = { 0, 0 };
             flip(ctxt->_state->turn);
             ctxt->_is_null_move = true;
         }
 
         ctxt->_algorithm = _algorithm;
-        ctxt->_tid = _tid;
         ctxt->_parent = this;
         ctxt->_max_depth = _max_depth;
         ctxt->_ply = _ply + 1;
         ctxt->_double_ext = _double_ext;
         ctxt->_extension = _extension;
-        ctxt->_move_maker.set_ply(ctxt->_ply);
         ctxt->_is_retry = retry;
         ctxt->_is_singleton = !ctxt->is_null_move() && _move_maker.is_singleton(*this);
-        ctxt->_history = _history;
         ctxt->_futility_pruning = _futility_pruning && FUTILITY_PRUNING;
         ctxt->_multicut_allowed = _multicut_allowed && MULTICUT;
 
@@ -790,7 +804,6 @@ namespace search
         ctxt->_tt = _tt;
 
         ctxt->_alpha = -_beta;
-        ctxt->_beta = -_alpha;
 
         if (ctxt->is_null_move())
         {
@@ -820,7 +833,7 @@ namespace search
         }
         else
         {
-            ASSERT(move);
+            ctxt->_beta = -_alpha;
 
             if (ctxt->is_pvs_ok())
             {
@@ -837,7 +850,7 @@ namespace search
             /*
              * https://en.wikipedia.org/wiki/Fifty-move_rule
              */
-            if (FIFTY_MOVES_RULE)
+            if constexpr(FIFTY_MOVES_RULE)
             {
                 if (ctxt->is_capture())
                     ctxt->_fifty = 0;
@@ -848,12 +861,9 @@ namespace search
             }
         }
 
-        if (!first_move)
-        {
-            ASSERT(ctxt->_alpha < ctxt->_beta);
-            ASSERT(ctxt->_alpha >= ctxt->_score);
-            ASSERT(ctxt->_score == SCORE_MIN);
-        }
+        ASSERT(ctxt->_alpha < ctxt->_beta);
+        ASSERT(ctxt->_alpha >= ctxt->_score);
+        ASSERT(ctxt->_score == SCORE_MIN);
 
         return ctxt;
     }
@@ -864,7 +874,7 @@ namespace search
      */
     INLINE bool Context::on_next()
     {
-        if (_tid == 0 && ++_callback_count >= CALLBACK_PERIOD)
+        if (tid() == 0 && ++_callback_count >= CALLBACK_PERIOD)
         {
             _callback_count = 0; /* reset */
 
@@ -899,6 +909,41 @@ namespace search
     }
 
 
+    INLINE Context* Context::next_ply(bool init) const
+    {
+        if (_ply >= PLY_MAX)
+            return nullptr;
+
+        auto* buffer = _context_stacks[tid()][_ply].as_context();
+
+        if (init)
+            return new (buffer) Context;
+        else
+            return buffer;
+    }
+
+
+    /* static */ INLINE MovesList& Context::moves(int tid, int ply)
+    {
+        ASSERT(ply >= 0);
+        ASSERT(size_t(ply) < MAX_MOVE);
+
+        return _move_stacks[tid][ply];
+    }
+
+
+    /* static */ INLINE std::vector<State>& Context::states(int tid, int ply)
+    {
+        ASSERT(ply >= 0);
+        ASSERT(size_t(ply) < PLY_MAX);
+
+        return _state_stacks[tid][ply];
+    }
+
+
+    /*
+     * MoveMaker Helper Class
+     */
     INLINE int MoveMaker::current(Context& ctxt)
     {
         ensure_moves(ctxt);
@@ -908,8 +953,6 @@ namespace search
 
     INLINE void MoveMaker::ensure_moves(Context& ctxt)
     {
-        ASSERT(!moves().empty() || _count <= 0);
-
         if (_count < 0)
         {
             ASSERT(_current < 0);
@@ -953,7 +996,7 @@ namespace search
             return nullptr;
         }
 
-        const auto& moves_list = moves();
+        const auto& moves_list = ctxt.moves();
         ASSERT(!moves_list.empty());
 
         const Move* move = &moves_list[index];
@@ -1015,7 +1058,7 @@ namespace search
         {
         #if !defined(NO_ASSERT)
             /* checked for skipped moves above, make sure there aren't any */
-            const auto& all_moves = moves();
+            const auto& all_moves = ctxt.moves();
             for (const auto& move : all_moves)
             {
                 ASSERT(move._group != MoveOrder::QUIET_MOVES);
@@ -1049,19 +1092,27 @@ namespace search
              */
             auto capture_gain = move._state->capture_value;
 
-            const auto other = eval_exchanges<true>(move);
+            auto other = chess::WEIGHT[ctxt.state().piece_type_at(move.from_square())];
 
-            if (other < MATE_LOW)
+            /* skip exchange evaluation if the capturer is worth less than the captured */
+
+            if (other >= capture_gain)
             {
-                move._score = -other;
-                move._group = MoveOrder::WINNING_CAPTURES;
+                other = eval_exchanges<true>(ctxt.tid(), move);
 
-                if (DEBUG_CAPTURES)
-                    ctxt.log_message(
-                        LogLevel::DEBUG,
-                        move.uci() + ": " + std::to_string(move._score) + " " + ctxt.epd());
-                return;
+                if (EXCHANGES_DETECT_CHECKMATE && other < MATE_LOW)
+                {
+                    move._score = -other;
+                    move._group = MoveOrder::WINNING_CAPTURES;
+
+                    if (DEBUG_CAPTURES)
+                        ctxt.log_message(
+                            LogLevel::DEBUG,
+                            move.uci() + ": " + std::to_string(move._score) + " " + ctxt.epd());
+                    return;
+                }
             }
+
             capture_gain -= other;
 
             if (capture_gain < 0)
@@ -1090,8 +1141,8 @@ namespace search
         if (move._state == nullptr)
         {
             /* assign state buffer */
-            ASSERT(_state_index < states().size());
-            move._state = &states()[_state_index++];
+            ASSERT(_state_index < Context::states(ctxt.tid(), ctxt._ply).size());
+            move._state = &Context::states(ctxt.tid(), ctxt._ply)[_state_index++];
         }
         else
         {
@@ -1115,7 +1166,10 @@ namespace search
          * Prune (before verifying move legality, thus saving is_check() calls).
          * Late-move prune before making the move.
          */
-        if (ctxt.depth() > 0 && _current >= LMP[ctxt.depth()] && ctxt.can_forward_prune())
+        if (_phase > 2
+            && ctxt.depth() > 0
+            && _current >= LMP[ctxt.depth()]
+            && ctxt.can_forward_prune())
         {
             _have_pruned_moves = true;
             ++ctxt._pruned_count;
@@ -1124,6 +1178,14 @@ namespace search
         }
 
         move._state->apply_move(move);
+
+        if (_group_quiet_moves && is_quiet(*move._state))
+        {
+            _have_quiet_moves = true;
+            move._group = MoveOrder::QUIET_MOVES;
+            return false;
+        }
+
         incremental_update(move, ctxt);
 
         /* Futility-prune after making the move (state is needed for simple eval). */
@@ -1153,7 +1215,7 @@ namespace search
             return false;
         }
 
-        if (_group_quiet_moves && (is_quiet(*move._state) || is_standing_pat(ctxt)))
+        if (_group_quiet_moves && move._state->capture_value && is_standing_pat(ctxt))
         {
             _have_quiet_moves = true;
             move._group = MoveOrder::QUIET_MOVES;
@@ -1192,11 +1254,11 @@ namespace search
     }
 
 
-    INLINE void MoveMaker::sort_moves(Context& /* ctxt */, size_t start_at)
+    INLINE void MoveMaker::sort_moves(Context& ctxt, size_t start_at)
     {
-        ASSERT(start_at < moves().size());
+        ASSERT(start_at < ctxt.moves().size());
 
-        auto& moves_list = moves();
+        auto& moves_list = ctxt.moves();
         const auto last = moves_list.end();
         const auto first = moves_list.begin() + start_at;
 

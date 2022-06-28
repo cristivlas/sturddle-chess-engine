@@ -18,18 +18,19 @@ Compiler args.
 inc_dirs = ['-I./libpopcnt', '-I./magic-bits/include']
 
 # Assert-enabled build (requires TUNING_ENABLED)
-args = []
+# args = ['-DTUNING_ENABLED=true']
 link = []
 
 # Debug build
 # if platform.startswith('win'):
-#     args = [ '/Od', '/Zi' ]
-#     link = ['/DEBUG']
+#      args = [ '/Od', '/Zi' ]
+#      link = ['/DEBUG']
 # else:
-#     args = [ '-O0', '-D_DEBUG' ]
+#      args = [ '-O0', '-D_DEBUG' ]
 
 # Release build
 args = ['-DNO_ASSERT']
+
 
 if platform.startswith('win'):
     args.append('/std:c++17')
@@ -50,8 +51,18 @@ else:
     cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
     if cc and cc.startswith('clang'):
         args.append('-Wno-deprecated-declarations')
+"""
+end of compiler args.
+"""
 
-
-extensions = [Extension('chess_engine', sources=sourcefiles, extra_compile_args=args + inc_dirs, extra_link_args=link)]
+extensions = [
+    Extension(
+        'chess_engine',
+        sources=sourcefiles,
+        extra_compile_args=args + inc_dirs,
+        extra_link_args=link
+    )
+]
 
 setup(ext_modules=cythonize(extensions))
+

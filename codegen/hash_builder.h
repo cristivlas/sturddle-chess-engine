@@ -29,15 +29,27 @@
 #include <ostream>
 #include <unordered_map>
 #include <vector>
+#include <set>
 #include <sstream>
 #include <string>
 
 #include "common.h"
-#include "perfect_hash.h"
-
 
 namespace
 {
+    /*
+     * https://stackoverflow.com/questions/51408771/c-reversed-integer-sequence-implementation
+     */
+    template<std::size_t... Is>
+    constexpr auto reversed_index_sequence(const std::index_sequence<Is...>&)
+        -> decltype(std::index_sequence<sizeof...(Is) - 1U - Is...>{});
+
+    template<std::size_t N>
+    using make_reversed_index_sequence = decltype(
+        reversed_index_sequence(std::make_index_sequence<N>{})
+    );
+
+
     using TableData = std::vector<uint64_t>;
 
 
@@ -64,9 +76,11 @@ namespace
 
             _hash_funcs.emplace(hf, _hash_funcs.size());
             _hash_funcs_index.emplace(_hash_funcs[hf], hf);
+            ++_hash_freq[hf];
+            _data_size += data.size();
         }
 
-        void write(std::ostream& os) const
+        void write(std::ostream& os)
         {
             os << "/* Auto-generated attack tables */\n";
             os << "#pragma once\n\n";
@@ -142,6 +156,8 @@ namespace
             }
 
             os << "} /* namespace chess */\n";
+
+            std::clog << "\nTotal tables = " << _data_size / 1024 << " KiB\n";
         }
 
     private:
@@ -159,7 +175,7 @@ namespace
             std::ostringstream os;
 
             os << "[](uint64_t *& data) {\n";
-            os << "        data = new uint64_t [" << data.size() + 1 << "]();\n";
+            os << "        data = new uint64_t [" << data.size() << "]();\n";
 
             for (size_t i = 0; i != data.size(); ++i)
             {
@@ -175,7 +191,7 @@ namespace
             return os.str();
         }
 
-        void generate_unified_hash_function(std::ostream& os) const
+        void generate_unified_hash_function(std::ostream& os)
         {
             os << "/************************************************************/\n";
             os << "/* Unified hash function. */\n";
@@ -184,11 +200,34 @@ namespace
             os << "{\n";
             os << "    switch (i)\n";
             os << "    {\n";
+        #if 0
             for (const auto& index : _hash_funcs_index)
             {
                 os << "    case " << index.first << ":\n";
                 os << "        return " << index.second << "(u);\n";
             }
+        #else
+            /* sort by utilization */
+            std::vector<std::string> hfuncs;
+            for (const auto& index : _hash_funcs)
+                hfuncs.emplace_back(index.first);
+
+            std::sort(hfuncs.begin(), hfuncs.end(),
+                [this](const std::string& lhs, const std::string& rhs) -> bool{
+                    return _hash_freq.at(lhs) > _hash_freq.at(rhs);
+                });
+
+            /* reindex */
+            _hash_funcs.clear();
+            for (size_t i = 0; i != hfuncs.size(); ++i)
+                _hash_funcs.emplace(hfuncs[i], i);
+
+            for (const auto& hf : hfuncs)
+            {
+                os << "    case " << _hash_funcs.at(hf) << ": /* usage: " << _hash_freq.at(hf) << " */\n";
+                os << "        return " << hf << "(u);\n";
+            }
+        #endif /* 0 */
 
             os << "    }\n";
             os << "    return 0;\n";
@@ -198,6 +237,8 @@ namespace
     private:
         std::unordered_map<std::string, int> _hash_funcs;
         std::map<int, std::string> _hash_funcs_index;
+        std::unordered_map<std::string, int> _hash_freq;
+        size_t _data_size = 0;
 
         std::set<std::string> _templates; /* hasher templates */
         std::unordered_map<std::string, Group> _groups;
@@ -231,7 +272,6 @@ namespace
     class HashBuilderBase : public HashBuilder
     {
     protected:
-        mutable size_t _data_size = 0;
         virtual size_t hash(uint64_t) const = 0;
         virtual bool build_impl(const Input& input) = 0;
 
@@ -254,74 +294,15 @@ namespace
             {
                 const auto i = hash(elem.first);
                 ASSERT(i < max_table_size);
+
                 if (i >= data.size())
                     data.resize(i + 1);
+
                 data[i] = elem.second;
             }
+
             ASSERT(data.size() <= max_table_size);
-
-            _data_size = data.size();
             return data;
-        }
-    };
-
-
-    class PerfectHashBuilder : public HashBuilderBase
-    {
-        perfect_hash::HashMatrix _hm;
-
-        std::string strategy() const override
-        {
-            return "perfect hash";
-        }
-
-        bool build_impl(const Input& input) override
-        {
-            _hm = perfect_hash::HashMatrix();
-            return perfect_hash::generate(input, _hm);
-        }
-
-        size_t hash(uint64_t k) const override final
-        {
-            return _hm.hash(k);
-        }
-
-        void write_hash_template(CodeGenerator& code) const override
-        {
-            std::ostringstream os;
-
-            os << "static inline uint64_t bitparity(uint64_t u) {\n";
-            os << "#if _MSC_VER\n";
-            os << "    return __popcnt64(u) % 2;\n";
-            os << "#else\n";
-            os << "    static_assert(__GNUC__, \"unsupported compiler\");\n";
-            os << "    return __builtin_parityll(u);\n";
-            os << "#endif\n";
-            os << "}\n\n";
-            os << "template<int B, uint64_t R> struct RHash {\n";
-            os << "    static constexpr inline size_t hash(uint64_t n) {\n";
-            os << "        return RHash<B-1, R>::_hash(n);\n";
-            os << "    }\n";
-            os << "    static constexpr inline size_t _hash(uint64_t n) {\n";
-            os << "         return bitparity(R & n) | (RHash<B-1, (R >> 1)>::_hash(n) << 1);\n";
-            os << "    }\n";
-            os << "};\n\n";
-            os << "template<uint64_t R> struct RHash<0, R> {\n";
-            os << "    static constexpr inline size_t _hash(uint64_t n) {\n";
-            os << "        return bitparity(R & n);\n";
-            os << "    }\n";
-            os << "};\n\n";
-
-            code.add_hash_template(os.str());
-        }
-
-        void write_instance(CodeGenerator& code, const char* name, const Input& input) const override
-        {
-            std::ostringstream os;
-
-            os << "RHash<" << _hm.size() << ", " << _hm.r() << "ULL>::hash";
-            const auto max_table_size = 1ULL << _hm.size();
-            code.add_instance(name, os.str(), transform(input, max_table_size));
         }
     };
 
@@ -329,13 +310,17 @@ namespace
     class Hash64Builder : public HashBuilderBase
     {
     protected:
-        bool build_impl(const Input& input) override final
+        size_t _max_hash = 0;
+
+        bool build_impl(const Input& input) override
         {
             std::unordered_map<size_t, uint64_t> mapping;
 
             for (const auto& elem : input)
             {
-                auto hval = hash(elem.first);
+                const auto hval = hash(elem.first);
+                _max_hash = std::max(_max_hash, hval);
+
                 auto iter = mapping.find(hval);
                 if (iter == mapping.end())
                     mapping.emplace(hval, elem.second);
@@ -356,7 +341,7 @@ namespace
         static std::string mixin()
         {
             std::ostringstream os;
-            os << "inline uint64_t " << name() << "(uint64_t key) {\n";
+            os << "INLINE uint64_t " << name() << "(uint64_t key) {\n";
             os << "    return key;\n";
             os << "}\n";
             return os.str();
@@ -375,7 +360,7 @@ namespace
         static std::string mixin()
         {
             std::ostringstream os;
-            os << "inline uint64_t " << name() << "(uint64_t key) {\n";
+            os << "INLINE uint64_t " << name() << "(uint64_t key) {\n";
             os << "    return key * " << M << "ULL;\n";
             os << "}\n";
             return os.str();
@@ -398,7 +383,7 @@ namespace
         {
             std::ostringstream os;
 
-            os << "inline uint64_t " << name() << "(uint64_t key) {\n";
+            os << "INLINE uint64_t " << name() << "(uint64_t key) {\n";
             os << "    return " << BaseMixin::name() << "(key) >> " << N << ";\n";
             os << "}\n";
             return os.str();
@@ -428,14 +413,21 @@ namespace
     {
         const size_t _max_table_size;
         std::ostringstream _name;
+        mutable size_t _max_index = 0;
 
     public:
-        explicit MixinHashBuilder(size_t max_table_size) : _max_table_size(max_table_size)
+        explicit MixinHashBuilder(size_t max_table_size)
+            : _max_table_size(max_table_size)
         {
             _name << Mixin::name() << "_" << _max_table_size;
         }
 
     private:
+        bool build_impl(const Input& input) override
+        {
+            return Hash64Builder::build_impl(input) && (_max_hash < _max_table_size);
+        }
+
         std::string strategy() const override
         {
             return _name.str();
@@ -443,7 +435,10 @@ namespace
 
         size_t hash(uint64_t key) const override final
         {
-            return Mixin::hash(key) & (_max_table_size - 1);
+            const auto i = Mixin::hash(key);
+            _max_index = std::max<size_t>(_max_index, i);
+
+            return _max_table_size >= 4096 ? i & (_max_table_size - 1) : i;
         }
 
         void write_hash_template(CodeGenerator& code) const override
@@ -451,9 +446,12 @@ namespace
             Mixin::add(code);
 
             std::ostringstream os;
-            os << "template<size_t Mask>\n";
-            os << "inline size_t " << Mixin::name() << "_mixin(uint64_t key) {\n";
-            os << "    return " << Mixin::name() << "(key) & Mask;\n";
+            os << "template<size_t Mask, bool MaskRequired>\n";
+            os << "INLINE size_t " << Mixin::name() << "_mixin(uint64_t key) {\n";
+            os << "    if constexpr(MaskRequired)\n";
+            os << "        return " << Mixin::name() << "(key) & Mask;\n";
+            os << "    else\n";
+            os << "        return " << Mixin::name() << "(key);\n";
             os << "}\n";
             code.add_hash_template(os.str());
         }
@@ -461,8 +459,14 @@ namespace
         void write_instance(CodeGenerator& code, const char* name, const Input& input) const override
         {
             std::ostringstream os;
-            os << Mixin::name() << "_mixin<0x" << std::hex << (_max_table_size - 1) << std::dec << ">";
-            code.add_instance(name, os.str(), transform(input, _max_table_size));
+
+            const auto data = transform(input, _max_table_size);
+            const auto mask_required = (_max_index >= _max_table_size);
+
+            os << Mixin::name() << "_mixin<" << (_max_table_size - 1);
+            os << ", " << std::boolalpha << mask_required << ">";
+
+            code.add_instance(name, os.str(), data);
         }
     };
 
@@ -496,7 +500,12 @@ namespace
 
         template<typename M> void add_group(size_t table_size)
         {
-            add_group<M>(table_size, std::make_integer_sequence<size_t, 64>{});
+            add_group<M>(table_size, std::make_index_sequence<64>{});
+        }
+
+        template<typename M> void add_group_reversed(size_t table_size)
+        {
+            add_group<M>(table_size, make_reversed_index_sequence<64>{});
         }
 
         template<uint64_t... M>
@@ -529,17 +538,12 @@ namespace
              * Try a bunch of strategies and see which one fits the data best.
              * The idea is to maximize performance with minimum memory.
              */
-
-            for (size_t table_size : { 32, 64 })
-                add_group<Identity>(table_size);
-
-            for (size_t table_size : { 256, 512, 1024, 2048, 4096 })
+        #if 0
+            for (size_t table_size : { 64 })
+                add_group_reversed<Identity>(table_size);
+        #endif
+            for (size_t table_size : { 1024, 2048, 4096 })
                 add_multipliers(table_size);
-
-            /*
-             * This is catch all strategy. Guaranteed to find perfect hashing, but slow.
-             */
-            _builders.emplace_back(std::make_unique<PerfectHashBuilder>());
         }
 
         std::string strategy() const override

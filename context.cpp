@@ -42,6 +42,7 @@ using std::chrono::high_resolution_clock;
 using std::chrono::nanoseconds;
 
 
+
 /*
  * Late-move reduction tables (adapted from berserk)
  */
@@ -148,7 +149,13 @@ namespace search
 
     atomic_int  Context::_time_limit = -1; /* milliseconds */
     atomic_time Context::_time_start;
-    asize_t Context::_callback_count(0);
+    size_t Context::_callback_count(0);
+
+    HistoryPtr Context::_history; /* moves played so far */
+
+    std::vector<Context::ContextStack> Context::_context_stacks(SMP_CORES);
+    std::vector<Context::MoveStack> Context::_move_stacks(SMP_CORES);
+    std::vector<Context::StateStack> Context::_state_stacks(SMP_CORES);
 
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
@@ -156,53 +163,27 @@ namespace search
     std::string (*Context::_epd)(const State&) = nullptr;
     void (*Context::_log_message)(int, const std::string&, bool) = nullptr;
 
-    void (*Context::_on_iter)(PyObject*, ContextPtr, score_t) = nullptr;
+    void (*Context::_on_iter)(PyObject*, Context*, score_t) = nullptr;
     void (*Context::_on_next)(PyObject*, int64_t) = nullptr;
 
-    std::string(*Context::_pgn)(ContextPtr) = nullptr;
+    std::string(*Context::_pgn)(Context*) = nullptr;
     void (*Context::_print_state)(const State&) = nullptr;
-    void (*Context::_report)(PyObject*, std::vector<ContextPtr>&) = nullptr;
+    void (*Context::_report)(PyObject*, std::vector<Context*>&) = nullptr;
 
     size_t (*Context::_vmem_avail)() = nullptr;
 
 
-#if RECYCLE_CONTEXTS
-    static THREAD_LOCAL Free* free_list = nullptr;
-
-    void* Context::operator new(size_t size)
-    {
-        if (auto head = free_list)
-        {
-            free_list = head->_next;
-            return head;
-        }
-        return ::operator new(size);
-    }
-
-    void Context::operator delete(void* ptr, size_t) noexcept
-    {
-        auto ctxt = static_cast<Context*>(ptr);
-        ctxt->_next = free_list;
-        free_list = ctxt;
-    }
-#endif /* RECYCLE_CONTEXTS */
-
-
+    /* Init attack masks and other magic bitboards in chess.cpp */
     /* static */ void Context::init()
     {
         _init();
     }
 
 
+    /* Call into the Python logger */
     /* static */ void Context::log_message(LogLevel level, const std::string& msg, bool force)
     {
         cython_wrapper::call(_log_message, int(level), msg, force);
-    }
-
-
-    /* static */ int Context::cpu_cores()
-    {
-        return SMP_CORES;
     }
 
 
@@ -211,22 +192,14 @@ namespace search
      * 1) clone root at the beginning of SMP searches, and
      * 2) create a temporary context for singularity search.
      */
-    ContextPtr Context::clone(int ply) const
+    Context* Context::clone(Context* buffer, int ply) const
     {
-        ContextPtr ctxt(new Context);
+        Context* ctxt = new (buffer) Context;
 
         ctxt->_algorithm = _algorithm;
         ctxt->_alpha = _alpha;
         ctxt->_beta = _beta;
         ctxt->_score = _score;
-
-        /*
-         * ply != 0 implies use case 2), ok to share history within same thread;
-         * ply == 0 implies cloning at root for use on SMP threads, not safe to
-         * share with non-atomic refcount.
-         */
-        ctxt->_history = ply ? _history : HistoryPtr(new History(*_history));
-
         ctxt->_max_depth = _max_depth;
         ctxt->_parent = _parent;
         ctxt->_ply = ply;
@@ -236,17 +209,30 @@ namespace search
         ctxt->_move = _move;
         ctxt->_excluded = _excluded;
         ctxt->_tt_entry = _tt_entry;
-        ctxt->_tid = _tid;
-        ctxt->_move_maker.set_ply(ply);
         ctxt->_counter_move = _counter_move;
+
         return ctxt;
     }
 
 
+
+    /* static */ void Context::ensure_stacks()
+    {
+        const size_t n_threads(SMP_CORES);
+        if (_context_stacks.size() < n_threads)
+        {
+            _context_stacks.resize(n_threads);
+            _move_stacks.resize(n_threads);
+            _state_stacks.resize(n_threads);
+        }
+    }
+
+
     /*
-     * Track the best score and move so far, return true if beta cutoff.
+     * Track the best score and move so far, return true if beta cutoff;
+     * called from search right after: score = -negamax(*next_ctxt).
      */
-    bool Context::is_beta_cutoff(const ContextPtr& next_ctxt, score_t score)
+    bool Context::is_beta_cutoff(Context* next_ctxt, score_t score, BaseMove& next_best)
     {
         ASSERT(next_ctxt->_ply != 0);
         ASSERT(score > SCORE_MIN && score < SCORE_MAX);
@@ -290,6 +276,8 @@ namespace search
                         return false;
                     }
 
+                    next_best = next_ctxt->_best_move;
+
                     if (score >= _beta)
                     {
                         _cutoff_move = next_ctxt->_move;
@@ -318,7 +306,7 @@ namespace search
             #if LAZY_STATE_COPY
                 next_ctxt->copy_move_state();
             #endif
-                _best = next_ctxt;
+                _best_move = next_ctxt->_move;
             }
         }
 
@@ -388,21 +376,21 @@ namespace search
     }
 
 
-    /*
-     * NOTE: uses top half of MoveMaker's moves buffers to minimize memory allocations.
-     */
     template<bool Debug>
-    int do_exchanges(const State& state, Bitboard mask, score_t gain, int ply)
+    int do_exchanges(const State& state, Bitboard mask, score_t gain, int tid, int ply)
     {
         ASSERT(popcount(mask) == 1);
         ASSERT(gain >= 0);
 
-        if (size_t(ply) >= MoveMaker::MAX_MOVE)
+        /* use top half of moves stacks */
+        ASSERT(ply >= PLY_MAX);
+
+        if (size_t(ply) >= Context::MAX_MOVE)
             return 0;
 
         mask &= ~state.kings;
 
-        MovesList& moves = MoveMaker::_moves[ply];
+        auto& moves = Context::moves(tid, ply);
         state.generate_pseudo_legal_moves(moves, mask);
 
         /* sort moves by piece type */
@@ -420,7 +408,7 @@ namespace search
         if constexpr(Debug)
         {
             std::ostringstream out;
-            out << "\tdo_exchanges (" << Context::_epd(state) << ") gain=" << gain << " ";
+            out << "\tdo_exchanges (" << Context::epd(state) << ") gain=" << gain << " ";
             for (const auto& move : moves)
                 out << move.uci() << "(" << move._score << ") ";
             Context::log_message(LogLevel::DEBUG, out.str());
@@ -496,6 +484,7 @@ namespace search
                     next_state,
                     mask,
                     next_state.capture_value - gain,
+                    tid,
                     ply + 1);
             }
             /*****************************************************************/
@@ -539,7 +528,7 @@ namespace search
      * Skip the exchanges when the value of the captured piece exceeds
      * the value of the capturer.
      */
-    static score_t do_captures(const State& state, Bitboard from_mask, Bitboard to_mask)
+    static score_t do_captures(int tid, const State& state, Bitboard from_mask, Bitboard to_mask)
     {
         static constexpr auto ply = FIRST_EXCHANGE_PLY;
         const auto mask = to_mask & state.occupied_co(!state.turn) & ~state.kings;
@@ -549,7 +538,7 @@ namespace search
          * buffers declared in the MoveMaker class to keep memory allocations down to a
          * minimum. NOTE: generate... function takes masks in reverse: to, from.
          */
-        MovesList& moves = MoveMaker::_moves[ply];
+        auto& moves = Context::moves(tid, ply);
         if (state.generate_pseudo_legal_moves(moves, mask, from_mask).empty())
         {
             return 0;
@@ -575,7 +564,7 @@ namespace search
         if constexpr(DEBUG_CAPTURES)
         {
             std::ostringstream out;
-            out << "do_captures (" << Context::_epd(state) << ") ";
+            out << "do_captures (" << Context::epd(state) << ") ";
             for (const auto& move : moves)
                 out << move.uci() << "(" << move._score << ") ";
 
@@ -653,6 +642,7 @@ namespace search
                 next_state,
                 BB_SQUARES[move.to_square()],
                 next_state.capture_value,
+                tid,
                 ply + 1);
             /****************************************************************/
 
@@ -691,13 +681,16 @@ namespace search
         auto state = ctxt._state;
 
     #if NO_ASSERT
-        if (ctxt._tid == 0 && ctxt._tt_entry._capt != SCORE_MIN)
+        if (ctxt._tt_entry._capt != SCORE_MIN)
             return ctxt._tt_entry._capt;
     #endif /* NO_ASSERT */
 
-        const auto result = STATIC_EXCHANGES
-            ? estimate_captures(*state)
-            : do_captures(*state, BB_ALL, BB_ALL);
+        score_t result;
+
+        if constexpr(STATIC_EXCHANGES)
+            result = estimate_captures(*state);
+        else
+            result = do_captures(ctxt.tid(), *state, BB_ALL, BB_ALL);
 
         ASSERT(result >= 0);
 
@@ -863,7 +856,7 @@ namespace search
             if (DEBUG_MATERIAL && score)
             {
                 std::ostringstream out;
-                out << "rook: " << Context::_epd(state) << ": " << score << ", mat: " << mat_eval;
+                out << "rook: " << Context::epd(state) << ": " << score << ", mat: " << mat_eval;
                 Context::log_message(LogLevel::DEBUG, out.str());
             }
         }
@@ -1192,8 +1185,8 @@ namespace search
                     }
                     _tt_entry._eval = eval;
                 }
-                /* 2. Tactical (skip in midgame at very low depth) */
-                else if (state().is_endgame() || depth() > 3)
+                /* 2. Tactical (skip in midgame at low depth) */
+                else if (state().is_endgame() || depth() > TACTICAL_LOW_DEPTH)
                 {
                     eval -= CHECK_BONUS * is_check();
                     eval += SIGN[turn] * eval_tactical(*this);
@@ -1288,13 +1281,12 @@ namespace search
 
 
     /*
-     * Return the first legal move, wrapped in a Context object.
      * Used when the search has fails to find a move before the time runs out.
      */
-    ContextPtr Context::first_move()
+    const Move* Context::first_valid_move()
     {
         rewind(0);
-        return next(false, true /* suppress time-checking callback */);
+        return get_next_move(0 /* = no futility pruning */);
     }
 
 
@@ -1315,7 +1307,10 @@ namespace search
         ASSERT(iteration());
         ASSERT(_retry_above_alpha == RETRY::None);
 
-        _best.reset();
+    #if 0
+        /* ok to clear only if the iterative search  callback keeps track of best move */
+        _best_move = Move();
+    #endif
         _cancel = false;
         _can_prune = -1;
 
@@ -1441,30 +1436,6 @@ namespace search
 
 
     /*
-     * Ok to generate a null-move?
-     */
-    bool Context::is_null_move_ok()
-    {
-        if (_ply == 0
-            || _null_move_allowed[turn()] == false
-            || _excluded
-            || is_null_move() /* consecutive null moves are not allowed */
-            || is_singleton()
-            || is_qsearch()
-            || is_pv_node()
-            || is_mate_bound()
-            || is_repeated()
-            || is_check()
-            || state().just_king_and_pawns()
-           )
-            return false;
-
-        ASSERT(depth() >= 0);
-        return evaluate_material() >= _beta - NULL_MOVE_DEPTH_WEIGHT * depth() + NULL_MOVE_MARGIN;
-    }
-
-
-    /*
      * Late move reduction and pruning.
      * https://www.chessprogramming.org/Late_Move_Reductions
      */
@@ -1549,17 +1520,16 @@ namespace search
             || is_null_move()
             || is_retry()
             || state().promotion
-        #if 0
-            || (is_capture() && (_ply % 2) && !is_standing_pat(*this))
-        #endif
             || is_check()
-            /* last move to search from current node, with score close to mate?
-               extend the search as to not miss a possible mate in the next move */
+            /*
+             * last move to search from current node, with score close to mate?
+             * extend the search as to not miss a possible mate in the next move
+             */
             || (_parent->_score < MATE_LOW && _parent->_score > SCORE_MIN && is_last_move())
            )
             return false;
 
-        /* treat as leaf for now but retry and extend if it beats alpha */
+        /* treat it as leaf for now but retry and extend if it beats alpha */
         if (is_reduced())
             _retry_above_alpha = RETRY::Reduced;
 
@@ -1570,9 +1540,9 @@ namespace search
     /*
      * https://en.wikipedia.org/wiki/Extended_Position_Description
      */
-    std::string Context::epd() const
+    std::string Context::epd(const State& state)
     {
-        return cython_wrapper::call(_epd, state());
+        return cython_wrapper::call(_epd, state);
     }
 
 
@@ -1690,10 +1660,6 @@ namespace search
     /*---------------------------------------------------------------------
      * MoveMaker
      *---------------------------------------------------------------------*/
-    THREAD_LOCAL std::vector<State> MoveMaker::_states[MAX_MOVE];
-    THREAD_LOCAL MovesList MoveMaker::_moves[MAX_MOVE];
-
-
     int MoveMaker::rewind(Context& ctxt, int where, bool force_reorder)
     {
         ensure_moves(ctxt);
@@ -1709,7 +1675,7 @@ namespace search
 
             for (int i = 0; i != _count; ++i)
             {
-                auto& move = moves()[i];
+                auto& move = ctxt.moves()[i];
 
                 if (move._state == nullptr)
                 {
@@ -1801,12 +1767,11 @@ namespace search
         ASSERT(_current < 0);
         ASSERT(_phase == 0);
         ASSERT(_state_index == 0);
-        ASSERT(_ply == ctxt._ply);
 
-        auto& moves_list = moves();
+        auto& moves_list = ctxt.moves();
         moves_list.clear();
 
-        if (_initial_moves.empty())
+        if (ctxt.get_tt()->_initial_moves.empty())
         {
             if (!USE_MOVES_CACHE || ctxt.state()._hash == 0)
             {
@@ -1827,7 +1792,7 @@ namespace search
         }
         else
         {
-            moves_list.swap(_initial_moves);
+            moves_list.swap(ctxt.get_tt()->_initial_moves);
 
             for (auto& move : moves_list)
             {
@@ -1841,7 +1806,7 @@ namespace search
         _current = 0;
 
         /* Initialize scratch buffers for making the moves. */
-        states().resize(_count);
+        Context::states(ctxt.tid(), ctxt._ply).resize(_count);
 
         /*
          * In quiescent search, only quiet moves are interesting.
@@ -1883,7 +1848,7 @@ namespace search
 
 
     template<std::size_t... I>
-    constexpr std::array<double, sizeof ... (I)> thresholds(std::index_sequence<I...>)
+    static constexpr std::array<double, sizeof ... (I)> thresholds(std::index_sequence<I...>)
     {
         auto logistic = [](int i) { return HISTORY_HIGH / (1 + exp(6 - i)); };
         return { logistic(I) ... };
@@ -1902,7 +1867,7 @@ namespace search
 
         ASSERT(_phase <= MAX_PHASE);
         ASSERT(ctxt._tt);
-        ASSERT(moves()[start_at]._group == MoveOrder::UNORDERED_MOVES);
+        ASSERT(ctxt.moves()[start_at]._group == MoveOrder::UNORDERED_MOVES);
 
         const KillerMoves* killer_moves = nullptr;
 
@@ -1921,7 +1886,7 @@ namespace search
             /********************************************************************/
             /* iterate over pseudo-legal moves                                  */
             /********************************************************************/
-            auto& moves_list = moves();
+            auto& moves_list = ctxt.moves();
             const auto n = moves_list.size();
 
             for (size_t i = start_at; i < n; ++i)
@@ -2016,7 +1981,7 @@ namespace search
 
         if (size_t(_count) <= start_at)
         {
-            ASSERT(moves()[start_at]._group >= MoveOrder::QUIET_MOVES);
+            ASSERT(ctxt.moves()[start_at]._group >= MoveOrder::QUIET_MOVES);
             _need_sort = false;
         }
         else if (_need_sort)
@@ -2025,29 +1990,11 @@ namespace search
         }
 
     #if !defined(NO_ASSERT)
-        for (size_t i = _count; i < moves().size(); ++i)
+        for (size_t i = _count; i < ctxt.moves().size(); ++i)
         {
-            ASSERT(moves()[i]._group >= MoveOrder::QUIET_MOVES);
+            ASSERT(ctxt.moves()[i]._group >= MoveOrder::QUIET_MOVES);
         }
     #endif /* NO_ASSERT */
-    }
-
-
-    /*
-     * SMP: copy the root moves from the main thread to the other
-     * workers at the beginning of the iteration; also used in the
-     * singular extension heuristic.
-     */
-    void MoveMaker::set_initial_moves(const MovesList& moves)
-    {
-        /* Expect initial state */
-        ASSERT(_initial_moves.empty());
-        ASSERT(_count < 0);
-        ASSERT(_current == -1);
-        ASSERT(_phase == 0);
-        ASSERT(_state_index == 0);
-
-        _initial_moves.assign(moves.begin(), moves.end());
     }
 } /* namespace */
 

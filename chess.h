@@ -72,7 +72,7 @@ namespace chess
     extern AttackMasks BB_DIAG_MASKS, BB_FILE_MASKS, BB_RANK_MASKS;
 
     template<std::size_t... I>
-    constexpr std::array<uint64_t, sizeof ... (I)> bb_squares(std::index_sequence<I...>)
+    static constexpr std::array<uint64_t, sizeof ... (I)> bb_squares(std::index_sequence<I...>)
     {
         return { 1ULL << I ... };
     }
@@ -812,7 +812,7 @@ namespace chess
         };
 
         template<std::size_t... I>
-        constexpr std::array<double, sizeof ... (I)> _exp_table(std::index_sequence<I...>)
+        static constexpr std::array<double, sizeof ... (I)> _exp_table(std::index_sequence<I...>)
         {
             return { _exp<I>::value ... };
         }
@@ -989,17 +989,22 @@ namespace chess
             Bitboard to_mask = BB_ALL,
             Bitboard from_mask = BB_ALL) const;
 
+        /* perft */
+        size_t make_pseudo_legal_moves(MovesList&) const;
+
         void generate_moves(MovesList& out, MovesList& buffer) const;
 
         void generate_castling_moves(MovesList& moves, Bitboard to_mask = BB_ALL) const;
 
         void eval_apply_delta(const BaseMove&, const State& previous);
 
+        /* indirection point for future ideas (dynamic piece weights) */
         static INLINE constexpr int weight(PieceType piece_type)
         {
             return WEIGHT[piece_type];
         }
 
+        mutable std::array<int, 2> _check = {-1, -1};
         mutable uint64_t _hash = 0;
 
     private:
@@ -1013,8 +1018,6 @@ namespace chess
         void set_piece_at(Square, PieceType, Color, PieceType promotion_type = PieceType::NONE);
 
         static bool is_endgame(const State&);
-
-        mutable std::array<int, 2> _check = {-1, -1};
 
         enum : int8_t
         {
@@ -1045,7 +1048,7 @@ namespace chess
         ASSERT(move);
         ASSERT(piece_type_at(move.to_square()) != PieceType::KING);
 
-        _check = {-1, -1};
+        _check = { -1, -1 };
 
         this->capture_value = weight(piece_type_at(move.to_square()));
         this->promotion = move.promotion();
@@ -1334,7 +1337,7 @@ namespace chess
         if ((castling_rights != BB_EMPTY) && (kings & BB_SQUARES[move.from_square()]))
         {
             const auto diff = square_file(move.from_square()) - square_file(move.to_square());
-            return abs(diff) > 1 || (rooks & occupied_co(turn) & BB_SQUARES[move.to_square()]) != 0;
+            return abs(diff) > 1 /* || (rooks & occupied_co(turn) & BB_SQUARES[move.to_square()]) != 0 */;
         }
         return false;
     }

@@ -104,6 +104,7 @@ Config::Namespace Config::_namespace = {
 
 static constexpr int HASH_MIN = 16; /* MB */
 
+/* Min-max range is useful when exposing params via UCI (see sturddle.py) */
 /****************************************************************************
  *              NAME                                VALUE  MIN      MAX
  ****************************************************************************/
@@ -113,7 +114,7 @@ DECLARE_VALUE(  ASPIRATION_WINDOW,                    1,    0,       1)
 DECLARE_CONST(  DEBUG_CAPTURES,                       0,    0,       1)
 DECLARE_CONST(  DEBUG_MATERIAL,                       0,    0,       1)
 DECLARE_PARAM(  EVAL_FUZZ,                            0,    0,     100)
-DECLARE_VALUE(  FIFTY_MOVES_RULE,                     1,    0,       1)
+DECLARE_CONST(  FIFTY_MOVES_RULE,                     1,    0,       1)
 DECLARE_VALUE(  FUTILITY_PRUNING,                     1,    0,       1)
 DECLARE_VALUE(  MANAGE_TIME,                          1,    0,       1)
 DECLARE_VALUE(  MULTICUT,                             1,    0,       1)
@@ -123,17 +124,17 @@ DECLARE_CONST(  STATIC_EXCHANGES,                     0,    0,       1)
 GROUP(Search)
 DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  635,    0,    2000)
 DECLARE_VALUE(  DOUBLE_EXT_MAX,                       6,    0,     100)
-DECLARE_VALUE(  LMP_BASE,                            12,    2,     100)
+DECLARE_VALUE(  LMP_BASE,                             2,    2,     100)
 DECLARE_VALUE(  LATE_MOVE_REDUCTION_COUNT,            4,    0,     100)
 DECLARE_VALUE(  NULL_MOVE_DEPTH_WEIGHT,              16,    0,     100)
 DECLARE_VALUE(  NULL_MOVE_DEPTH_DIV,                  2,    1,     100)
 DECLARE_VALUE(  NULL_MOVE_DIV,                      468,    1,    1000)
 DECLARE_VALUE(  NULL_MOVE_REDUCTION,                  4,    0,     100)
+DECLARE_VALUE(  NULL_MOVE_IMPROVEMENT_DIV,           15,    1,     100)
 DECLARE_VALUE(  NULL_MOVE_MARGIN,                   475,    0,    1000)
 DECLARE_VALUE(  NULL_MOVE_MIN_VERIFICATION_DEPTH,    14,    0,     100)
-DECLARE_VALUE(  SINGULAR_MARGIN,                     25,    0,     100)
+DECLARE_VALUE(  SINGULAR_MARGIN,                      6,    0,     100)
 
-/* Move ordering */
 GROUP(MoveOrdering)
 DECLARE_VALUE(  COUNTER_MOVE_BONUS,                3412,    0,    5000)
 DECLARE_VALUE(  COUNTER_MOVE_MIN_DEPTH,               3,    0,      20)
@@ -144,7 +145,6 @@ DECLARE_VALUE(  HISTORY_HIGH,                        87,    0,     100)
 DECLARE_VALUE(  HISTORY_LOW,                         61,    0,     100)
 DECLARE_VALUE(  HISTORY_MIN_DEPTH,                   11,    0,     100)
 
-/* Tactical evaluation */
 GROUP(Eval)
 DECLARE_VALUE(  BISHOP_PAIR,                         68,    0,     100)
 DECLARE_VALUE(  CASTLING_RIGHTS_BONUS,              108,    0,     300)
@@ -155,6 +155,7 @@ DECLARE_VALUE(  KING_ATTACK_DIV,                     28,    1,     100)
 DECLARE_VALUE(  KING_OUT_PENALTY,                  -150, -500,       0)
 DECLARE_VALUE(  PAWN_SHIELD,                         22,    0,     100)
 DECLARE_VALUE(  REDUNDANT_ROOK,                    -119, -500,       0)
+DECLARE_VALUE(  TACTICAL_LOW_DEPTH,                  15,    0,     100)
 
 DECLARE_VALUE(  ENDGAME_CONNECTED_ROOKS,             13,    0,     100)
 DECLARE_VALUE(  ENDGAME_DEFENDED_PASSED,             15,    0,     100)
@@ -164,8 +165,8 @@ DECLARE_VALUE(  ENDGAME_ISOLATED_PAWNS,             -15, -100,       0)
 DECLARE_VALUE(  ENDGAME_PASSED_FORMATION,            32,    0,     250)
 DECLARE_VALUE(  ENDGAME_PAWN_MAJORITY,               13,    0,     250)
 DECLARE_VALUE(  ENDGAME_THREATS,                     29,    0,     250)
-DECLARE_VALUE(  ENDGAME_UNBLOCKED_PASSED_6,         110,    0,     250)
-DECLARE_VALUE(  ENDGAME_UNBLOCKED_PASSED_7,         230,    0,     250)
+DECLARE_VALUE(  ENDGAME_UNBLOCKED_PASSED_6,         145,    0,     250)
+DECLARE_VALUE(  ENDGAME_UNBLOCKED_PASSED_7,         295,    0,     500)
 
 DECLARE_VALUE(  MIDGAME_CONNECTED_ROOKS,             25,    0,     100)
 DECLARE_VALUE(  MIDGAME_DEFENDED_PASSED,             63,    0,     100)
@@ -177,8 +178,8 @@ DECLARE_VALUE(  MIDGAME_OPEN_FILE,                   30,    0,     250)
 DECLARE_VALUE(  MIDGAME_PASSED_FORMATION,            76,    0,     250)
 DECLARE_VALUE(  MIDGAME_PAWN_MAJORITY,               48,    0,     250)
 DECLARE_VALUE(  MIDGAME_THREATS,                     67,    0,     250)
-DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_6,         100,    0,     250)
-DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_7,         155,    0,     250)
+DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_6,         135,    0,     250)
+DECLARE_VALUE(  MIDGAME_UNBLOCKED_PASSED_7,         215,    0,     250)
 
 #undef DECLARE_ALIAS
 #undef DECLARE_PARAM
