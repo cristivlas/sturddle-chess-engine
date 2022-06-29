@@ -79,7 +79,7 @@ using score_t = int32_t;
   #define LOW_MEMORY_PROFILE                true
 #endif /* LOW_MEMORY_PROFILE */
 
-#define MTDF_CSTAR_BISECT                   true
+#define MTDF_CSTAR_BISECT                   false
 
 #define MTDF_REORDER_MOVES                  true
 

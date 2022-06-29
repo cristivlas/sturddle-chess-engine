@@ -286,7 +286,7 @@ namespace search
         void        reinitialize();
         int         rewind(int where = 0, bool reorder = false);
 
-        void        set_counter_move(const Move& move) { _counter_move = move; }
+        void        set_counter_move(const BaseMove& move) { _counter_move = move; }
         void        set_search_window(score_t, bool reset = false);
 
         static void set_time_limit_ms(int milliseconds);
@@ -346,7 +346,7 @@ namespace search
 
         int repeated_count(const State&) const;
 
-        Move                _counter_move;
+        BaseMove            _counter_move;
         mutable int         _can_prune = -1;
         State               _statebuf;
         bool                _leftmost = false;

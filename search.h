@@ -229,7 +229,7 @@ namespace search
         size_t _reductions = 0;
         size_t _retry_reductions = 0;
 
-        Move lookup_countermove(const Context&) const;
+        BaseMove lookup_countermove(const Context&) const;
 
         const KillerMoves* get_killer_moves(int ply) const
         {

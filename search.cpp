@@ -256,7 +256,7 @@ void TranspositionTable::clear()
 }
 
 
-Move TranspositionTable::lookup_countermove(const Context& ctxt) const
+BaseMove TranspositionTable::lookup_countermove(const Context& ctxt) const
 {
 #if USE_BUTTERFLY_TABLES
     return _countermoves[ctxt.turn()].lookup(ctxt._move);
@@ -483,6 +483,11 @@ void TranspositionTable::store_pv(Context& start)
 
     for (auto ctxt = &start; true; )
     {
+    #if 0
+        if (pv.size() < _pv.size() && (ctxt->_score == SCORE_MIN || ctxt->is_null_move()))
+            return;
+    #endif
+
         pv.emplace_back(ctxt->_move);
 
         if constexpr(Debug)
