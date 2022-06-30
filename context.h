@@ -167,6 +167,7 @@ namespace search
 
         static void* operator new(size_t, void* p) { return p; }
         static void* operator new(size_t) = delete;
+        static void operator delete(void*, void*) noexcept;
         static void operator delete(void*, size_t) noexcept = delete;
 
         /* parent move in the graph */
@@ -246,7 +247,7 @@ namespace search
 
         score_t     improvement();
         static void init();
-        bool        is_beta_cutoff(Context*, score_t, BaseMove&);
+        bool        is_beta_cutoff(Context*, score_t);
         static bool is_cancelled() { return _cancel; }
         bool        is_capture() const { return state().capture_value != 0; }
         bool        is_check() const { return state().is_check(); }

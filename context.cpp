@@ -232,7 +232,7 @@ namespace search
      * Track the best score and move so far, return true if beta cutoff;
      * called from search right after: score = -negamax(*next_ctxt).
      */
-    bool Context::is_beta_cutoff(Context* next_ctxt, score_t score, BaseMove& next_best)
+    bool Context::is_beta_cutoff(Context* next_ctxt, score_t score)
     {
         ASSERT(next_ctxt->_ply != 0);
         ASSERT(score > SCORE_MIN && score < SCORE_MAX);
@@ -275,8 +275,6 @@ namespace search
                         rewind(-1);
                         return false;
                     }
-
-                    next_best = next_ctxt->_best_move;
 
                     if (score >= _beta)
                     {
@@ -1960,7 +1958,10 @@ namespace search
                     move._score = ctxt.history_score(move);
 
                     if (move._score >= HISTORY_LOW
-                        && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
+                        /* computing forks and pins is expensive */
+                        && (move._state->has_fork(!move._state->turn)
+                            || is_direct_check(move)
+                            || move._state->is_pinned(move._state->turn)))
                     {
                         move._group = MoveOrder::TACTICAL_MOVES;
                     }

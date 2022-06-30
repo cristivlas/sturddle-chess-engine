@@ -484,7 +484,7 @@ void TranspositionTable::store_pv(Context& start)
     for (auto ctxt = &start; true; )
     {
     #if 0
-        if (pv.size() < _pv.size() && (ctxt->_score == SCORE_MIN || ctxt->is_null_move()))
+        if (ctxt->_score == SCORE_MIN || ctxt->is_null_move())
             return;
     #endif
 
@@ -610,7 +610,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
     int move_count = 0, cutoffs = 0;
     const auto reduction = (ctxt.depth() - 1) / 2;
 
-    BaseMove best_move, next_best;
+    BaseMove best_move;
     score_t best_score = SCORE_MIN;
 
     /*
@@ -638,7 +638,6 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
             {
                 best_score = score;
                 best_move = next_ctxt->_move;
-                next_best = next_ctxt->_best_move;
             }
 
             if (++cutoffs >= min_cutoffs)
@@ -650,7 +649,6 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
 
                 /* Fix-up best move */
                 ctxt.next_ply()->_move = ctxt._best_move = best_move;
-                ctxt.next_ply()->_best_move = next_best;
 
                 return true;
             }
@@ -669,7 +667,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
 }
 
 
-static inline void
+static INLINE void
 update_pruned(TranspositionTable& table, Context& ctxt, const Context& next, size_t& count)
 {
     ASSERT(!next.is_capture());
@@ -774,7 +772,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     #endif /* EXTRA_STATS */
 
         int move_count = 0, futility = -1;
-        BaseMove next_best;
 
         /* iterate over moves */
         while (auto next_ctxt = ctxt.next(std::exchange(null_move, false), futility))
@@ -908,7 +905,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 return ctxt._score;
             }
 
-            if (ctxt.is_beta_cutoff(next_ctxt, move_score, next_best))
+            if (ctxt.is_beta_cutoff(next_ctxt, move_score))
             {
                 ASSERT(ctxt._score == move_score);
                 ASSERT(ctxt._cutoff_move || next_ctxt->is_null_move());
@@ -1012,10 +1009,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 return move_score;
             }
         }
-
-        /* link up the principal variation */
-        ctxt.next_ply()->_move = ctxt._best_move;
-        ctxt.next_ply()->_best_move = next_best;
 
         ASSERT(ctxt._score <= ctxt._alpha || ctxt._best_move);
 
