@@ -771,6 +771,9 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         table._null_move_not_ok += !null_move;
     #endif /* EXTRA_STATS */
 
+        const auto root = ctxt._ply == 0 ? &ctxt : ctxt.stack()[0].as_context()->_parent;
+        const auto root_depth = root->depth();
+
         int move_count = 0, futility = -1;
 
         /* iterate over moves */
@@ -800,89 +803,92 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     }
                 }
 
-            #if SINGULAR_EXTENSION
-               /*
-                * https://www.chessprogramming.org/Singular_Extensions
-                *
-                * Implementation adapted from idea in SF:
-                * Check if the move matches a lower-bound TT entry (beta cutoff);
-                * if it does, search with reduced depth; if the result of the search
-                * does not beat beta, it means the move is singular (the only cutoff
-                * in the current position).
-                */
-                if (ctxt._ply != 0
-                    && !next_ctxt->is_singleton()
-                    && ctxt.depth() >= 7
-                    && ctxt._tt_entry.is_lower()
-                    && abs(ctxt._tt_entry._value) < MATE_HIGH
-                    && next_ctxt->_move == ctxt._tt_entry._hash_move
-                    && ctxt._tt_entry._depth >= ctxt.depth() - 3)
+                if (ctxt._ply < root_depth * 2)
                 {
-                    ASSERT(!ctxt._excluded);
-                    ASSERT(ctxt._tt_entry.is_valid());
-
-                    auto s_beta = std::max(ctxt._tt_entry._value - ctxt.singular_margin(), SCORE_MIN + 1);
-
-                    /*
-                     * Hack: use ply + 2 for the singular search to avoid clobbering
-                     * _move_maker's _moves / _states stacks for the current context.
-                     */
-                    ContextBuffer buf;
-                    auto s_ctxt = ctxt.clone(buf.as_context(), ctxt._ply + 2);
-
-                    s_ctxt->set_tt(ctxt.get_tt());
-                    s_ctxt->set_initial_moves(ctxt);
-                    s_ctxt->_excluded = next_ctxt->_move;
-                    s_ctxt->_max_depth = s_ctxt->_ply + (ctxt.depth() - 1) / 2;
-                    s_ctxt->_alpha = s_beta - 1;
-                    s_ctxt->_beta = s_beta;
-                    s_ctxt->_score = SCORE_MIN;
-
-                    const auto value = negamax(*s_ctxt, table);
-
-                    if (ctxt.is_cancelled())
-                        break;
-
-                    if (value < s_beta && value > SCORE_MIN)
+                #if SINGULAR_EXTENSION
+                   /*
+                    * https://www.chessprogramming.org/Singular_Extensions
+                    *
+                    * Implementation adapted from idea in SF:
+                    * Check if the move matches a lower-bound TT entry (beta cutoff);
+                    * if it does, search with reduced depth; if the result of the search
+                    * does not beat beta, it means the move is singular (the only cutoff
+                    * in the current position).
+                    */
+                    if (ctxt._ply != 0
+                        && !next_ctxt->is_singleton()
+                        && ctxt.depth() >= 7
+                        && ctxt._tt_entry.is_lower()
+                        && abs(ctxt._tt_entry._value) < MATE_HIGH
+                        && next_ctxt->_move == ctxt._tt_entry._hash_move
+                        && ctxt._tt_entry._depth >= ctxt.depth() - 3)
                     {
-                        next_ctxt->_extension += ONE_PLY;
+                        ASSERT(!ctxt._excluded);
+                        ASSERT(ctxt._tt_entry.is_valid());
 
-                        if (ctxt._double_ext <= DOUBLE_EXT_MAX
-                            && !ctxt.is_pv_node()
-                            && value + DOUBLE_EXT_MARGIN < s_beta)
-                        {
-                            ++next_ctxt->_max_depth;
-                            ++next_ctxt->_double_ext;
-                        }
-                    }
-                    /*
-                     * Got another fail-high from the (reduced) search that skipped the known
-                     * cutoff move, so there must be multiple cutoffs, do 2nd multicut pruning.
-                     */
-                    else if (s_beta >= ctxt._beta)
-                    {
-                    #if CACHE_HEURISTIC_CUTOFFS
-                        /* Store it in the TT as a cutoff move. */
-                        ctxt._alpha = ctxt._score = s_beta;
+                        auto s_beta = std::max(ctxt._tt_entry._value - ctxt.singular_margin(), SCORE_MIN + 1);
 
                         /*
-                         * Same as with null move pruning below, make sure that
-                         * the move is updated in the TT when storing the result.
+                         * Hack: use ply + 2 for the singular search to avoid clobbering
+                         * _move_maker's _moves / _states stacks for the current context.
                          */
-                        ctxt._cutoff_move = ctxt._best_move = next_ctxt->_move;
-                        break;
-                    #else
-                        return s_beta;
-                    #endif /* CACHE_HEURISTIC_CUTOFFS */
-                    }
-                    else if (ctxt._tt_entry._value >= ctxt._beta && next_ctxt->can_reduce())
-                    {
-                        next_ctxt->_max_depth -= 2;
-                    }
-                }
-            #endif /* SINGULAR_EXTENSION */
+                        ContextBuffer buf;
+                        auto s_ctxt = ctxt.clone(buf.as_context(), ctxt._ply + 2);
 
-                next_ctxt->extend(); /* apply fractional extensions */
+                        s_ctxt->set_tt(ctxt.get_tt());
+                        s_ctxt->set_initial_moves(ctxt);
+                        s_ctxt->_excluded = next_ctxt->_move;
+                        s_ctxt->_max_depth = s_ctxt->_ply + (ctxt.depth() - 1) / 2;
+                        s_ctxt->_alpha = s_beta - 1;
+                        s_ctxt->_beta = s_beta;
+                        s_ctxt->_score = SCORE_MIN;
+
+                        const auto value = negamax(*s_ctxt, table);
+
+                        if (ctxt.is_cancelled())
+                            break;
+
+                        if (value < s_beta && value > SCORE_MIN)
+                        {
+                            next_ctxt->_extension += ONE_PLY;
+
+                            if (ctxt._double_ext <= DOUBLE_EXT_MAX
+                                && !ctxt.is_pv_node()
+                                && value + DOUBLE_EXT_MARGIN < s_beta)
+                            {
+                                ++next_ctxt->_max_depth;
+                                ++next_ctxt->_double_ext;
+                            }
+                        }
+                        /*
+                         * Got another fail-high from the (reduced) search that skipped the known
+                         * cutoff move, so there must be multiple cutoffs, do 2nd multicut pruning.
+                         */
+                        else if (s_beta >= ctxt._beta)
+                        {
+                        #if CACHE_HEURISTIC_CUTOFFS
+                            /* Store it in the TT as a cutoff move. */
+                            ctxt._alpha = ctxt._score = s_beta;
+
+                            /*
+                             * Same as with null move pruning below, make sure that
+                             * the move is updated in the TT when storing the result.
+                             */
+                            ctxt._cutoff_move = ctxt._best_move = next_ctxt->_move;
+                            break;
+                        #else
+                            return s_beta;
+                        #endif /* CACHE_HEURISTIC_CUTOFFS */
+                        }
+                        else if (ctxt._tt_entry._value >= ctxt._beta && next_ctxt->can_reduce())
+                        {
+                            next_ctxt->_max_depth -= 2;
+                        }
+                    }
+                #endif /* SINGULAR_EXTENSION */
+
+                    next_ctxt->extend(); /* apply fractional extensions */
+                }
 
                 /* Late-move reduction and pruning */
                 if (move_count && next_ctxt->late_move_reduce(move_count) == LMRAction::Prune)
