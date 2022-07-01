@@ -771,8 +771,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         table._null_move_not_ok += !null_move;
     #endif /* EXTRA_STATS */
 
-        const auto root = ctxt._ply == 0 ? &ctxt : ctxt.stack()[0].as_context()->_parent;
-        const auto root_depth = root->depth();
+        const auto root_depth = table._iteration;
 
         int move_count = 0, futility = -1;
 
