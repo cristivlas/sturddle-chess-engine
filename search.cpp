@@ -423,7 +423,7 @@ void TranspositionTable::store_killer_move(const Context& ctxt)
 
 
 template<bool Debug>
-void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, BaseMovesList& pv)
+void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, PV& pv)
 {
     auto state = ctxt.state().clone();
 
@@ -477,17 +477,12 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, B
 template<bool Debug>
 void TranspositionTable::store_pv(Context& start)
 {
-    BaseMovesList pv;
+    PV pv;
 
     ASSERT(start._best_move);
 
     for (auto ctxt = &start; true; )
     {
-    #if 0
-        if (ctxt->_score == SCORE_MIN || ctxt->is_null_move())
-            return;
-    #endif
-
         pv.emplace_back(ctxt->_move);
 
         if constexpr(Debug)
@@ -802,7 +797,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     }
                 }
 
-                if (ctxt._ply < root_depth * 2)
+                /*
+                 * Do not extend at root, or if already deeper than twice the depth at root
+                 */
+
+                if (ctxt._ply != 0 && ctxt._ply < root_depth * 2)
                 {
                 #if SINGULAR_EXTENSION
                    /*
@@ -814,8 +813,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     * does not beat beta, it means the move is singular (the only cutoff
                     * in the current position).
                     */
-                    if (ctxt._ply != 0
-                        && !next_ctxt->is_singleton()
+                    if (!next_ctxt->is_singleton()
                         && ctxt.depth() >= 7
                         && ctxt._tt_entry.is_lower()
                         && abs(ctxt._tt_entry._value) < MATE_HIGH

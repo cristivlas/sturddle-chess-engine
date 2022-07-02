@@ -1246,7 +1246,7 @@ namespace search
      */
     void Context::extend()
     {
-        if (_extension || (_ply && depth() > 6))
+        if (_extension || depth() > 6)
         {
             /*
              * things that could add interestingness along the search path

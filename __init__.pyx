@@ -933,7 +933,6 @@ cdef class SearchAlgorithm:
         score = self._search(self._table)
 
         self.best_move = self.context.best_move()
-
         self.context._ctxt.check_time_and_update_nps()
 
         return (self.best_move, score)
@@ -1126,7 +1125,7 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0
-__minor__   = 96
+__minor__   = 97
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
 

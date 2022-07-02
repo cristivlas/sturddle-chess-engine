@@ -317,7 +317,7 @@ namespace search
         }
 
         /* retrieve PV from TT */
-        const BaseMovesList& get_pv() const { return get_tt()->get_pv(); }
+        const PV& get_pv() const { return get_tt()->get_pv(); }
 
         /* buffers for generating and making moves */
         static MovesList& moves(int tid, int ply);
