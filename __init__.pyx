@@ -1073,9 +1073,9 @@ def perft(fen, repeat=1):
     count = 0
     start = time.perf_counter()
     for i in range(0, repeat):
-        # board._state.generate_pseudo_legal_moves(moves, BB_ALL, BB_ALL)
-        # count += moves.size()
-        count += board._state.make_pseudo_legal_moves(moves)
+        board._state.generate_pseudo_legal_moves(moves, BB_ALL, BB_ALL)
+        count += moves.size()
+        # count += board._state.make_pseudo_legal_moves(moves)
     return count, time.perf_counter() - start
 
 
