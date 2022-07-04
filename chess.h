@@ -308,7 +308,9 @@ namespace chess
         return std::max(abs(square_file(a) - square_file(b)), abs(square_rank(a) - square_rank(b)));
     }
 
-    // https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating
+    /*
+     * https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating
+     */
     INLINE constexpr int square_mirror(int square)
     {
         return square ^ 0x38;
@@ -374,7 +376,7 @@ namespace chess
 
     public:
         BaseMove() = default;
-        BaseMove(Square from, Square to, PieceType promo)
+        BaseMove(Square from, Square to, PieceType promo) noexcept
             : _from_square(from)
             , _to_square(to)
             , _promotion(promo)
@@ -432,7 +434,7 @@ namespace chess
         Move(const Move&) = default;
         Move& operator=(const Move&) = default;
 
-        Move(Square from, Square to, PieceType promo = PieceType::NONE)
+        Move(Square from, Square to, PieceType promo = PieceType::NONE) noexcept
             : BaseMove(from, to, promo)
         {
         }
