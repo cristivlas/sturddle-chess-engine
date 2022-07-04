@@ -838,7 +838,7 @@ namespace search
     }
 
 
-    static INLINE int eval_material_imbalance(const State& state, int pcs, score_t mat_eval)
+    static INLINE int eval_redundant_rook(const State& state, int pcs, score_t mat_eval)
     {
         int score = 0;
 
@@ -1119,7 +1119,7 @@ namespace search
 
         eval += eval_center(state, piece_count);
 
-        eval += eval_material_imbalance(state, piece_count, mat_eval);
+        eval += eval_redundant_rook(state, piece_count, mat_eval);
         eval += eval_open_files(state, piece_count);
         eval += eval_pawn_structure(state, piece_count);
         eval += eval_piece_grading(state, piece_count);
@@ -1398,14 +1398,14 @@ namespace search
         if (_ply < 2 || _excluded || is_promotion())
             return 0;
 
-        if (abs(_tt_entry._eval) < MATE_HIGH &&
-            abs(_parent->_parent->_tt_entry._eval) < MATE_HIGH
-           )
-            return std::max(0, _parent->_parent->_tt_entry._eval - _tt_entry._eval);
+        const auto prev = _parent->_parent;
+
+        if (abs(_tt_entry._eval) < MATE_HIGH && abs(prev->_tt_entry._eval) < MATE_HIGH)
+            return std::max(0, prev->_tt_entry._eval - _tt_entry._eval);
 
         return std::max(0,
               eval_material_and_piece_squares(*_state)
-            - eval_material_and_piece_squares(*_parent->_parent->_state));
+            - eval_material_and_piece_squares(*prev->_state));
     }
 
 

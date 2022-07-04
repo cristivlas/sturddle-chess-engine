@@ -548,12 +548,12 @@ namespace search
     {
         ASSERT(move && move._state && move != _move);
 
-        return (move != _tt_entry._hash_move)
+        return can_forward_prune()
+            && (move != _tt_entry._hash_move)
             && (move._state->capture_value == 0)
             && (move.promotion() == chess::PieceType::NONE)
             && (move.from_square() != _capture_square)
             && !is_counter_move(move)
-            && can_forward_prune()
             && !move._state->is_check();
     }
 
