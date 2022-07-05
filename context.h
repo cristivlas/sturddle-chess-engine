@@ -239,13 +239,15 @@ namespace search
         const Move* first_valid_move();
         score_t     futility_margin();
 
-        bool        has_improved(score_t margin = 0) { return improvement() > margin; }
+        bool        has_improved(score_t margin = 0) const
+                    { return improvement() > margin; }
+
         bool        has_moves() { return _move_maker.has_moves(*this); }
 
         int         history_count(const Move&) const;
         float       history_score(const Move&) const;
 
-        score_t     improvement();
+        score_t     improvement() const;
         static void init();
         bool        is_beta_cutoff(Context*, score_t);
         static bool is_cancelled() { return _cancel; }
@@ -648,9 +650,34 @@ namespace search
     }
 
 
+    /*
+     * Improvement for the side that just moved.
+     */
+    INLINE score_t Context::improvement() const
+    {
+        if (_ply < 2 || _excluded || is_promotion())
+            return 0;
+
+        const auto prev = _parent->_parent;
+
+        if (abs(_tt_entry._eval) < MATE_HIGH && abs(prev->_tt_entry._eval) < MATE_HIGH)
+            return std::max(0, prev->_tt_entry._eval - _tt_entry._eval);
+
+        return std::max(0,
+              eval_material_and_piece_squares(*_state)
+            - eval_material_and_piece_squares(*prev->_state));
+    }
+
+
     INLINE bool Context::is_counter_move(const Move& move) const
     {
         return _counter_move == move;
+    }
+
+
+    INLINE bool Context::is_evasion() const
+    {
+        return _parent && _parent->is_check();
     }
 
 

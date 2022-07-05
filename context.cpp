@@ -838,6 +838,10 @@ namespace search
     }
 
 
+    /*
+     * If the difference in material is with a pawn or less, favor
+     * the side with two minor pieces over the side with extra rook.
+     */
     static INLINE int eval_redundant_rook(const State& state, int pcs, score_t mat_eval)
     {
         int score = 0;
@@ -966,6 +970,7 @@ namespace search
     }
 
 
+    /* Evaluate unblocked and supported passed pawns */
     template<int i>
     static INLINE int eval_passed_pawns(const State& state, int piece_count, int (&pawn_chain_evals)[2][64])
     {
@@ -1098,6 +1103,34 @@ namespace search
     }
 
 
+    /*
+     * Discourage exchanging queens if the "other" side's king is less safe than "ours".
+     */
+    static INLINE int eval_queen_exchange(const Context& ctxt, int king_safety)
+    {
+        int score = king_safety;
+
+        if (score && ctxt._ply)
+        {
+            const auto prev = ctxt._parent;
+            ASSERT(prev);
+
+            if (popcount(prev->state().queens) == 2 &&
+                prev->state().piece_type_at(ctxt._move.to_square()) == PieceType::QUEEN &&
+                prev->state().piece_type_at(ctxt._move.from_square()) == PieceType::QUEEN
+               )
+            {
+                /* side that moved is the one with the safer king? */
+                if (prev->turn() == (king_safety > 0))
+                {
+                    score += SIGN[prev->turn()] * QUEEN_EXCHANGE_PENALTY;
+                }
+            }
+        }
+        return score;
+    }
+
+
     static INLINE int eval_threats(const State& state, int piece_count)
     {
         int diff = 0;
@@ -1120,7 +1153,9 @@ namespace search
         eval += eval_center(state, piece_count);
 
         eval += eval_redundant_rook(state, piece_count, mat_eval);
+
         eval += eval_open_files(state, piece_count);
+
         eval += eval_pawn_structure(state, piece_count);
         eval += eval_piece_grading(state, piece_count);
 
@@ -1139,7 +1174,7 @@ namespace search
         const auto mat_eval = ctxt.evaluate_material();
 
         return eval_tactical(ctxt.state(), mat_eval, piece_count)
-            + ctxt.eval_king_safety(piece_count)
+            + eval_queen_exchange(ctxt, ctxt.eval_king_safety(piece_count))
             + ctxt.eval_threats(piece_count);
     }
 
@@ -1256,6 +1291,8 @@ namespace search
             _extension += _move.from_square() == _parent->_capture_square;
             _extension += is_recapture() * (is_pv_node() * (ONE_PLY - 1) + 1);
             _extension += is_singleton() * (is_pv_node() + 1) * ONE_PLY / 2;
+
+            _extension += improvement() / IMPROVEMENT_EXT_DIV;
 
             /*
              * extend if move has historically high cutoff percentages and counts
@@ -1387,31 +1424,6 @@ namespace search
         _statebuf = *_move._state;
         _state = &_statebuf;
         _move._state = _state;
-    }
-
-
-    /*
-     * Improvement for the side that just moved.
-     */
-    score_t Context::improvement()
-    {
-        if (_ply < 2 || _excluded || is_promotion())
-            return 0;
-
-        const auto prev = _parent->_parent;
-
-        if (abs(_tt_entry._eval) < MATE_HIGH && abs(prev->_tt_entry._eval) < MATE_HIGH)
-            return std::max(0, prev->_tt_entry._eval - _tt_entry._eval);
-
-        return std::max(0,
-              eval_material_and_piece_squares(*_state)
-            - eval_material_and_piece_squares(*prev->_state));
-    }
-
-
-    bool Context::is_evasion() const
-    {
-        return _parent && _parent->is_check();
     }
 
 
