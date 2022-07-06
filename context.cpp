@@ -1108,26 +1108,16 @@ namespace search
      */
     static INLINE int eval_queen_exchange(const Context& ctxt, int king_safety)
     {
-        int score = king_safety;
-
-        if (score && ctxt._ply)
+        if (king_safety
+            && ctxt._parent
+            && ctxt.state().capture_value == WEIGHT[QUEEN]
+            && ctxt._parent->state().capture_value == WEIGHT[QUEEN]
+            && ctxt.state().queens == BB_EMPTY
+            && ctxt.turn() == (king_safety > 0))
         {
-            const auto prev = ctxt._parent;
-            ASSERT(prev);
-
-            if (popcount(prev->state().queens) == 2 &&
-                prev->state().piece_type_at(ctxt._move.to_square()) == PieceType::QUEEN &&
-                prev->state().piece_type_at(ctxt._move.from_square()) == PieceType::QUEEN
-               )
-            {
-                /* side that moved is the one with the safer king? */
-                if (prev->turn() == (king_safety > 0))
-                {
-                    score += SIGN[prev->turn()] * QUEEN_EXCHANGE_PENALTY;
-                }
-            }
+            return king_safety + SIGN[ctxt.turn()] * QUEEN_EXCHANGE_PENALTY;
         }
-        return score;
+        return king_safety;
     }
 
 
