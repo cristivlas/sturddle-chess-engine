@@ -595,6 +595,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
         return false;
 
     const auto& state = ctxt.state();
+
     if (state.passed_pawns(!state.turn, BB_RANK_2 | BB_RANK_7) != BB_EMPTY)
         return false;
 
@@ -662,8 +663,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
 }
 
 
-static INLINE void
-update_pruned(TranspositionTable& table, Context& ctxt, const Context& next, size_t& count)
+static INLINE void update_pruned(Context& ctxt, const Context& next, size_t& count)
 {
     ASSERT(!next.is_capture());
 
@@ -791,7 +791,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
                         if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune())
                         {
-                            update_pruned(table, ctxt, *next_ctxt, table._futility_prune_count);
+                            update_pruned(ctxt, *next_ctxt, table._futility_prune_count);
                             continue;
                         }
                     }
@@ -890,7 +890,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 /* Late-move reduction and pruning */
                 if (move_count && next_ctxt->late_move_reduce(move_count) == LMRAction::Prune)
                 {
-                    update_pruned(table, ctxt, *next_ctxt, table._late_move_prune_count);
+                    update_pruned(ctxt, *next_ctxt, table._late_move_prune_count);
                     continue;
                 }
 
