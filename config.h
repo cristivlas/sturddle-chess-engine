@@ -155,7 +155,7 @@ DECLARE_VALUE(  CENTER_OCCUPANCY,                   108,    0,     300)
 DECLARE_VALUE(  KING_ATTACK_DIV,                     28,    1,     100)
 DECLARE_VALUE(  KING_OUT_PENALTY,                  -150, -500,       0)
 DECLARE_VALUE(  PAWN_SHIELD,                         22,    0,     100)
-DECLARE_PARAM(  QUEEN_EXCHANGE_PENALTY,             -85, -100,       0)
+DECLARE_PARAM(  QUEEN_EXCHANGE_PENALTY,             -40, -100,       0)
 DECLARE_VALUE(  REDUNDANT_ROOK,                    -119, -500,       0)
 DECLARE_VALUE(  TACTICAL_LOW_DEPTH,                  15,    0,     100)
 

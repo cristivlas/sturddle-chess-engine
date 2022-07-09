@@ -881,7 +881,7 @@ namespace chess
         bool is_castle = false;
 
         PieceType promotion = PieceType::NONE;
-        mutable score_t simple_score = 0;
+        mutable score_t simple_score = 0; /* material and PST from white's POV */
 
         void apply_move(const BaseMove&);
 
@@ -1283,7 +1283,7 @@ namespace chess
 
     INLINE score_t State::eval() const
     {
-        if (!simple_score)
+        if (simple_score == 0)
             simple_score = eval_simple();
 
         auto value = simple_score;
@@ -1325,7 +1325,7 @@ namespace chess
             || prev.is_castling(move)
             || prev.is_en_passant(move))
         {
-            simple_score = 0;
+            simple_score = 0; /* clear, eval() will recalculate */
         }
         else
         {

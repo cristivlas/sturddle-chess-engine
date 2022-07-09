@@ -1306,7 +1306,7 @@ namespace search
 
 
     /*
-     * Used when the search has fails to find a move before the time runs out.
+     * Used when the search failed to find a move before time ran out.
      */
     const Move* Context::first_valid_move()
     {
@@ -1332,10 +1332,10 @@ namespace search
         ASSERT(iteration());
         ASSERT(_retry_above_alpha == RETRY::None);
 
-    #if 0
-        /* ok to clear only if the iterative search  callback keeps track of best move */
+    #if 0 /* do not clear, carry over _best_move to next iteration */
         _best_move = Move();
     #endif
+
         _cancel = false;
         _can_prune = -1;
 
