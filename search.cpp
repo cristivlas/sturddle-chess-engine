@@ -475,13 +475,13 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
 
 
 template<bool Debug>
-void TranspositionTable::store_pv(Context& start)
+void TranspositionTable::store_pv(Context& root)
 {
     PV pv;
 
-    ASSERT(start._best_move);
+    ASSERT(root._best_move);
 
-    for (auto ctxt = &start; true; )
+    for (auto ctxt = &root; true; )
     {
         pv.emplace_back(ctxt->_move);
 
@@ -510,7 +510,7 @@ void TranspositionTable::store_pv(Context& start)
         if constexpr(Debug)
             std::cout << ctxt->_score << " hash: ";
 
-        get_pv_from_table<Debug>(start, *ctxt, pv);
+        get_pv_from_table<Debug>(root, *ctxt, pv);
         break;
     }
 
@@ -1304,12 +1304,14 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
     score_t score = 0;
     max_iter_count = std::min(PLY_MAX, max_iter_count);
 
+    bool reset_window = false;
+
     for (int i = 1; i != max_iter_count; table.increment_clock())
     {
         table._iteration = i;
         ASSERT(ctxt.iteration() == i);
 
-        ctxt.set_search_window(score);
+        ctxt.set_search_window(score, std::exchange(reset_window, false));
         ctxt.reinitialize();
 
         {   /* SMP scope start */
@@ -1323,8 +1325,14 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
 
             if (table._reset_window)
             {
+                ASSERT(score <= table._w_alpha);
                 ctxt.cancel();
                 table._reset_window = false;
+                reset_window = true;
+            #if 0
+                std::cout << "WINDOW RESET(" << i << "): " << score << " (";
+                std::cout << table._w_alpha << ", " << table._w_beta << ")\n";
+            #endif
                 continue; /* keep looping at same depth */
             }
         }   /* SMP scope end */
