@@ -1183,8 +1183,11 @@ namespace search
         {
             _tt->_eval_depth = _ply;
 
-            /* 1. Material + piece-squares + mobility */
-            eval = state().eval();
+            /* 1. Material + piece-squares + mobility, if PV node */
+            if (is_pv_node())
+                eval = state().eval();
+            else
+                eval = state().eval<false>();
 
             ASSERT(eval > SCORE_MIN);
             ASSERT(eval < SCORE_MAX);
@@ -1209,7 +1212,7 @@ namespace search
                     _tt_entry._eval = eval;
                 }
                 /* 2. Tactical (skip in midgame at low depth) */
-                else if (state().is_endgame() || depth() > TACTICAL_LOW_DEPTH)
+                else if (is_pv_node() || state().is_endgame() || depth() > TACTICAL_LOW_DEPTH)
                 {
                     eval -= CHECK_BONUS * is_check();
                     eval += SIGN[turn] * eval_tactical(*this);
@@ -1282,7 +1285,7 @@ namespace search
             _extension += is_recapture() * (is_pv_node() * (ONE_PLY - 1) + 1);
             _extension += is_singleton() * (is_pv_node() + 1) * ONE_PLY / 2;
 
-            _extension += improvement() / IMPROVEMENT_EXT_DIV;
+            _extension += !state().promotion * !state().capture_value * (improvement() / IMPROVEMENT_EXT_DIV);
 
             /*
              * extend if move has historically high cutoff percentages and counts
@@ -1731,35 +1734,6 @@ namespace search
     }
 
 
-#if USE_MOVES_CACHE
-    struct Moves
-    {
-        static constexpr int _depth = 0; /* unused */
-        static constexpr int _value = 0; /* unused */
-
-        uint16_t    _age = 0;
-        uint64_t    _hash = 0;
-        void*       _lock = nullptr;
-        MovesList   _moves;
-
-        INLINE bool matches(const State& state) const
-        {
-            return _hash == state.hash();
-        }
-
-        INLINE bool is_valid() const { return _hash; }
-
-        INLINE void update(const Context& ctxt, const MovesList& moves)
-        {
-            _hash = ctxt.state().hash();
-            _moves = moves;
-        }
-    };
-
-    auto moves_cache = std::make_shared<MovesCache>(49999);
-#endif /* USE_MOVES_CACHE */
-
-
     void MoveMaker::generate_unordered_moves(Context& ctxt)
     {
         /* pre-conditions */
@@ -1773,22 +1747,7 @@ namespace search
 
         if (ctxt.get_tt()->_initial_moves.empty())
         {
-            if (!USE_MOVES_CACHE || ctxt.state()._hash == 0)
-            {
-                ctxt.state().generate_pseudo_legal_moves(moves_list);
-            }
-#if USE_MOVES_CACHE
-            else if (auto p = moves_cache->lookup(ctxt.state(), Acquire::Read))
-            {
-                moves_list.assign(p->_moves.begin(), p->_moves.end());
-            }
-            else
-            {
-                ctxt.state().generate_pseudo_legal_moves(moves_list);
-
-                (*moves_cache->lookup(ctxt.state(), Acquire::Write)).update(ctxt, moves_list);
-            }
-#endif /* USE_MOVES_CACHE */
+            ctxt.state().generate_pseudo_legal_moves(moves_list);
         }
         else
         {

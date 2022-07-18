@@ -158,7 +158,6 @@ cdef extern from 'chess.h' namespace 'chess':
         int     count_isolated_pawns(Color, Bitboard) const
 
         bint    equals(const State&) const
-        score_t eval() const
         size_t  hash() const
         void    rehash()
 
@@ -299,10 +298,6 @@ cdef class BoardState:
 
     cpdef int count_isolated_pawns(self, Color color, Bitboard mask = BB_ALL):
         return self._state.count_isolated_pawns(color, mask)
-
-
-    cpdef score_t eval(self):
-        return self._state.eval()
 
 
     cpdef bint has_connected_rooks(self, color):

@@ -913,7 +913,7 @@ namespace chess
         }
 
         /* evaluate base score from the perspective of the side to play */
-        score_t eval() const;
+        template<bool EVAL_MOBILITY = true> score_t eval() const;
 
         score_t eval_material() const;
 
@@ -1281,18 +1281,18 @@ namespace chess
     }
 
 
-    INLINE score_t State::eval() const
+    template<bool EVAL_MOBILITY> INLINE score_t State::eval() const
     {
         if (simple_score == 0)
             simple_score = eval_simple();
 
         auto value = simple_score;
 
-    #if EVAL_MOBILITY
-        if (!is_endgame())
-            value += eval_mobility();
-    #endif /* EVAL_MOBILITY */
-
+        if constexpr(EVAL_MOBILITY)
+        {
+            if (!is_endgame())
+                value += eval_mobility();
+        }
         return value * SIGN[turn];
     }
 

@@ -237,10 +237,6 @@ void TranspositionTable::clear()
 /* static */ void TranspositionTable::increment_clock()
 {
     _table->increment_clock();
-
-#if USE_MOVES_CACHE
-    moves_cache->increment_clock();
-#endif /* USE_MOVES_CACHE */
 }
 
 

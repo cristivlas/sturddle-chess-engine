@@ -48,10 +48,6 @@ namespace search
     struct Context;
     class TranspositionTable;
 
-#if USE_MOVES_CACHE
-    using MovesCache = SharedHashTable<struct Moves, 1>;
-    extern std::shared_ptr<MovesCache> moves_cache;
-#endif /* USE_MOVES_CACHE */
 
     /*
      * Search algorithms
