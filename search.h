@@ -75,18 +75,18 @@ namespace search
             clear();
         }
 
-        inline void clear()
+        INLINE void clear()
         {
             std::fill_n(&_table[0][0], 64 * 64, T());
         }
 
-        inline T& operator[](const Move& move)
+        INLINE T& operator[](const Move& move)
         {
             ASSERT(move);
             return _table[move.from_square()][move.to_square()];
         }
 
-        inline const T& lookup(const Move& move) const
+        INLINE const T& lookup(const Move& move) const
         {
             ASSERT(move);
             return _table[move.from_square()][move.to_square()];
@@ -103,19 +103,19 @@ namespace search
             clear();
         }
 
-        inline void clear()
+        INLINE void clear()
         {
             std::fill_n(&_table[0][0], 7 * 64, T());
         }
 
-        inline T& lookup(chess::PieceType piece_type, const Move& move)
+        INLINE T& lookup(chess::PieceType piece_type, const Move& move)
         {
             ASSERT(piece_type != chess::PieceType::NONE);
             ASSERT(move);
             return _table[piece_type][move.to_square()];
         }
 
-        inline const T& lookup(chess::PieceType piece_type, const Move& move) const
+        INLINE const T& lookup(chess::PieceType piece_type, const Move& move) const
         {
             return const_cast<PieceMoveTable*>(this)->lookup(piece_type, move);
         }
@@ -146,11 +146,11 @@ namespace search
 
         explicit TT_Entry(void* lock = nullptr) : _lock(lock) {}
 
-        inline bool is_lower() const { return _value >= _beta; }
-        inline bool is_upper() const { return _value <= _alpha; }
-        inline bool is_valid() const { return _version != 0; }
+        INLINE bool is_lower() const { return _value >= _beta; }
+        INLINE bool is_upper() const { return _value <= _alpha; }
+        INLINE bool is_valid() const { return _version != 0; }
 
-        inline bool matches(const State& state) const
+        INLINE bool matches(const State& state) const
         {
             return is_valid() && _hash == state.hash();
         }
@@ -285,7 +285,7 @@ namespace search
      * https://www.chessprogramming.org/History_Heuristic
      * https://www.chessprogramming.org/Relative_History_Heuristic
      */
-    inline const std::pair<int, int>&
+    INLINE const std::pair<int, int>&
     TranspositionTable::historical_counters(
         const State& state,
         Color turn,
@@ -302,7 +302,7 @@ namespace search
     }
 
 
-    inline float
+    INLINE float
     TranspositionTable::history_score(
         int ply,
         const State& state,
@@ -317,7 +317,7 @@ namespace search
     }
 
 
-    inline void TranspositionTable::history_update_non_cutoffs(const Move& move, bool low)
+    INLINE void TranspositionTable::history_update_non_cutoffs(const Move& move, bool low)
     {
         if (move)
         {
@@ -339,7 +339,7 @@ namespace search
     }
 
 
-    inline void TranspositionTable::history_update_cutoffs(const Move& move)
+    INLINE void TranspositionTable::history_update_cutoffs(const Move& move)
     {
         ASSERT(move);
         ASSERT(move._state);

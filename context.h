@@ -1177,17 +1177,6 @@ namespace search
             return (_have_move = true);
         }
 
-        ctxt.state().clone_into(*move._state);
-
-        ASSERT(move._state->capture_value == 0);
-
-        /* capturing the king is an illegal move (Louis XV?) */
-        if (move._state->kings & chess::BB_SQUARES[move.to_square()])
-        {
-            mark_as_illegal(move);
-            return false;
-        }
-
         static const auto LMP = lmp(std::make_index_sequence<PLY_MAX>{});
 
         /*
@@ -1202,6 +1191,17 @@ namespace search
             _have_pruned_moves = true;
             ++ctxt._pruned_count;
             move._group = MoveOrder::PRUNED_MOVES;
+            return false;
+        }
+
+        ctxt.state().clone_into(*move._state);
+
+        ASSERT(move._state->capture_value == 0);
+
+        /* capturing the king is an illegal move (Louis XV?) */
+        if (move._state->kings & chess::BB_SQUARES[move.to_square()])
+        {
+            mark_as_illegal(move);
             return false;
         }
 
@@ -1249,6 +1249,7 @@ namespace search
             move._group = MoveOrder::QUIET_MOVES;
             return false;
         }
+
         /* consistency check */
         ASSERT((move._state->capture_value != 0) == ctxt.state().is_capture(move));
 
