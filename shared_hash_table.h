@@ -113,7 +113,7 @@ namespace search
             SpinLock() = default;
 
         public:
-            SpinLock(SharedHashTable& ht, size_t ix, Acquire acquire)
+            SpinLock(SharedHashTable& ht, size_t ix, const Acquire acquire)
                 : _ht(&ht), _ix(ix)
             {
                 switch (acquire)
@@ -197,7 +197,8 @@ namespace search
             data_t(capacity).swap(_data);
         }
 
-        Proxy lookup(const chess::State& state, Acquire acquire, int depth = 0, int value = 0)
+        template<Acquire acquire>
+        Proxy lookup(const chess::State& state, int depth = 0, int value = 0)
         {
             const auto h = state.hash();
             size_t index = h % _data.size();

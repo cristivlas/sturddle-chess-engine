@@ -254,12 +254,14 @@ namespace search
             {
                 if (!next_ctxt->is_null_move())
                 {
-                    if (next_ctxt->_retry_above_alpha == RETRY::Reduced)
+                    if (next_ctxt->_retry_above_alpha == RETRY::Reduced && score < _beta)
                     {
                         _retry_next = true;
+
                     #if EXTRA_STATS
                         ++_tt->_retry_reductions;
                     #endif /* EXTRA_STATS */
+
                         /* increment, so that late_move_reduce() skips it */
                         _full_depth_count = next_move_index() + 1;
                     }
@@ -289,6 +291,23 @@ namespace search
 
                             if (score >= CHECKMATE - next_ctxt->depth())
                                 _parent->_mate_detected = CHECKMATE - score + 1;
+                        }
+                        else if (const auto counter_move = next_ctxt->next_ply())
+                        {
+                            /*
+                             * Give a history bonus to non-capturing moves that beat
+                             * beta by a good margin even when countered by a capture.
+                             */
+                            if (_ply < PLY_HISTORY_MAX
+                                && score > 0
+                                && score < MATE_HIGH
+                                && score - _beta > HISTORY_BONUS_MARGIN
+                                && depth() >= HISTORY_MIN_DEPTH
+                                && !next_ctxt->is_capture()
+                                && counter_move->is_capture())
+                            {
+                                get_tt()->_plyHistory[_ply][turn()][next_ctxt->_move] += score / depth();
+                            }
                         }
                     }
                 }
@@ -981,7 +1000,7 @@ namespace search
         };
 
         static
-    #if TUNING_ENABLED
+    #if TUNING_ENABLED || TUNING_PARTIAL
             const
     #else
             constexpr
@@ -1216,6 +1235,7 @@ namespace search
                 {
                     eval -= CHECK_BONUS * is_check();
                     eval += SIGN[turn] * eval_tactical(*this);
+
                     ASSERT(eval < SCORE_MAX);
 
                     _tt_entry._eval = eval;

@@ -272,7 +272,7 @@ const score_t* TranspositionTable::lookup(Context& ctxt)
     if (ctxt.is_repeated() > 0)
         return nullptr;
 
-    if (auto p = _table->lookup(ctxt.state(), Acquire::Read))
+    if (auto p = _table->lookup<Acquire::Read>(ctxt.state()))
     {
         ASSERT(p->matches(ctxt.state()));
         ctxt._tt_entry = *p;
@@ -367,7 +367,7 @@ void TranspositionTable::store(Context& ctxt, score_t alpha, int depth)
     update_stats(ctxt);
 #endif /* EXTRA_STATS */
 
-    if (auto p = _table->lookup(ctxt.state(), Acquire::Write, depth, ctxt._score))
+    if (auto p = _table->lookup<Acquire::Write>(ctxt.state(), depth, ctxt._score))
     {
         store(ctxt, *p, alpha, depth);
     }
@@ -452,7 +452,7 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
         /* Add the move to the principal variation. */
         pv.emplace_back(move);
 
-        auto p = _table->lookup(state, Acquire::Read);
+        auto p = _table->lookup<Acquire::Read>(state);
         if (!p)
             break;
 
@@ -682,11 +682,14 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         && (ctxt.is_leftmost() || ctxt._alpha + 1 < ctxt._beta);
 
     /* reduce by one ply at expected cut nodes */
-    ctxt._max_depth -=
-           !ctxt.is_pv_node()
+    if (!ctxt.is_pv_node()
         && !ctxt.is_null_move()
         && ctxt.depth() > 7
-        && ctxt.can_reduce();
+        && ctxt.can_reduce())
+    {
+        --ctxt._max_depth;
+        ctxt._retry_above_alpha = RETRY::Reduced;
+    }
 
     if (ctxt._alpha + 1 < ctxt._beta)
     {
