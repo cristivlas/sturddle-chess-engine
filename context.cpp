@@ -800,6 +800,8 @@ namespace search
         int outside = 0; /* penalty for king out of ranks [0,1] */
         int shield  = 0; /* pawn shield bonus */
 
+        const auto occupied = state.occupied();
+
         for (auto color : { BLACK, WHITE })
         {
             const auto king = state.king(color);
@@ -835,7 +837,7 @@ namespace search
                 double attacks_value = 0;
 
                 const auto attackers_mask =
-                    state.attacker_pieces_mask(!color, square);
+                    state.attacker_pieces_mask(!color, square, occupied);
 
                 for_each_square(attackers_mask, [&](Square attacking_square) {
                     const auto pt = state.piece_type_at(attacking_square);
@@ -896,6 +898,8 @@ namespace search
         int open_score = 0;
         int half_open_score = 0;
 
+        const auto occupied = state.occupied();
+
         for (auto color : { BLACK, WHITE })
         {
             const auto own_color_mask = state.occupied_co(color);
@@ -926,7 +930,7 @@ namespace search
                              * to opposite ranks (i.e. in front of its own pawns)? treat it as open file.
                              */
                             if (for_each_square_r<bool>(mask, [&](Square square) {
-                                return bool(state.attacks_mask(square) & file_mask & opposite_backranks[color]);
+                                return bool(state.attacks_mask(square, occupied) & file_mask & opposite_backranks[color]);
                             }))
                                 open_score += SIGN[color];
                         }
@@ -961,37 +965,46 @@ namespace search
     }
 
 
-    static INLINE Bitboard pawn_defenders(const State& state, Color defender_color, Square square)
+    static INLINE Bitboard pawn_defenders(const State& state, Color color, Square square)
     {
-        return state.occupied_co(defender_color) & state.pawns & BB_PAWN_ATTACKS[!defender_color][square];
+        return state.occupied_co(color) & state.pawns & BB_PAWN_ATTACKS[!color][square];
     }
 
 
-    static INLINE int eval_pawn_chain(const State& state, Color color, Square pawn, int (&pawn_chain_evals)[64])
+    static Bitboard pawn_chain(
+        const State&    state,
+        Color           color,
+        Square          pawn_square,
+        Bitboard        (&cache)[64])
     {
-        int& score = pawn_chain_evals[pawn];
+        auto& chain = cache[pawn_square];
 
-        if (score == SCORE_MIN)
+        if (chain == BB_ALL)
         {
-            score = 0;
+            const auto defenders = pawn_defenders(state, color, pawn_square);
 
-            if (const auto defenders = pawn_defenders(state, color, pawn))
-            {
-                for_each_square(defenders, [&](Square square) {
-                    score += 1 + eval_pawn_chain(state, color, square, pawn_chain_evals);
-                });
-            }
+            chain = defenders;
 
-            score += popcount(state.attacker_pieces_mask(color, pawn));
+            for_each_square(defenders, [&](Square square) {
+                chain |= pawn_chain(state, color, square, cache);
+            });
         }
+        return chain;
+    }
 
-        return score;
+    static INLINE int eval_pawn_chain(
+        const State&    state,
+        Color           color,
+        Square          pawn_square,
+        Bitboard        (&cache)[64])
+    {
+        const auto chain = pawn_chain(state, color, pawn_square, cache);
+        return chain == BB_EMPTY ? 0 : pow(2, 1 + popcount(chain));
     }
 
 
-    /* Evaluate unblocked and supported passed pawns */
-    template<int i>
-    static INLINE int eval_passed_pawns(const State& state, int piece_count, int (&pawn_chain_evals)[2][64])
+    /* Evaluate unblocked, passed pawns */
+    template<int i> static INLINE int eval_passed_pawns(const State& state, int piece_count)
     {
         struct PassedPawnRank
         {
@@ -1039,10 +1052,6 @@ namespace search
                 {
                     score += sign * interpolate(piece_count, ranks[i].bonus[0], ranks[i].bonus[1]);
                 }
-
-                score += sign
-                    * eval_pawn_chain(state, color, square, pawn_chain_evals[color])
-                    * interpolate(piece_count, MIDGAME_DEFENDED_PASSED, ENDGAME_DEFENDED_PASSED);
             });
         }
 
@@ -1091,33 +1100,41 @@ namespace search
     {
         int eval = eval_passed_formation(state, pc);
 
-        int pawn_chain_evals[2][64];
-        std::fill_n(&pawn_chain_evals[0][0], 2 * 64, SCORE_MIN);
+        Bitboard pawn_chain_cache[2][64];
+        std::fill_n(&pawn_chain_cache[0][0], 2 * 64, BB_ALL);
 
-        eval += eval_passed_pawns<0>(state, pc, pawn_chain_evals);
-        eval += eval_passed_pawns<1>(state, pc, pawn_chain_evals);
+        eval += eval_passed_pawns<0>(state, pc);
+        eval += eval_passed_pawns<1>(state, pc);
 
-        int doubled = 0;
-        int isolated = 0;
-        int diff = 0;
+        int doubled_pawn_count = 0;
+        int isolated_pawn_count = 0;
+        int diff = 0; /* for pawn majority */
+        int pawn_chain = 0;
 
         for (auto color : { BLACK, WHITE })
         {
+            const auto sign = SIGN[color];
+
             if (const auto own_pawns = state.pawns & state.occupied_co(color))
             {
                 for (const auto& bb_file : BB_FILES)
                 {
                     auto n = popcount(own_pawns & bb_file);
-                    doubled += SIGN[color] * (n > 1) * (n - 1);
+                    doubled_pawn_count += sign * (n > 1) * (n - 1);
                 }
-                diff += SIGN[color] * popcount(own_pawns);
-                isolated += SIGN[color] * state.count_isolated_pawns(color);
+                diff += sign * popcount(own_pawns);
+                isolated_pawn_count += sign * state.count_isolated_pawns(color);
+
+                for_each_square(own_pawns, [&](Square pawn_square) {
+                    pawn_chain += sign * eval_pawn_chain(state, color, pawn_square, pawn_chain_cache[color]);
+                });
             }
         }
 
         return eval
-            + doubled * interpolate(pc, MIDGAME_DOUBLED_PAWNS, ENDGAME_DOUBLED_PAWNS)
-            + isolated * interpolate(pc, MIDGAME_ISOLATED_PAWNS, ENDGAME_ISOLATED_PAWNS)
+            + doubled_pawn_count * interpolate(pc, MIDGAME_DOUBLED_PAWNS, ENDGAME_DOUBLED_PAWNS)
+            + isolated_pawn_count * interpolate(pc, MIDGAME_ISOLATED_PAWNS, ENDGAME_ISOLATED_PAWNS)
+            + pawn_chain * interpolate(pc, MIDGAME_PAWN_CHAIN, ENDGAME_PAWN_CHAIN)
             + (diff != 0) * SIGN[diff > 0] * interpolate(pc, MIDGAME_PAWN_MAJORITY, ENDGAME_PAWN_MAJORITY);
     }
 
@@ -1144,11 +1161,14 @@ namespace search
     {
         int diff = 0;
 
+        const auto occupied = state.occupied();
+
         for (auto color : { BLACK, WHITE })
         {
             const auto sign = SIGN[color];
+
             for_each_square(state.occupied_co(color) & ~(state.pawns | state.kings), [&](Square square) {
-                diff -= sign * popcount(state.attackers_mask(!color, square));
+                diff -= sign * popcount(state.attackers_mask(!color, square, occupied));
             });
         }
         return diff * interpolate(piece_count, MIDGAME_THREATS, ENDGAME_THREATS);
@@ -1230,8 +1250,12 @@ namespace search
                     }
                     _tt_entry._eval = eval;
                 }
+            #if 0
                 /* 2. Tactical (skip in midgame at low depth) */
                 else if (is_pv_node() || state().is_endgame() || depth() > TACTICAL_LOW_DEPTH)
+            #else
+                else if (is_pv_node() || state().is_endgame() || iteration() > TACTICAL_LOW_DEPTH)
+            #endif
                 {
                     eval -= CHECK_BONUS * is_check();
                     eval += SIGN[turn] * eval_tactical(*this);
@@ -1338,12 +1362,6 @@ namespace search
     }
 
 
-    void Context::cancel()
-    {
-        _cancel = true;
-    }
-
-
     /*
      * Reinitialize top context at the start of a new iteration.
      */
@@ -1406,13 +1424,13 @@ namespace search
             }
             else if (score <= _tt->_w_alpha)
             {
-                _alpha = std::max(SCORE_MIN, score - HALF_WINDOW * pow2(iteration()));
+                _alpha = std::max(SCORE_MIN, score - HALF_WINDOW * squared(iteration()));
                 _beta = _tt->_w_beta;
             }
             else if (score >= _tt->_w_beta)
             {
                 _alpha = _tt->_w_alpha;
-                _beta = std::min(SCORE_MAX, score + HALF_WINDOW * pow2(iteration()));
+                _beta = std::min(SCORE_MAX, score + HALF_WINDOW * squared(iteration()));
             }
             else
             {

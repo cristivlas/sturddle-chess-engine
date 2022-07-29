@@ -290,8 +290,6 @@ namespace chess
 
     std::vector<int> scan_forward(Bitboard);
 
-    Bitboard square_file_mask(Square);
-    Bitboard square_rank_mask(Square);
 
     INLINE constexpr int square_file(int square)
     {
@@ -527,11 +525,11 @@ namespace chess
         PieceType _piece_types[64] = { PieceType::NONE };
 
         /* Get the bitboard of squares attacked from a given square */
-        Bitboard attacks_mask(Square) const;
+        Bitboard attacks_mask(Square, Bitboard occupied) const;
 
-        Bitboard attackers_mask(Color color, Square square) const
+        INLINE Bitboard attackers_mask(Color color, Square square, Bitboard occupied) const
         {
-            const auto attackers = attacker_pieces_mask(color, square)
+            const auto attackers = attacker_pieces_mask(color, square, occupied)
                 | (kings & BB_KING_ATTACKS[square])
                 | (pawns & BB_PAWN_ATTACKS[!color][square]);
 
@@ -542,9 +540,8 @@ namespace chess
          * Get the bitboard of squares attacked from a given square
          * by pieces other than pawns and kings.
          */
-        Bitboard attacker_pieces_mask(Color color, Square square) const
+        INLINE Bitboard attacker_pieces_mask(Color color, Square square, Bitboard occupied_mask) const
         {
-            const auto occupied_mask = occupied();
     #if USE_MAGIC_BITS
             const auto attackers = (knights & BB_KNIGHT_ATTACKS[square])
                 | (bishops & magic_bits_attacks.Bishop(occupied_mask, square))
@@ -570,7 +567,7 @@ namespace chess
         INLINE Bitboard checkers_mask(Color turn) const
         {
             const auto king_square = king(turn);
-            return attackers_mask(!turn, king_square);
+            return attackers_mask(!turn, king_square, occupied());
         }
 
         INLINE Square king(Color color) const
@@ -651,7 +648,7 @@ namespace chess
     };
 
 
-    INLINE Bitboard Position::attacks_mask(Square square) const
+    INLINE Bitboard Position::attacks_mask(Square square, Bitboard occupied) const
     {
         const auto bb_square = BB_SQUARES[square];
 
@@ -671,7 +668,7 @@ namespace chess
         else
         {
             Bitboard mask = 0;
-            const auto occupied = black | white;
+
     #if USE_MAGIC_BITS
             if ((bb_square & bishops) || (bb_square & queens))
                 mask = magic_bits_attacks.Bishop(occupied, square);
@@ -801,7 +798,7 @@ namespace chess
     }
 
 
-    template<typename T> INLINE T constexpr pow2(T x) { return x * x; }
+    template<typename T> INLINE T constexpr squared(T x) { return x * x; }
 
     namespace
     {
@@ -935,20 +932,22 @@ namespace chess
 
         INLINE bool has_connected_rooks(Color color) const
         {
-            auto rook_mask = rooks & occupied_co(color);
+            const auto rook_mask = rooks & occupied_co(color);
+            const auto occupied = black | white;
 
             return for_each_square_r<bool>(rook_mask, [&](Square rook) {
-                return attacks_mask(rook) & rook_mask;
+                return attacks_mask(rook, occupied) & rook_mask;
             });
         }
 
         INLINE bool has_fork(Color color) const
         {
             const auto attacked = occupied_co(!color) & ~pawns;
+            const auto occupied = black | white;
 
             return for_each_square_r<bool>(occupied_co(color) & (pawns | knights | bishops),
                 [&](Square attacking_square) {
-                    return popcount(attacks_mask(attacking_square) & attacked) > 1;
+                    return popcount(attacks_mask(attacking_square, occupied) & attacked) > 1;
                 });
         }
 

@@ -23,6 +23,7 @@
 #define QUADRATIC_PROBING   false
 #define TRY_LOCK_ON_READ    true
 
+static_assert(std::atomic<bool>::is_always_lock_free);
 
 namespace search
 {
@@ -41,13 +42,18 @@ namespace search
     };
 
 
+    template<Acquire> struct LockType
+    {
+    };
+
+
     template<typename T, int BUCKET_SIZE=16> class SharedHashTable
     {
         using entry_t = T;
         using data_t = std::vector<entry_t>;
 
     #if SMP
-        using locks_t = std::vector<std::atomic_bool>;
+        using locks_t = std::vector<std::atomic<bool>>;
     #else
         struct locks_t /* dummy */
         {
@@ -113,19 +119,17 @@ namespace search
             SpinLock() = default;
 
         public:
-            SpinLock(SharedHashTable& ht, size_t ix, const Acquire acquire)
+            SpinLock(SharedHashTable& ht, size_t ix, LockType<Acquire::Lock>)
                 : _ht(&ht), _ix(ix)
             {
-                switch (acquire)
-                {
-                case Acquire::Lock:
-                    lock();
-                    break;
+                lock();
+                ASSERT(_locked);
+            }
 
-                case Acquire::TryLock:
-                    try_lock();
-                    break;
-                }
+            SpinLock(SharedHashTable& ht, size_t ix, LockType<Acquire::TryLock>)
+                : _ht(&ht), _ix(ix)
+            {
+                try_lock();
             }
 
             ~SpinLock()
@@ -161,8 +165,8 @@ namespace search
         public:
             Proxy() = default;
 
-            Proxy(SharedHashTable& ht, size_t ix, Acquire acquire)
-                : SpinLock(ht, ix, acquire)
+            template<typename L> Proxy(SharedHashTable& ht, size_t ix, L lock_type)
+                : SpinLock(ht, ix, lock_type)
                 , _entry(this->entry())
             {
             }
@@ -205,9 +209,9 @@ namespace search
 
             for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
             {
-                Proxy p(*this, i, acquire);
+                Proxy p(*this, i, LockType<acquire>());
 
-                if (p.is_locked())
+                if (acquire == Acquire::Lock || p.is_locked())
                 {
                     if (!p->is_valid())
                     {
@@ -225,7 +229,7 @@ namespace search
                     if (p->matches(state) && age <= _clock)
                         return p;
 
-                    if (acquire == Acquire::Write)
+                    if constexpr (acquire == Acquire::Write)
                     {
                         if (age != _clock)
                             return p;
@@ -252,7 +256,11 @@ namespace search
              * acquire == SpinLock::Acquire::Write: lock and return the entry at index;
              * otherwise: return unlocked Proxy, which means nullptr (no match found).
              */
-            return acquire == Acquire::Write ? Proxy(*this, index, acquire) : Proxy();
+
+            if constexpr (acquire == Acquire::Write)
+                return Proxy(*this, index, LockType<acquire>());
+            else
+                return Proxy();
         }
 
         INLINE size_t capacity() const { return _data.size(); }

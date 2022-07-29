@@ -209,7 +209,7 @@ namespace search
         TT_Entry    _tt_entry;
         Square      _capture_square = Square::UNDEFINED;
 
-        static void cancel();
+        static void cancel() { _cancel.store(true, std::memory_order_relaxed); }
 
         Context*    clone(Context*, int ply = 0) const;
 
@@ -250,7 +250,7 @@ namespace search
         score_t     improvement() const;
         static void init();
         bool        is_beta_cutoff(Context*, score_t);
-        static bool is_cancelled() { return _cancel; }
+        static bool is_cancelled() { return _cancel.load(std::memory_order_relaxed); }
         bool        is_capture() const { return state().capture_value != 0; }
         bool        is_check() const { return state().is_check(); }
         bool        is_counter_move(const Move&) const;
@@ -474,7 +474,8 @@ namespace search
         ASSERT(move._state);
 
         const auto& state = *move._state;
-        if (state.attacks_mask(move.to_square()) & state.kings & state.occupied_co(state.turn))
+
+        if (state.attacks_mask(move.to_square(), state.occupied()) & state.kings & state.occupied_co(state.turn))
         {
             ASSERT(state.is_check());
             return true;
@@ -768,7 +769,7 @@ namespace search
         const bool retry = _retry_next;
         _retry_next = false;
 
-        if (!_excluded && !on_next() /* && !is_check() */)
+        if (!_excluded && !on_next())
             return nullptr;
 
         /* null move must be tried before actual moves */

@@ -548,6 +548,7 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
     if (ctxt.is_cancelled())
         return false;
 
+
     /*
      * null move refuted? update capture_square and mate_detected
      */
