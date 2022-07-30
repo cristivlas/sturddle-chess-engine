@@ -28,22 +28,23 @@ namespace search
 {
     enum class Acquire : int8_t
     {
-        TryLock,
-        Lock,
+        Read,
+        Write,
+    };
+
+    template<Acquire> struct LockTraits
+    {
+        template<class S> static void lock(S& spin) { spin.lock(); }
+        template<class S> static bool constexpr is_locked(S& spin) { return true; }
+    };
 
 #if TRY_LOCK_ON_READ
-        Read = TryLock,
-#else
-        Read = Lock,
-#endif /* !TRY_LOCK_ON_READ */
-
-        Write = Lock,
-    };
-
-
-    template<Acquire> struct LockType
+    template<> struct LockTraits<Acquire::Read>
     {
+        template<class S> static void lock(S& spin) { spin.try_lock(); }
+        template<class S> static bool is_locked(S& spin) { return spin.is_locked(); }
     };
+#endif /* TRY_LOCK_ON_READ */
 
 
     template<typename T, int BUCKET_SIZE=16> class SharedHashTable
@@ -70,6 +71,8 @@ namespace search
 
             using table_t = SharedHashTable;
 
+            template<Acquire> friend struct LockTraits;
+
             table_t*        _ht = nullptr;
             const size_t    _ix = 0;
             bool            _locked = false;
@@ -95,15 +98,13 @@ namespace search
                 _locked = false;
             }
 
-            INLINE bool try_lock()
+            INLINE void try_lock()
             {
                 if (!std::atomic_flag_test_and_set_explicit(lock_p(), ACQUIRE))
                 {
                     _locked = true;
                     entry()->_lock = this;
-                    return true;
                 }
-                return false;
             }
     #else
             INLINE void lock() { _locked = true; }
@@ -118,17 +119,10 @@ namespace search
             SpinLock() = default;
 
         public:
-            SpinLock(SharedHashTable& ht, size_t ix, LockType<Acquire::Lock>)
+            template<typename LockTraits> SpinLock(SharedHashTable& ht, size_t ix, LockTraits)
                 : _ht(&ht), _ix(ix)
             {
-                lock();
-                ASSERT(_locked);
-            }
-
-            SpinLock(SharedHashTable& ht, size_t ix, LockType<Acquire::TryLock>)
-                : _ht(&ht), _ix(ix)
-            {
-                try_lock();
+                LockTraits::lock(*this);
             }
 
             ~SpinLock()
@@ -164,8 +158,9 @@ namespace search
         public:
             Proxy() = default;
 
-            template<typename L> Proxy(SharedHashTable& ht, size_t ix, L lock_type)
-                : SpinLock(ht, ix, lock_type)
+            template<typename LockTraits>
+            Proxy(SharedHashTable& ht, size_t ix, LockTraits lock_traits)
+                : SpinLock(ht, ix, lock_traits)
                 , _entry(this->entry())
             {
             }
@@ -208,15 +203,21 @@ namespace search
 
             for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
             {
-                Proxy p(*this, i, LockType<acquire>());
+                Proxy p(*this, i, LockTraits<acquire>{});
 
-                if (acquire == Acquire::Lock || p.is_locked())
+                if (LockTraits<acquire>::is_locked(p))
                 {
                     if (!p->is_valid())
                     {
-                        if (acquire == Acquire::Write)
+                        if constexpr (acquire == Acquire::Write)
                         {
-                            ++_used; /* slot is unoccupied, bump up usage count */
+                            /* slot is unoccupied, bump up usage count */
+                        #if SMP
+                            _used.fetch_add(1, std::memory_order_relaxed);
+                        #else
+                            ++_used;
+                        #endif /* SMP */
+
                             return p;
                         }
 
@@ -241,14 +242,11 @@ namespace search
                     }
                 }
 
-            /*
-             * https://en.wikipedia.org/wiki/Open_addressing
-             */
-            #if QUADRATIC_PROBING
-                i = (h + j * j) % _data.size();
-            #else
-                i = (h + j) % _data.size();
-            #endif
+                /* https://en.wikipedia.org/wiki/Open_addressing */
+                if constexpr(QUADRATIC_PROBING)
+                    i = (h + j * j) % _data.size();
+                else
+                    i = (h + j) % _data.size();
             }
 
             /*
@@ -257,7 +255,7 @@ namespace search
              */
 
             if constexpr (acquire == Acquire::Write)
-                return Proxy(*this, index, LockType<acquire>());
+                return Proxy(*this, index, LockTraits<acquire>{});
             else
                 return Proxy();
         }

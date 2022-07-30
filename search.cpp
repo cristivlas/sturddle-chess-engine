@@ -665,7 +665,9 @@ static INLINE void update_pruned(Context& ctxt, const Context& next, size_t& cou
     ASSERT(!next.is_capture());
 
     ++ctxt._pruned_count;
-    ++count;
+
+    if constexpr(EXTRA_STATS)
+        ++count;
 }
 
 
