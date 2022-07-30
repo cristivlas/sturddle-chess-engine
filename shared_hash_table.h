@@ -23,7 +23,6 @@
 #define QUADRATIC_PROBING   false
 #define TRY_LOCK_ON_READ    true
 
-static_assert(std::atomic<bool>::is_always_lock_free);
 
 namespace search
 {
@@ -53,7 +52,7 @@ namespace search
         using data_t = std::vector<entry_t>;
 
     #if SMP
-        using locks_t = std::vector<std::atomic<bool>>;
+        using locks_t = std::vector<std::atomic_flag>;
     #else
         struct locks_t /* dummy */
         {
@@ -77,11 +76,11 @@ namespace search
 
         private:
     #if SMP
-            std::atomic_bool* lock_p() { return &_ht->_locks[_ix]; }
+            std::atomic_flag* lock_p() { return &_ht->_locks[_ix]; }
 
             INLINE void lock()
             {
-                while (std::atomic_exchange_explicit(lock_p(), true, ACQUIRE))
+                while (std::atomic_flag_test_and_set_explicit(lock_p(), ACQUIRE))
                     ;
                 _locked = true;
                 entry()->_lock = this;
@@ -92,13 +91,13 @@ namespace search
                 ASSERT(_locked);
                 ASSERT(entry()->_lock == this);
 
-                std::atomic_store_explicit(lock_p(), false, RELEASE);
+                std::atomic_flag_clear_explicit(lock_p(), RELEASE);
                 _locked = false;
             }
 
             INLINE bool try_lock()
             {
-                if (!std::atomic_exchange_explicit(lock_p(), true, ACQUIRE))
+                if (!std::atomic_flag_test_and_set_explicit(lock_p(), ACQUIRE))
                 {
                     _locked = true;
                     entry()->_lock = this;
