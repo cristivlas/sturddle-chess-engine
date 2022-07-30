@@ -1004,7 +1004,8 @@ namespace search
 
 
     /* Evaluate unblocked, passed pawns */
-    template<int i> static INLINE int eval_passed_pawns(const State& state, int piece_count)
+    template<int i> static INLINE
+    int eval_passed_pawns(const State& state, int piece_count, Bitboard (&pawn_chain)[2][64])
     {
         struct PassedPawnRank
         {
@@ -1052,6 +1053,10 @@ namespace search
                 {
                     score += sign * interpolate(piece_count, ranks[i].bonus[0], ranks[i].bonus[1]);
                 }
+
+                score += sign
+                    * eval_pawn_chain(state, color, square, pawn_chain[color])
+                    * interpolate(piece_count, MIDGAME_PAWN_CHAIN, ENDGAME_PAWN_CHAIN);
             });
         }
 
@@ -1103,8 +1108,8 @@ namespace search
         Bitboard pawn_chain_cache[2][64];
         std::fill_n(&pawn_chain_cache[0][0], 2 * 64, BB_ALL);
 
-        eval += eval_passed_pawns<0>(state, pc);
-        eval += eval_passed_pawns<1>(state, pc);
+        eval += eval_passed_pawns<0>(state, pc, pawn_chain_cache);
+        eval += eval_passed_pawns<1>(state, pc, pawn_chain_cache);
 
         int doubled_pawn_count = 0;
         int isolated_pawn_count = 0;
@@ -1124,10 +1129,6 @@ namespace search
                 }
                 diff += sign * popcount(own_pawns);
                 isolated_pawn_count += sign * state.count_isolated_pawns(color);
-
-                for_each_square(own_pawns, [&](Square pawn_square) {
-                    pawn_chain += sign * eval_pawn_chain(state, color, pawn_square, pawn_chain_cache[color]);
-                });
             }
         }
 
@@ -1250,12 +1251,9 @@ namespace search
                     }
                     _tt_entry._eval = eval;
                 }
-            #if 0
+
                 /* 2. Tactical (skip in midgame at low depth) */
                 else if (is_pv_node() || state().is_endgame() || depth() > TACTICAL_LOW_DEPTH)
-            #else
-                else if (is_pv_node() || state().is_endgame() || iteration() > TACTICAL_LOW_DEPTH)
-            #endif
                 {
                     eval -= CHECK_BONUS * is_check();
                     eval += SIGN[turn] * eval_tactical(*this);

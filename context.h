@@ -916,7 +916,7 @@ namespace search
                 cython_wrapper::call(_on_next, _engine, millisec);
         }
 
-        return !is_cancelled(); /* check again in case _on_next called cancel() */
+        return !is_cancelled();
     }
 
 
