@@ -201,7 +201,6 @@ void TranspositionTable::clear()
 
     _w_alpha = SCORE_MIN;
     _w_beta = SCORE_MAX;
-    _reset_window = false;
 
     _check_nodes = 0;
     _eval_count = 0;
@@ -675,6 +674,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 {
     ASSERT(ctxt._beta > SCORE_MIN);
     ASSERT(ctxt._score <= ctxt._alpha);
+    ASSERT(ctxt._alpha < ctxt._beta);
 
     ctxt.set_tt(&table);
     /*
@@ -691,7 +691,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         && ctxt.can_reduce())
     {
         --ctxt._max_depth;
-        ctxt._retry_above_alpha = RETRY::Reduced;
     }
 
     if (ctxt._alpha + 1 < ctxt._beta)
@@ -996,21 +995,17 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             }
 
             /*
-             * If the 1st move fails low at root it may not be likely for
+             * If the 1st move fails low at root it maybe unlikely for the
              * subsequent moves to improve things much (assuming reasonable
-             * move ordering); readjust the aspiration window and retry, so
-             * that the upper bound gets more accurate.
+             * move ordering); readjust the aspiration window and retry.
+             *
              * https://www.chessprogramming.org/PVS_and_Aspiration
              */
-            if (table._iteration <= 7
-                && ctxt._ply == 0
-                && ctxt.tid() == 0
-                && move_count == 1
-                && move_score <= table._w_alpha
-               )
+            if (ctxt._ply == 0 && move_count == 1 && move_score <= table._w_alpha)
             {
                 ASSERT(!next_ctxt->is_null_move());
-                table._reset_window = true;
+                ctxt.reset_window();
+
                 return move_score;
             }
         }
@@ -1096,7 +1091,7 @@ score_t search::mtdf(Context& ctxt, score_t first, TranspositionTable& table)
 
         ASSERT(g < SCORE_MAX); /* sanity check */
 
-        if (table._reset_window || ctxt.is_cancelled())
+        if (ctxt.is_cancelled())
             break;
 
         if (g < b)
@@ -1130,10 +1125,16 @@ static score_t search_iteration(Context& ctxt, TranspositionTable& table, score_
         ASSERT_ALWAYS(false);
     }
 
-    if (ctxt._best_move)
+    if (ctxt._best_move && !ctxt.is_window_reset())
     {
         ctxt._prev = ctxt._best_move; /* save for next iteration */
         table.store_pv(ctxt);
+    }
+
+    /* reset the aspiration window if there's a big drop in score */
+    if (score + HALF_WINDOW < prev_score)
+    {
+        ctxt.reset_window();
     }
 
     return score;
@@ -1320,23 +1321,24 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
             SMPTasks tasks(ctxt, table, score);
             const auto iter_score = search_iteration(ctxt, table, score);
 
-            if (ctxt.is_cancelled())
+            if (ctxt.is_cancelled() && !ctxt.is_window_reset())
                 break;
 
             score = iter_score; /* retain the score for completed iterations */
 
-            if (table._reset_window)
+            if (ctxt.is_window_reset())
             {
                 ASSERT(score <= table._w_alpha);
-                ctxt.cancel();
-                table._reset_window = false;
+
                 reset_window = true;
             #if 0
                 std::cout << "WINDOW RESET(" << i << "): " << score << " (";
                 std::cout << table._w_alpha << ", " << table._w_beta << ")\n";
             #endif
-                continue; /* keep looping at same depth */
+
+                continue;
             }
+
         }   /* SMP scope end */
 
         ASSERT(ctxt.iteration() == ctxt._max_depth);

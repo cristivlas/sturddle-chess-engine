@@ -205,7 +205,6 @@ namespace search
         /* search window bounds */
         score_t _w_alpha = SCORE_MIN;
         score_t _w_beta = SCORE_MAX;
-        bool _reset_window = false;
 
         /* Stats for current thread */
         size_t _check_nodes = 0;

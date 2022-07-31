@@ -146,6 +146,7 @@ namespace search
      * Context
      *---------------------------------------------------------------------*/
     atomic_bool Context::_cancel(false);
+    atomic_bool Context::_reset_window(false);
 
     atomic_int  Context::_time_limit = -1; /* milliseconds */
     atomic_time Context::_time_start;
@@ -254,7 +255,7 @@ namespace search
             {
                 if (!next_ctxt->is_null_move())
                 {
-                    if (next_ctxt->_retry_above_alpha == RETRY::Reduced && score < _beta)
+                    if (next_ctxt->_retry_above_alpha == RETRY::Reduced)
                     {
                         _retry_next = true;
 
@@ -1154,6 +1155,7 @@ namespace search
         {
             return king_safety + SIGN[ctxt.turn()] * QUEEN_EXCHANGE_PENALTY;
         }
+
         return king_safety;
     }
 
@@ -1394,6 +1396,7 @@ namespace search
 
         _repetitions = -1;
 
+        _reset_window = false;
         _retry_next = false;
         _retry_beta = SCORE_MAX;
 
@@ -1602,7 +1605,7 @@ namespace search
 
         if (_time_limit >= 0 && millisec >= _time_limit)
         {
-            _cancel = true;
+            cancel();
             return -1;
         }
 

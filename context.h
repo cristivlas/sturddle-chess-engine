@@ -250,7 +250,7 @@ namespace search
         score_t     improvement() const;
         static void init();
         bool        is_beta_cutoff(Context*, score_t);
-        static bool is_cancelled() { return _cancel.load(std::memory_order_relaxed); }
+        static bool is_cancelled();
         bool        is_capture() const { return state().capture_value != 0; }
         bool        is_check() const { return state().is_check(); }
         bool        is_counter_move(const Move&) const;
@@ -271,6 +271,8 @@ namespace search
         int         is_repeated() const;
         bool        is_retry() const { return _is_retry; }
         bool        is_singleton() const { return _is_singleton; }
+        static bool is_window_reset() { return _reset_window.load(std::memory_order_relaxed); }
+
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
 
         LMRAction   late_move_reduce(int move_count);
@@ -297,6 +299,8 @@ namespace search
         void        set_tt(TranspositionTable* tt) { _tt = tt; }
 
         bool        should_verify_null_move() const;
+        static void reset_window() { _reset_window.store(true, std::memory_order_relaxed); }
+
         int         singular_margin() const;
 
         int         tid() const { return _tt->_tid; }
@@ -362,6 +366,7 @@ namespace search
         static atomic_bool  _cancel;
 
         static size_t       _callback_count;
+        static atomic_bool  _reset_window;
         static atomic_int   _time_limit; /* milliseconds */
         static atomic_time  _time_start;
 
@@ -667,6 +672,12 @@ namespace search
         return std::max(0,
               eval_material_and_piece_squares(*_state)
             - eval_material_and_piece_squares(*prev->_state));
+    }
+
+
+    /* static */ INLINE bool Context::is_cancelled()
+    {
+        return _cancel.load(std::memory_order_relaxed) || is_window_reset();
     }
 
 
