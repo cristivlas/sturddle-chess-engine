@@ -798,8 +798,6 @@ namespace chess
     }
 
 
-    template<typename T> INLINE T constexpr squared(T x) { return x * x; }
-
     namespace
     {
         template<int N> struct _exp {

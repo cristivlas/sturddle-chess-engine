@@ -1131,12 +1131,6 @@ static score_t search_iteration(Context& ctxt, TranspositionTable& table, score_
         table.store_pv(ctxt);
     }
 
-    /* reset the aspiration window if there's a big drop in score */
-    if (score + HALF_WINDOW < prev_score)
-    {
-        ctxt.reset_window();
-    }
-
     return score;
 }
 

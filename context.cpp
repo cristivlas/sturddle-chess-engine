@@ -1425,13 +1425,13 @@ namespace search
             }
             else if (score <= _tt->_w_alpha)
             {
-                _alpha = std::max(SCORE_MIN, score - HALF_WINDOW * squared(iteration()));
+                _alpha = std::max<int>(SCORE_MIN, score - HALF_WINDOW * pow(iteration(), 1.5));
                 _beta = _tt->_w_beta;
             }
             else if (score >= _tt->_w_beta)
             {
                 _alpha = _tt->_w_alpha;
-                _beta = std::min(SCORE_MAX, score + HALF_WINDOW * squared(iteration()));
+                _beta = std::min<int>(SCORE_MAX, score + HALF_WINDOW * pow(iteration(), 1.5));
             }
             else
             {
