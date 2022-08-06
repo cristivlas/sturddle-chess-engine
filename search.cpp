@@ -1001,7 +1001,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
              *
              * https://www.chessprogramming.org/PVS_and_Aspiration
              */
-            if (ctxt._ply == 0 && move_count == 1 && move_score <= table._w_alpha)
+            if (ASPIRATION_WINDOW && ctxt._ply == 0 && move_count == 1 && move_score <= table._w_alpha)
             {
                 ASSERT(!next_ctxt->is_null_move());
                 ctxt.reset_window();
@@ -1301,12 +1301,14 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
     score_t score = 0;
     max_iter_count = std::min(PLY_MAX, max_iter_count);
 
+    bool reset_window = false;
+
     for (int i = 1; i != max_iter_count;)
     {
         table._iteration = i;
         ASSERT(ctxt.iteration() == i);
 
-        ctxt.set_search_window(score);
+        ctxt.set_search_window(score, std::exchange(reset_window, false));
         ctxt.reinitialize();
 
         {   /* SMP scope start */
@@ -1325,7 +1327,7 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
                 std::cout << "WINDOW RESET(" << i << "): " << score << " (";
                 std::cout << table._w_alpha << ", " << table._w_beta << ")\n";
             #endif
-
+                reset_window = true;
                 continue;
             }
 

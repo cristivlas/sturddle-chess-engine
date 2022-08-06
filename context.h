@@ -292,7 +292,7 @@ namespace search
         int         rewind(int where = 0, bool reorder = false);
 
         void        set_counter_move(const BaseMove& move) { _counter_move = move; }
-        void        set_search_window(score_t);
+        void        set_search_window(score_t, bool);
 
         static void set_time_limit_ms(int milliseconds);
         void        set_time_info(int time_left /* millisec */, int moves_left);
