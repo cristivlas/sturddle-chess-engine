@@ -43,6 +43,18 @@ constexpr score_t MATE_LOW  = -MATE_HIGH;
 constexpr score_t HALF_WINDOW = chess::WEIGHT[chess::PieceType::PAWN] / 4;
 
 
+constexpr score_t checkmated(int ply)
+{
+    return -CHECKMATE + ply;
+}
+
+
+constexpr score_t checkmating(int ply)
+{
+    return CHECKMATE + ply;
+}
+
+
 namespace search
 {
     struct Context;

@@ -338,21 +338,21 @@ namespace search
     {
         ++_tt->_eval_count;
 
-        auto score = _evaluate();
+        /* detect draws by repetition and by fifty-moves rule */
+
+        if (_fifty >= 100)
+        {
+            return 0;
+        }
+        if (is_repeated() > 0)
+        {
+            return 0;
+        }
+
+        const auto score = _evaluate();
 
         ASSERT(score > SCORE_MIN);
         ASSERT(score < SCORE_MAX);
-
-        /* detect draws by repetition and by fifty-moves rule */
-
-        if (is_repeated() > 0)
-        {
-            score = 0;
-        }
-        else if (_fifty >= 100)
-        {
-            score = 0;
-        }
 
         return score;
     }
@@ -375,7 +375,7 @@ namespace search
             return evaluate();
         }
 
-        return is_check() ? -CHECKMATE + _ply : 0;
+        return is_check() ? checkmated(_ply) : 0;
     }
 
 
@@ -1425,13 +1425,13 @@ namespace search
             }
             else if (score <= _tt->_w_alpha)
             {
-                _alpha = std::max<int>(SCORE_MIN, score - HALF_WINDOW * pow(iteration(), 1.5));
+                _alpha = std::max<int>(SCORE_MIN, score - HALF_WINDOW * pow(iteration(), 1.9));
                 _beta = _tt->_w_beta;
             }
             else if (score >= _tt->_w_beta)
             {
                 _alpha = _tt->_w_alpha;
-                _beta = std::min<int>(SCORE_MAX, score + HALF_WINDOW * pow(iteration(), 1.5));
+                _beta = std::min<int>(SCORE_MAX, score + HALF_WINDOW * pow(iteration(), 1.9));
             }
             else
             {

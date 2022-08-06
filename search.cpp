@@ -677,6 +677,22 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     ASSERT(ctxt._alpha < ctxt._beta);
 
     ctxt.set_tt(&table);
+
+    if (ctxt._ply != 0)
+    {
+        if (ctxt.is_cancelled())
+        {
+            return ctxt._score = 0;
+        }
+        /* mating distance pruning: if a shorter mate was found, skip the search */
+        ctxt._alpha = std::max(checkmated(ctxt._ply), ctxt._alpha);
+        ctxt._beta = std::min(checkmating(ctxt._ply + 1), ctxt._beta);
+
+        if (ctxt._alpha >= ctxt._beta)
+        {
+            return ctxt._score = ctxt._alpha;
+        }
+    }
     /*
      * https://www.chessprogramming.org/Node_Types#PV
      */
@@ -1327,6 +1343,7 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
                 std::cout << "WINDOW RESET(" << i << "): " << score << " (";
                 std::cout << table._w_alpha << ", " << table._w_beta << ")\n";
             #endif
+
                 reset_window = true;
                 continue;
             }
