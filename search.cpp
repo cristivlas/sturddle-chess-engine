@@ -84,6 +84,7 @@ const score_t* TT_Entry::lookup_score(Context& ctxt) const
 
         if (ctxt._alpha >= ctxt._beta)
         {
+            ASSERT(_value >= ctxt._beta);
             return &_value;
         }
     }
@@ -459,7 +460,6 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
 
         move = p->_hash_move;
     }
-
     if (state.is_checkmate())
     {
         /* The parity of the PV length tells which side is winning. */
@@ -1301,14 +1301,12 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
     score_t score = 0;
     max_iter_count = std::min(PLY_MAX, max_iter_count);
 
-    bool reset_window = false;
-
-    for (int i = 1; i != max_iter_count; table.increment_clock())
+    for (int i = 1; i != max_iter_count;)
     {
         table._iteration = i;
         ASSERT(ctxt.iteration() == i);
 
-        ctxt.set_search_window(score, std::exchange(reset_window, false));
+        ctxt.set_search_window(score);
         ctxt.reinitialize();
 
         {   /* SMP scope start */
@@ -1323,8 +1321,6 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
             if (ctxt.is_window_reset())
             {
                 ASSERT(score <= table._w_alpha);
-
-                reset_window = true;
             #if 0
                 std::cout << "WINDOW RESET(" << i << "): " << score << " (";
                 std::cout << table._w_alpha << ", " << table._w_beta << ")\n";

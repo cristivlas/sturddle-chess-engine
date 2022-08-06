@@ -1404,9 +1404,9 @@ namespace search
     }
 
 
-    void Context::set_search_window(score_t score, bool reset)
+    void Context::set_search_window(score_t score)
     {
-        if (!ASPIRATION_WINDOW || reset || iteration() == 1)
+        if (!ASPIRATION_WINDOW || iteration() == 1)
         {
             _alpha = SCORE_MIN;
             _beta = SCORE_MAX;
@@ -1437,10 +1437,18 @@ namespace search
             {
                 _alpha = std::max(SCORE_MIN, score - HALF_WINDOW);
                 _beta = std::min(SCORE_MAX, score + HALF_WINDOW);
+
+                if (_alpha > _tt->_w_alpha || _beta < _tt->_w_beta)
+                {
+                    /*
+                     * bump up the clock if the window is shrinking, so that
+                     * future lookups ignore entries from wider search windows
+                     */
+                    TranspositionTable::increment_clock();
+                }
             }
         }
 
-        /* save iteration bounds */
         _tt->_w_alpha = _alpha;
         _tt->_w_beta = _beta;
 
@@ -1521,7 +1529,8 @@ namespace search
          * "Classical implementation assumes a re-search at full depth
          * if the reduced depth search returns a score above alpha."
          */
-        _retry_above_alpha = RETRY::Reduced;
+        if (_algorithm == Algorithm::NEGASCOUT)
+            _retry_above_alpha = RETRY::Reduced;
 
     #if EXTRA_STATS
         ++_tt->_reductions;

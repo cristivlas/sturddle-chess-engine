@@ -226,9 +226,10 @@ namespace search
 
                     const auto age = p->_age;
 
-                    if (p->matches(state) && age <= _clock)
+                    if (age == _clock && p->matches(state))
+                    {
                         return p;
-
+                    }
                     if constexpr (acquire == Acquire::Write)
                     {
                         if (age != _clock)
