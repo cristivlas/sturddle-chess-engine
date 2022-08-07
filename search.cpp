@@ -680,10 +680,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
     if (ctxt._ply != 0)
     {
-        if (ctxt.is_cancelled())
-        {
-            return ctxt._score = 0;
-        }
         /* mating distance pruning: if a shorter mate was found, skip the search */
         ctxt._alpha = std::max(checkmated(ctxt._ply), ctxt._alpha);
         ctxt._beta = std::min(checkmating(ctxt._ply + 1), ctxt._beta);
@@ -714,15 +710,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         ASSERT(ctxt._algorithm != NEGASCOUT || ctxt.is_leftmost() || ctxt.is_retry());
     }
 
-    /* transposition table lookup */
-    if (const auto* p = table.lookup(ctxt))
-    {
-        ASSERT(ctxt._score == *p);
-        ASSERT(!ctxt._excluded);
-
-        return *p;
-    }
-
     table._nodes += !COUNT_VALID_MOVES_AS_NODES;
 
     const auto alpha = ctxt._alpha;
@@ -734,6 +721,14 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
         ASSERT(ctxt._score > SCORE_MIN);
         ASSERT(ctxt._score < SCORE_MAX);
+    }
+    /* transposition table lookup */
+    else if (const auto* p = table.lookup(ctxt))
+    {
+        ASSERT(ctxt._score == *p);
+        ASSERT(!ctxt._excluded);
+
+        return *p;
     }
     else if (multicut(ctxt, table))
     {
