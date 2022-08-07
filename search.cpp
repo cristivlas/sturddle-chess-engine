@@ -680,7 +680,10 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
     if (ctxt._ply != 0)
     {
-        /* mating distance pruning: if a shorter mate was found, skip the search */
+        /*
+         * Mating distance pruning: skip the search if a shorter mate was found.
+         * https://www.chessprogramming.org/Mate_Distance_Pruning
+         */
         ctxt._alpha = std::max(checkmated(ctxt._ply), ctxt._alpha);
         ctxt._beta = std::min(checkmating(ctxt._ply + 1), ctxt._beta);
 
