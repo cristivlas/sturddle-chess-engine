@@ -47,7 +47,7 @@ namespace search
 #endif /* TRY_LOCK_ON_READ */
 
 
-    template<typename T, int BUCKET_SIZE=16> class SharedHashTable
+    template<typename T, int BUCKET_SIZE = 192> class SharedHashTable
     {
         using entry_t = T;
         using data_t = std::vector<entry_t>;
@@ -77,7 +77,6 @@ namespace search
             const size_t    _ix = 0;
             bool            _locked = false;
 
-        private:
     #if SMP
             std::atomic_flag* lock_p() { return &_ht->_locks[_ix]; }
 
@@ -113,8 +112,7 @@ namespace search
     #endif /* !SMP */
 
         protected:
-            entry_t* entry() { return _locked ? &_ht->_data[_ix] : nullptr; }
-            const entry_t* entry() const { return const_cast<SpinLock*>(this)->entry(); }
+            entry_t* entry() { ASSERT(_locked); return &_ht->_data[_ix]; }
 
             SpinLock() = default;
 
@@ -128,10 +126,7 @@ namespace search
             ~SpinLock()
             {
                 if (_locked)
-                {
-                    _ht->_data[_ix]._age = _ht->_clock;
                     release();
-                }
             }
 
             SpinLock(SpinLock&& other)
@@ -149,7 +144,11 @@ namespace search
 
             bool is_locked() const { return _locked; }
             explicit operator bool() const { return is_locked(); }
+
+        protected:
+            uint16_t clock() const { return _ht->_clock; }
         };
+
 
         class Proxy : public SpinLock
         {
@@ -161,13 +160,20 @@ namespace search
             template<typename LockTraits>
             Proxy(SharedHashTable& ht, size_t ix, LockTraits lock_traits)
                 : SpinLock(ht, ix, lock_traits)
-                , _entry(this->entry())
+                , _entry(LockTraits::is_locked(*this) ? this->entry() : nullptr)
             {
             }
 
             INLINE const entry_t* operator->() const { return _entry; }
             INLINE const entry_t& operator *() const { return *_entry; }
-            INLINE entry_t& operator *() { return *_entry; }
+
+            INLINE entry_t& operator *()
+            {
+                ASSERT(_entry);
+
+                _entry->_age = this->clock();
+                return *_entry;
+            }
         };
 
     public:
