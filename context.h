@@ -581,6 +581,21 @@ namespace search
     }
 
 
+    INLINE score_t Context::evaluate()
+    {
+        ASSERT(_fifty < 100);
+
+        ++_tt->_eval_count;
+
+        const auto score = _evaluate();
+
+        ASSERT(score > SCORE_MIN);
+        ASSERT(score < SCORE_MAX);
+
+        return score;
+    }
+
+
     INLINE score_t Context::evaluate_material(bool with_piece_squares) const
     {
         if (with_piece_squares)

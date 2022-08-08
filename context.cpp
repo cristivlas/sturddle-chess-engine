@@ -334,30 +334,6 @@ namespace search
     }
 
 
-    score_t Context::evaluate()
-    {
-        ++_tt->_eval_count;
-
-        /* detect draws by repetition and by fifty-moves rule */
-
-        if (_fifty >= 100)
-        {
-            return 0;
-        }
-        if (is_repeated() > 0)
-        {
-            return 0;
-        }
-
-        const auto score = _evaluate();
-
-        ASSERT(score > SCORE_MIN);
-        ASSERT(score < SCORE_MAX);
-
-        return score;
-    }
-
-
     /*
      * Called when there are no more moves available (endgame reached or
      * qsearch has examined all non-quiet moves in the current position).
@@ -1554,6 +1530,9 @@ namespace search
      */
     bool Context::is_leaf()
     {
+        ASSERT(_fifty < 100);
+        ASSERT(is_repeated() <= 0);
+
         if (_ply == 0)
             return false;
 
@@ -1562,9 +1541,6 @@ namespace search
 
         /* the only available move */
         if (is_singleton() && _ply <= 1)
-            return true;
-
-        if (_fifty >= 100 || is_repeated())
             return true;
 
         if (depth() > 0

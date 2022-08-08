@@ -680,6 +680,9 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
     if (ctxt._ply != 0)
     {
+        if (ctxt._fifty >= 100 || ctxt.is_repeated() > 0)
+            return 0;
+
         /*
          * Mating distance pruning: skip the search if a shorter mate was found.
          * https://www.chessprogramming.org/Mate_Distance_Pruning
@@ -1336,7 +1339,6 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
 
             if (ctxt.is_window_reset())
             {
-                ASSERT(score <= table._w_alpha);
             #if 0
                 std::cout << "WINDOW RESET(" << i << "): " << score << " (";
                 std::cout << table._w_alpha << ", " << table._w_beta << ")\n";
