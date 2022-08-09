@@ -1325,7 +1325,11 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
         table._iteration = i;
         ASSERT(ctxt.iteration() == i);
 
-        ctxt.set_search_window(score, std::exchange(reset_window, false));
+        if constexpr(FULL_WINDOW_RESET)
+            ctxt.set_search_window(score, std::exchange(reset_window, false));
+        else
+            ctxt.set_search_window(score, false);
+
         ctxt.reinitialize();
 
         {   /* SMP scope start */
@@ -1344,7 +1348,9 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
                 std::cout << table._w_alpha << ", " << table._w_beta << ")\n";
             #endif
 
-                reset_window = true;
+                if constexpr(FULL_WINDOW_RESET)
+                    reset_window = true;
+
                 continue;
             }
 

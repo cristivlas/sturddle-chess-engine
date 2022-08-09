@@ -442,7 +442,7 @@ namespace search
                 {
                     score = CHECKMATE - (ply + 1 - FIRST_EXCHANGE_PLY);
 
-                    if (debug)
+                    if constexpr(Debug)
                     {
                         std::ostringstream out;
                         out << "\t<<< " << move.uci() << ": CHECKMATE " << score;
