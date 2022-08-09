@@ -594,7 +594,7 @@ cdef class NodeContext:
         return board_from_cxx_state(deref(self._ctxt._state))
 
 
-    cdef int max_depth(self):
+    cdef int max_depth(self) nogil:
         return self._ctxt._max_depth
 
 
@@ -775,7 +775,7 @@ def clear_hashtable():
 
 cdef class SearchAlgorithm:
     cdef TranspositionTable _table
-    cdef public fail_high_cb, move_cb, node_cb, prune_cb, alpha_cb, report_cb
+    cdef public iteration_cb, node_cb, report_cb
     cdef public best_move
     cdef public NodeContext context # important to use the type here
     cdef public depth, is_cancelled, time_info
@@ -795,7 +795,10 @@ cdef class SearchAlgorithm:
             self.context._ctxt._engine = <PyObject*> self
 
             # iteration callback
-            self.context._ctxt._on_iter = <void (*)(PyObject*, Context*, score_t)> self.on_iter
+            if self.iteration_cb:
+                self.context._ctxt._on_iter = <void (*)(PyObject*, Context*, score_t)> self.on_iter
+            else:
+                self.context._ctxt._on_iter = NULL
 
             # search callback (checks timer, calls user-defined callback)
             if self.node_cb:
@@ -888,16 +891,12 @@ cdef class SearchAlgorithm:
     # Callback wrappers
     #
     cdef void on_iter(self, Context* ctxt, score_t score) except* :
-        self.current_depth = self.context.max_depth()
-        # self.best_move = py_move(deref(ctxt)._best_move)
-
-        if self.iteration_callback:
-           self.iteration_callback(self, NodeContext.from_cxx_context(ctxt), score)
+        if self.iteration_cb:
+           self.iteration_cb(self, NodeContext.from_cxx_context(ctxt), score)
 
 
     cdef void on_next(self, int64_t milliseconds) except* :
         self.node_cb(self, milliseconds)
-
 
 
     cdef score_t _search(self, TranspositionTable& table):
@@ -935,16 +934,14 @@ cdef class SearchAlgorithm:
 
 cdef class IterativeDeepening(SearchAlgorithm):
     cdef Algorithm algorithm
-    cdef public int current_depth, time_limit_ms
-    cdef public iteration_callback
+    cdef public int time_limit_ms
 
 
     def __init__(self, algorithm: Algorithm, board: chess.Board, depth, **kwargs):
         super().__init__(board, depth, **kwargs)
         self.algorithm = algorithm
         self.time_limit_ms = kwargs.get('time_limit_ms', None) or kwargs.get('time_limit', 5) * 1000
-        self.iteration_callback = kwargs.get('iteration_callback', None) or kwargs.get('on_iteration', None)
-        self.current_depth = 0
+        self.iteration_cb = kwargs.get('iteration_cb', None) or kwargs.get('on_iteration', None)
 
 
     cdef score_t _search(self, TranspositionTable& table):

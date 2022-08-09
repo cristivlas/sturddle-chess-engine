@@ -879,6 +879,8 @@ namespace search
 
         for (auto color : { BLACK, WHITE })
         {
+            const auto s = SIGN[color];
+
             const auto own_color_mask = state.occupied_co(color);
             const auto their_color_mask = state.occupied_co(!color);
 
@@ -892,12 +894,12 @@ namespace search
                 {
                     if ((file_mask & state.pawns) == BB_EMPTY)
                     {
-                        open_score += SIGN[color];
+                        open_score += s;
                     }
                     else
                         if ((file_mask & state.pawns & own_color_mask) == BB_EMPTY)
                         {
-                            half_open_score += SIGN[color];
+                            half_open_score += s;
                         }
                     else
                         if ((file_mask & state.pawns & their_color_mask) == BB_EMPTY)
@@ -909,7 +911,7 @@ namespace search
                             if (for_each_square_r<bool>(mask, [&](Square square) {
                                 return bool(state.attacks_mask(square, occupied) & file_mask & opposite_backranks[color]);
                             }))
-                                open_score += SIGN[color];
+                                open_score += s;
                         }
                 }
             }

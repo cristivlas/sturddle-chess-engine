@@ -1353,7 +1353,8 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
         ASSERT(ctxt.iteration() == ctxt._max_depth);
 
         /* post iteration results to Cython */
-        cython_wrapper::call(Context::_on_iter, Context::_engine, &ctxt, score);
+        if (Context::_on_iter)
+            cython_wrapper::call(Context::_on_iter, Context::_engine, &ctxt, score);
 
         ++i;
     }
