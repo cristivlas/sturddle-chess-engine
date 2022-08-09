@@ -1380,6 +1380,24 @@ namespace search
     }
 
 
+    template<std::size_t... I>
+    static constexpr std::array<int, sizeof ... (I)> window_bounds(std::index_sequence<I...>)
+    {
+        return { int(HALF_WINDOW * sqrt(I)) ... };
+    }
+
+
+    template<std::size_t... I>
+    static constexpr std::array<int, sizeof ... (I)> window_ext_bounds(std::index_sequence<I...>)
+    {
+        return { int(HALF_WINDOW * pow(I, 2)) ... };
+    }
+
+
+    static const auto wnd_bounds = window_bounds(std::make_index_sequence<PLY_MAX>{});
+    static const auto wnd_ext_bounds = window_ext_bounds(std::make_index_sequence<PLY_MAX>{});
+
+
     void Context::set_search_window(score_t score, bool reset)
     {
         if (!ASPIRATION_WINDOW || reset || iteration() == 1)
@@ -1401,18 +1419,18 @@ namespace search
             }
             else if (score <= _tt->_w_alpha)
             {
-                _alpha = std::max<int>(SCORE_MIN, score - HALF_WINDOW * pow(iteration(), 1.9));
+                _alpha = std::max(SCORE_MIN, score - wnd_ext_bounds[iteration()]);
                 _beta = _tt->_w_beta;
             }
             else if (score >= _tt->_w_beta)
             {
                 _alpha = _tt->_w_alpha;
-                _beta = std::min<int>(SCORE_MAX, score + HALF_WINDOW * pow(iteration(), 1.9));
+                _beta = std::min(SCORE_MAX, score + wnd_ext_bounds[iteration()]);
             }
             else
             {
-                _alpha = std::max(SCORE_MIN, score - HALF_WINDOW);
-                _beta = std::min(SCORE_MAX, score + HALF_WINDOW);
+                _alpha = std::max(SCORE_MIN, score - wnd_bounds[iteration()]);
+                _beta = std::min(SCORE_MAX, score + wnd_bounds[iteration()]);
 
                 if (_alpha > _tt->_w_alpha || _beta < _tt->_w_beta)
                 {
@@ -1838,6 +1856,9 @@ namespace search
     }
 
 
+    static const auto hist_thresholds = thresholds(std::make_index_sequence<PLY_MAX>{});
+
+
     /*
      * Order moves in multiple phases (passes). The idea is to minimize make_move() calls,
      * which validate the legality of the move. The granularity (number of phases) should
@@ -1845,7 +1866,6 @@ namespace search
      */
     void MoveMaker::order_moves(Context& ctxt, size_t start_at, score_t futility)
     {
-        static const auto hist_thresholds = thresholds(std::make_index_sequence<PLY_MAX>{});
         static constexpr int MAX_PHASE = 4;
 
         ASSERT(_phase <= MAX_PHASE);
