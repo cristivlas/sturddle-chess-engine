@@ -697,6 +697,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             return ctxt._score = ctxt._alpha;
         }
     }
+
     /*
      * https://www.chessprogramming.org/Node_Types#PV
      */

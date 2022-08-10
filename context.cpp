@@ -296,18 +296,18 @@ namespace search
                         else if (const auto counter_move = next_ctxt->next_ply())
                         {
                             /*
-                             * Give a history bonus to non-capturing moves that beat
-                             * beta by a good margin even when countered by a capture.
+                             * give a bonus to non-capturing moves that
+                             * beat beta even when countered by captures
                              */
                             if (_ply < PLY_HISTORY_MAX
                                 && score > 0
                                 && score < MATE_HIGH
-                                && score - _beta > HISTORY_BONUS_MARGIN
+                                && score > _beta + HISTORY_BONUS_MARGIN
                                 && depth() >= HISTORY_MIN_DEPTH
                                 && !next_ctxt->is_capture()
                                 && counter_move->is_capture())
                             {
-                                get_tt()->_plyHistory[_ply][turn()][next_ctxt->_move] += score / depth();
+                                get_tt()->_plyHistory[_ply][turn()][next_ctxt->_move] += double(score) / depth();
                             }
                         }
                     }
