@@ -148,15 +148,19 @@ namespace search
         score_t     _alpha = SCORE_MIN;
         score_t     _beta = SCORE_MAX;
         score_t     _value = SCORE_MIN;
-        score_t     _eval = SCORE_MIN;
+        score_t     _eval = SCORE_MIN; /* static eval */
         score_t     _king_safety = SCORE_MIN;
         score_t     _threats = SCORE_MIN;
         BaseMove    _hash_move;
         bool        _singleton = false;
         uint32_t    _version = 0;
+    #if !NO_ASSERT
         void*       _lock = nullptr;
 
-        explicit TT_Entry(void* lock = nullptr) : _lock(lock) {}
+        explicit TT_Entry(void* lock = nullptr): _lock(lock) {}
+    #else
+        explicit TT_Entry() {}
+    #endif /* NO_ASSERT */
 
         INLINE bool is_lower() const { return _value >= _beta; }
         INLINE bool is_upper() const { return _value <= _alpha; }

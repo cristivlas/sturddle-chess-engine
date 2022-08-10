@@ -85,7 +85,10 @@ namespace search
                 while (std::atomic_flag_test_and_set_explicit(lock_p(), ACQUIRE))
                     ;
                 _locked = true;
+
+            #if !NO_ASSERT
                 entry()->_lock = this;
+            #endif /* NO_ASSERT */
             }
 
             INLINE void release()
@@ -102,7 +105,9 @@ namespace search
                 if (!std::atomic_flag_test_and_set_explicit(lock_p(), ACQUIRE))
                 {
                     _locked = true;
+                #if !NO_ASSERT
                     entry()->_lock = this;
+                #endif /* NO_ASSERT */
                 }
             }
     #else
@@ -135,8 +140,10 @@ namespace search
                 , _locked(other._locked)
             {
                 other._locked = false;
+            #if !NO_ASSERT
                 if (_locked)
                     entry()->_lock = this;
+            #endif /* NO_ASSERT */
             }
             SpinLock(const SpinLock&) = delete;
             SpinLock& operator=(SpinLock&&) = delete;

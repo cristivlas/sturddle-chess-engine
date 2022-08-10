@@ -320,7 +320,11 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
 
     if (entry.is_valid() && !entry.matches(ctxt.state()))
     {
+#if !NO_ASSERT
         entry = TT_Entry(entry._lock);
+#else
+        entry = TT_Entry();
+#endif /* NO_ASSERT */
     }
    /*
     * Another thread has completed a deeper search from the time the current
