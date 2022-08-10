@@ -1022,7 +1022,12 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
              *
              * https://www.chessprogramming.org/PVS_and_Aspiration
              */
-            if (ASPIRATION_WINDOW && ctxt._ply == 0 && move_count == 1 && move_score <= table._w_alpha)
+            if (ASPIRATION_WINDOW
+                && ctxt._ply == 0
+                && move_count == 1
+                && move_score < MATE_HIGH
+                && move_score < table._w_alpha
+                && ctxt.evaluate() < table._w_alpha)
             {
                 ASSERT(!next_ctxt->is_null_move());
                 ctxt.reset_window();

@@ -709,10 +709,11 @@ namespace search
 
         for (auto color : { BLACK, WHITE })
         {
-            occupancy += SIGN[color] * popcount(state.pawns & state.occupied_co(color) & BB_CENTER);
+            const auto s = SIGN[color];
+            occupancy += s * popcount(state.pawns & state.occupied_co(color) & BB_CENTER);
 
             for_each_square(BB_CENTER, [&](Square square) {
-                attacks += SIGN[color] * popcount(state.pawns & BB_PAWN_ATTACKS[!color][square]);
+                attacks += s * popcount(state.pawns & BB_PAWN_ATTACKS[!color][square]);
             });
 
         }
