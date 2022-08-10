@@ -66,8 +66,10 @@ static void log_pv(const TranspositionTable& tt, const char* info)
 
 const score_t* TT_Entry::lookup_score(Context& ctxt) const
 {
-    if (is_valid() && _depth >= ctxt.depth())
+    if (_depth >= ctxt.depth())
     {
+        ASSERT(is_valid());
+
         if (is_lower())
         {
             ctxt._alpha = std::max(ctxt._alpha, _value);
@@ -272,7 +274,7 @@ const score_t* TranspositionTable::lookup(Context& ctxt)
     if (ctxt.is_repeated() > 0)
         return nullptr;
 
-    if (auto p = _table->lookup<Acquire::Read>(ctxt.state()))
+    if (const auto p = _table->lookup<Acquire::Read>(ctxt.state()))
     {
         ASSERT(p->matches(ctxt.state()));
         ctxt._tt_entry = *p;
@@ -337,11 +339,8 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
 
     ++entry._version;
 
-    /* Store hash move (cutoff or best) */
-    auto move = ctxt._cutoff_move;
-
-    if (!move && ctxt._best_move)
-        move = ctxt._best_move;
+    /* Store or reset hash move */
+    auto move = ctxt._best_move;
 
     if (move
         || (entry.is_lower() && ctxt._score < entry._value)
