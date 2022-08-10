@@ -123,7 +123,7 @@ DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
 DECLARE_CONST(  STATIC_EXCHANGES,                     0,    0,       1)
 
 GROUP(Search)
-DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  415,    0,    1000)
+DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  420,    0,    1000)
 DECLARE_VALUE(  DOUBLE_EXT_MAX,                       6,    0,     100)
 DECLARE_VALUE(  HISTORY_BONUS_MARGIN,               110,    0,    1000)
 DECLARE_VALUE(  IMPROVEMENT_EXT_DIV,                 33,    1,     200)

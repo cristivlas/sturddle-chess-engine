@@ -267,11 +267,10 @@ BaseMove TranspositionTable::lookup_countermove(const Context& ctxt) const
 
 const score_t* TranspositionTable::lookup(Context& ctxt)
 {
-    if (ctxt._excluded)
-        return nullptr;
+    /* expect repetitions to be dealt with before calling into this function */
+    ASSERT(ctxt.is_repeated() <= 0);
 
-    /* evaluate repetitions rather than using stored value */
-    if (ctxt.is_repeated() > 0)
+    if (ctxt._excluded)
         return nullptr;
 
     if (const auto p = _table->lookup<Acquire::Read>(ctxt.state()))
