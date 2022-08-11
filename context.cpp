@@ -293,23 +293,6 @@ namespace search
                             if (score >= CHECKMATE - next_ctxt->depth())
                                 _parent->_mate_detected = CHECKMATE - score + 1;
                         }
-                        else if (const auto counter_move = next_ctxt->next_ply())
-                        {
-                            /*
-                             * give a bonus to non-capturing moves that
-                             * beat beta even when countered by captures
-                             */
-                            if (_ply < PLY_HISTORY_MAX
-                                && score > 0
-                                && score < MATE_HIGH
-                                && score > _beta + HISTORY_BONUS_MARGIN
-                                && depth() >= HISTORY_MIN_DEPTH
-                                && !next_ctxt->is_capture()
-                                && counter_move->is_capture())
-                            {
-                                get_tt()->_plyHistory[_ply][turn()][next_ctxt->_move] += double(score) / depth();
-                            }
-                        }
                     }
                 }
 
@@ -1621,6 +1604,8 @@ namespace search
 
     /* static */ void Context::set_time_limit_ms(int time_limit)
     {
+        ASSERT_ALWAYS(time_limit >= 0);
+
         /*
          * Time limits can be updated from a different
          * thread, to support pondering in the background.
