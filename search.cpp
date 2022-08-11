@@ -1026,6 +1026,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 && move_count == 1
                 && move_score < MATE_HIGH
                 && move_score < table._w_alpha
+                && ctxt.tid() == 0 /* main thread */
                 && ctxt.evaluate() < table._w_alpha)
             {
                 ASSERT(!next_ctxt->is_null_move());

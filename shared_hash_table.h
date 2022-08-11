@@ -47,7 +47,7 @@ namespace search
 #endif /* TRY_LOCK_ON_READ */
 
 
-    template<typename T, int BUCKET_SIZE = 192> class SharedHashTable
+    template<typename T, int BUCKET_SIZE = 16> class SharedHashTable
     {
         using entry_t = T;
         using data_t = std::vector<entry_t>;
@@ -239,7 +239,7 @@ namespace search
 
                     const auto age = p->_age;
 
-                    if (age == _clock && p->matches(state))
+                    if (p->matches(state))
                     {
                         return p;
                     }

@@ -1417,15 +1417,16 @@ namespace search
             {
                 _alpha = std::max(SCORE_MIN, score - wnd_bounds[iteration()]);
                 _beta = std::min(SCORE_MAX, score + wnd_bounds[iteration()]);
-
+            #if 0
                 if (_alpha > _tt->_w_alpha || _beta < _tt->_w_beta)
                 {
                     /*
-                     * bump up the clock if the window is shrinking, so that
-                     * future lookups ignore entries from wider search windows
+                     * bump up the clock if the window is shrinking, so that entries
+                     * from previous searches are first choice candidates for overwrite
                      */
                     TranspositionTable::increment_clock();
                 }
+            #endif /* 0 */
             }
         }
 
