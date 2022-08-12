@@ -72,18 +72,6 @@ namespace chess
     }
 
 
-    Bitboard square_file_mask(Square square)
-    {
-        return BB_FILE_MASKS[square];
-    }
-
-
-    Bitboard square_rank_mask(Square square)
-    {
-        return BB_RANK_MASKS[square];
-    }
-
-
     std::string square_name(Square s)
     {
         if (s == UNDEFINED)
@@ -254,14 +242,18 @@ namespace chess
         Bitboard checks[2] = { 0 };
         Bitboard pinned[2] = { 0, 0 };
 
+        const auto occupied = this->occupied();
+
         /*
          * Step 1, build some tables...
          */
         for (const auto color: {BLACK, WHITE})
         {
-            for_each_square(occupied_co(color), [&](Square square) {
+            const auto our_pieces = this->occupied_co(color);
+
+            for_each_square(our_pieces, [&](Square square) {
                 const auto piece_type = piece_type_at(square);
-                auto piece_attacks = attacks_mask(square);
+                auto piece_attacks = attacks_mask(square, occupied);
 
                 checks_from[color][square] = piece_attacks;
                 checks[color] |= piece_attacks;
@@ -271,11 +263,9 @@ namespace chess
                 pinned[color] |= (mask != BB_ALL) * BB_SQUARES[square];
 
                 attacks[color][piece_type] |= piece_attacks;
-                attacks_from[color][square] = piece_attacks & ~(kings | occupied_co(color));
+                attacks_from[color][square] = piece_attacks & ~(kings | our_pieces);
             });
         }
-
-        const auto occupied = this->occupied();
         /*
          * Step 2, count where pieces can go without being captured by the
          * king or pieces of lower values, king not allowed to move into check.
@@ -405,12 +395,13 @@ namespace chess
 
         to_mask &= ~kings;
 
-        const auto our_pieces = occupied_co(turn);
+        const auto our_pieces = this->occupied_co(turn);
+        const auto occupied = this->occupied();
 
         /* Piece moves.*/
         if (const auto non_pawns = our_pieces & ~pawns & from_mask)
             for_each_square(non_pawns, [&](Square from_square) {
-                auto moves = attacks_mask(from_square) & ~our_pieces & to_mask;
+                auto moves = attacks_mask(from_square, occupied) & ~our_pieces & to_mask;
                 for_each_square(moves, [&](Square to_square) {
                     add_move(moves_list, from_square, to_square);
                 });
@@ -479,14 +470,16 @@ namespace chess
         if ((BB_SQUARES[king_square] & backrank & BB_FILE_E) == 0)
             return;
 
+        const auto occupied = this->occupied();
+
         /* king in check? */
-        if (attackers_mask(!turn, king_square))
+        if (attackers_mask(!turn, king_square, occupied))
             return;
 
         for_each_square((rooks & occupied_co(turn) & castling_rights), [&](Square rook_square)
         {
             /* any pieces between the king and the rook? */
-            if (between(king_square, rook_square) & occupied())
+            if (between(king_square, rook_square) & occupied)
                 return;
 
             const auto rook_file = square_file(rook_square);
@@ -501,7 +494,7 @@ namespace chess
 
             /* is any square in king's path under attack? */
             if (for_each_square_r<bool>(path, [&](Square sq) {
-                return attackers_mask(!turn, sq) != 0;
+                return attackers_mask(!turn, sq, occupied) != 0;
             }))
                 return;
 

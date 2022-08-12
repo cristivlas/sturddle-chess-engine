@@ -54,7 +54,7 @@ struct Config
 std::string Config::_group;
 
 Config::Namespace Config::_namespace = {
-#if MOBILITY_TUNING_ENABLED && EVAL_MOBILITY
+#if MOBILITY_TUNING_ENABLED
     /* Piece mobility coefficients */
     { "MOBILITY_PAWN", Config::Param{ &chess::MOBILITY[chess::PieceType::PAWN], 0, 50 } },
     { "MOBILITY_KNIGHT", Config::Param{ &chess::MOBILITY[chess::PieceType::KNIGHT], 0, 50 } },
@@ -62,7 +62,7 @@ Config::Namespace Config::_namespace = {
     { "MOBILITY_ROOK", Config::Param{ &chess::MOBILITY[chess::PieceType::ROOK], 0, 50 } },
     { "MOBILITY_QUEEN", Config::Param{ &chess::MOBILITY[chess::PieceType::QUEEN], 0, 50 } },
     { "MOBILITY_KING", Config::Param{ &chess::MOBILITY[chess::PieceType::KING], 0, 50 } },
-#endif /* MOBILITY_TUNING_ENABLED && EVAL_MOBILITY */
+#endif /* MOBILITY_TUNING_ENABLED */
 };
 
   #define GROUP(x) Config::Group __##x(_TOSTR(x));

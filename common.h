@@ -64,7 +64,6 @@ using score_t = int32_t;
  */
 #define COUNT_VALID_MOVES_AS_NODES          true
 
-#define EVAL_MOBILITY                       true
 
 /* NOTE: this setting has no effect when using SEE */
 #define EXCHANGES_DETECT_CHECKMATE          false
@@ -134,9 +133,6 @@ using score_t = int32_t;
  * https://github.com/goutham/magic-bits
  */
 #define USE_MAGIC_BITS                      true
-
-/* Half-baked hack */
-#define USE_MOVES_CACHE                     false
 
 
 /*

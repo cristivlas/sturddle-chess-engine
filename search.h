@@ -43,15 +43,22 @@ constexpr score_t MATE_LOW  = -MATE_HIGH;
 constexpr score_t HALF_WINDOW = chess::WEIGHT[chess::PieceType::PAWN] / 4;
 
 
+constexpr score_t checkmated(int ply)
+{
+    return -CHECKMATE + ply;
+}
+
+
+constexpr score_t checkmating(int ply)
+{
+    return CHECKMATE + ply;
+}
+
+
 namespace search
 {
     struct Context;
     class TranspositionTable;
-
-#if USE_MOVES_CACHE
-    using MovesCache = SharedHashTable<struct Moves, 1>;
-    extern std::shared_ptr<MovesCache> moves_cache;
-#endif /* USE_MOVES_CACHE */
 
     /*
      * Search algorithms
@@ -62,7 +69,7 @@ namespace search
 
 
     using BaseMove = chess::BaseMove;
-    using BaseMovesList = std::vector<BaseMove>;
+    using PV = std::vector<BaseMove>;
     using Color = chess::Color;
     using Move = chess::Move;
     using MovesList = chess::MovesList;
@@ -201,7 +208,7 @@ namespace search
         int _tid = 0;
         int _iteration = 0;
         int _eval_depth = 0;
-        BaseMovesList _pv; /* principal variation */
+        PV  _pv; /* principal variation */
         PlyHistory _plyHistory;
 
         MovesList _initial_moves;
@@ -229,7 +236,7 @@ namespace search
         size_t _reductions = 0;
         size_t _retry_reductions = 0;
 
-        Move lookup_countermove(const Context&) const;
+        BaseMove lookup_countermove(const Context&) const;
 
         const KillerMoves* get_killer_moves(int ply) const
         {
@@ -237,10 +244,10 @@ namespace search
             return &_killer_moves[ply];
         }
 
-        const BaseMovesList& get_pv() const { return _pv; }
+        const PV& get_pv() const { return _pv; }
 
         template<bool Debug=false>
-        void get_pv_from_table(Context&, const Context&, BaseMovesList&);
+        void get_pv_from_table(Context&, const Context&, PV&);
 
         const score_t* lookup(Context&);
 

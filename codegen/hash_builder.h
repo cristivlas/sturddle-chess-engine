@@ -146,11 +146,32 @@ namespace
 
             for (const auto& elem : _groups)
             {
+                /* hack: see if all hash funcs used by attack tables group have index 0 */
+                int hash_func_index = 0;
+
+                const auto& group = elem.second;
+                for (const auto& hf : group._hash_funcs)
+                {
+                    hash_func_index = _hash_funcs.at(hf);
+                    if (hash_func_index)
+                        break;
+                }
+
                 os << "\ntemplate<> struct Attacks<" << type[elem.first] << ">\n";
                 os << "{\n";
-                os << "    INLINE static uint64_t get(int square, uint64_t mask)\n";
+                os << "    INLINE static uint64_t get(int square, uint64_t mask) noexcept\n";
                 os << "    {\n";
-                os << "        return impl::" << elem.first << "[square][mask];\n";
+
+                if (hash_func_index == 0)
+                {
+                    /* can bypass switch(_strategy) */
+                    os << "        return impl::" << elem.first << "[square]._data[impl::";
+                    os << _hash_funcs_index.at(0) << "(mask)];\n";
+                }
+                else
+                {
+                    os << "        return impl::" << elem.first << "[square][mask];\n";
+                }
                 os << "    }\n";
                 os << "};\n";
             }
@@ -193,20 +214,6 @@ namespace
 
         void generate_unified_hash_function(std::ostream& os)
         {
-            os << "/************************************************************/\n";
-            os << "/* Unified hash function. */\n";
-            os << "/************************************************************/\n";
-            os << "INLINE size_t hash(int i, uint64_t u)\n";
-            os << "{\n";
-            os << "    switch (i)\n";
-            os << "    {\n";
-        #if 0
-            for (const auto& index : _hash_funcs_index)
-            {
-                os << "    case " << index.first << ":\n";
-                os << "        return " << index.second << "(u);\n";
-            }
-        #else
             /* sort by utilization */
             std::vector<std::string> hfuncs;
             for (const auto& index : _hash_funcs)
@@ -217,17 +224,29 @@ namespace
                     return _hash_freq.at(lhs) > _hash_freq.at(rhs);
                 });
 
-            /* reindex */
+            /* re-index */
             _hash_funcs.clear();
+            _hash_funcs_index.clear();
+
             for (size_t i = 0; i != hfuncs.size(); ++i)
+            {
                 _hash_funcs.emplace(hfuncs[i], i);
+                _hash_funcs_index.emplace(i, hfuncs[i]);
+            }
+
+            os << "/************************************************************/\n";
+            os << "/* Unified hash function. */\n";
+            os << "/************************************************************/\n";
+            os << "INLINE size_t hash(int i, uint64_t u) noexcept\n";
+            os << "{\n";
+            os << "    switch (i)\n";
+            os << "    {\n";
 
             for (const auto& hf : hfuncs)
             {
                 os << "    case " << _hash_funcs.at(hf) << ": /* usage: " << _hash_freq.at(hf) << " */\n";
                 os << "        return " << hf << "(u);\n";
             }
-        #endif /* 0 */
 
             os << "    }\n";
             os << "    return 0;\n";
@@ -542,7 +561,8 @@ namespace
             for (size_t table_size : { 64 })
                 add_group_reversed<Identity>(table_size);
         #endif
-            for (size_t table_size : { 1024, 2048, 4096 })
+
+            for (size_t table_size : { 512, 2048, 4096 })
                 add_multipliers(table_size);
         }
 

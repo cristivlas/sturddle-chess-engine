@@ -208,7 +208,7 @@ namespace search
         TT_Entry    _tt_entry;
         Square      _capture_square = Square::UNDEFINED;
 
-        static void cancel();
+        static void cancel() { _cancel.store(true, std::memory_order_relaxed); }
 
         Context*    clone(Context*, int ply = 0) const;
 
@@ -238,16 +238,16 @@ namespace search
         const Move* first_valid_move();
         score_t     futility_margin();
 
-        bool        has_improved(score_t margin = 0) { return improvement() > margin; }
+        bool        has_improved(score_t margin = 0) const { return improvement() > margin; }
         bool        has_moves() { return _move_maker.has_moves(*this); }
 
         int         history_count(const Move&) const;
         float       history_score(const Move&) const;
 
-        score_t     improvement();
+        score_t     improvement() const;
         static void init();
-        bool        is_beta_cutoff(Context*, score_t, BaseMove&);
-        static bool is_cancelled() { return _cancel; }
+        bool        is_beta_cutoff(Context*, score_t);
+        static bool is_cancelled() { return _cancel.load(std::memory_order_relaxed); }
         bool        is_capture() const { return state().capture_value != 0; }
         bool        is_check() const { return state().is_check(); }
         bool        is_counter_move(const Move&) const;
@@ -286,7 +286,7 @@ namespace search
         void        reinitialize();
         int         rewind(int where = 0, bool reorder = false);
 
-        void        set_counter_move(const Move& move) { _counter_move = move; }
+        void        set_counter_move(const BaseMove& move) { _counter_move = move; }
         void        set_search_window(score_t, bool reset = false);
 
         static void set_time_limit_ms(int milliseconds);
@@ -316,7 +316,7 @@ namespace search
         }
 
         /* retrieve PV from TT */
-        const BaseMovesList& get_pv() const { return get_tt()->get_pv(); }
+        const PV& get_pv() const { return get_tt()->get_pv(); }
 
         /* buffers for generating and making moves */
         static MovesList& moves(int tid, int ply);
@@ -346,7 +346,7 @@ namespace search
 
         int repeated_count(const State&) const;
 
-        Move                _counter_move;
+        BaseMove            _counter_move;
         mutable int         _can_prune = -1;
         State               _statebuf;
         bool                _leftmost = false;
@@ -471,7 +471,7 @@ namespace search
         ASSERT(move._state);
 
         const auto& state = *move._state;
-        if (state.attacks_mask(move.to_square()) & state.kings & state.occupied_co(state.turn))
+        if (state.attacks_mask(move.to_square(), state.occupied()) & state.kings & state.occupied_co(state.turn))
         {
             ASSERT(state.is_check());
             return true;
@@ -647,9 +647,34 @@ namespace search
     }
 
 
+    /*
+     * Improvement for the side that just moved.
+     */
+    INLINE score_t Context::improvement() const
+    {
+        if (_ply < 2 || _excluded || is_promotion())
+            return 0;
+
+        const auto prev = _parent->_parent;
+
+        if (abs(_tt_entry._eval) < MATE_HIGH && abs(prev->_tt_entry._eval) < MATE_HIGH)
+            return std::max(0, prev->_tt_entry._eval - _tt_entry._eval);
+
+        return std::max(0,
+              eval_material_and_piece_squares(*_state)
+            - eval_material_and_piece_squares(*prev->_state));
+    }
+
+
     INLINE bool Context::is_counter_move(const Move& move) const
     {
         return _counter_move == move;
+    }
+
+
+    INLINE bool Context::is_evasion() const
+    {
+        return _parent && _parent->is_check();
     }
 
 
@@ -740,7 +765,7 @@ namespace search
         const bool retry = _retry_next;
         _retry_next = false;
 
-        if (!_excluded && !on_next() /* && !is_check() */)
+        if (!_excluded && !on_next())
             return nullptr;
 
         /* null move must be tried before actual moves */
@@ -887,7 +912,7 @@ namespace search
                 cython_wrapper::call(_on_next, _engine, millisec);
         }
 
-        return !is_cancelled(); /* check again in case _on_next called cancel() */
+        return !is_cancelled();
     }
 
 
@@ -1128,6 +1153,9 @@ namespace search
     }
 
 
+    static const auto LMP = lmp(std::make_index_sequence<PLY_MAX>{});
+
+
     /*
      * Return false if the move is not legal, or pruned.
      */
@@ -1149,19 +1177,6 @@ namespace search
             return (_have_move = true);
         }
 
-        ctxt.state().clone_into(*move._state);
-
-        ASSERT(move._state->capture_value == 0);
-
-        /* capturing the king is an illegal move (Louis XV?) */
-        if (move._state->kings & chess::BB_SQUARES[move.to_square()])
-        {
-            mark_as_illegal(move);
-            return false;
-        }
-
-        static const auto LMP = lmp(std::make_index_sequence<PLY_MAX>{});
-
         /*
          * Prune (before verifying move legality, thus saving is_check() calls).
          * Late-move prune before making the move.
@@ -1174,6 +1189,17 @@ namespace search
             _have_pruned_moves = true;
             ++ctxt._pruned_count;
             move._group = MoveOrder::PRUNED_MOVES;
+            return false;
+        }
+
+        ctxt.state().clone_into(*move._state);
+
+        ASSERT(move._state->capture_value == 0);
+
+        /* capturing the king is an illegal move (Louis XV?) */
+        if (move._state->kings & chess::BB_SQUARES[move.to_square()])
+        {
+            mark_as_illegal(move);
             return false;
         }
 

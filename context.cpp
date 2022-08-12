@@ -232,7 +232,7 @@ namespace search
      * Track the best score and move so far, return true if beta cutoff;
      * called from search right after: score = -negamax(*next_ctxt).
      */
-    bool Context::is_beta_cutoff(Context* next_ctxt, score_t score, BaseMove& next_best)
+    bool Context::is_beta_cutoff(Context* next_ctxt, score_t score)
     {
         ASSERT(next_ctxt->_ply != 0);
         ASSERT(score > SCORE_MIN && score < SCORE_MAX);
@@ -276,8 +276,6 @@ namespace search
                         return false;
                     }
 
-                    next_best = next_ctxt->_best_move;
-
                     if (score >= _beta)
                     {
                         _cutoff_move = next_ctxt->_move;
@@ -318,23 +316,15 @@ namespace search
 
     score_t Context::evaluate()
     {
+        ASSERT(_fifty < 100);
+        ASSERT(!is_repeated());
+
         ++_tt->_eval_count;
 
-        auto score = _evaluate();
+        const auto score = _evaluate();
 
         ASSERT(score > SCORE_MIN);
         ASSERT(score < SCORE_MAX);
-
-        /* detect draws by repetition and by fifty-moves rule */
-
-        if (is_repeated() > 0)
-        {
-            score = 0;
-        }
-        else if (_fifty >= 100)
-        {
-            score = 0;
-        }
 
         return score;
     }
@@ -357,7 +347,7 @@ namespace search
             return evaluate();
         }
 
-        return is_check() ? -CHECKMATE + _ply : 0;
+        return is_check() ? checkmated(_ply) : 0;
     }
 
 
@@ -448,7 +438,7 @@ namespace search
                 {
                     score = CHECKMATE - (ply + 1 - FIRST_EXCHANGE_PLY);
 
-                    if (debug)
+                    if constexpr(Debug)
                     {
                         std::ostringstream out;
                         out << "\t<<< " << move.uci() << ": CHECKMATE " << score;
@@ -715,10 +705,11 @@ namespace search
 
         for (auto color : { BLACK, WHITE })
         {
-            occupancy += SIGN[color] * popcount(state.pawns & state.occupied_co(color) & BB_CENTER);
+            const auto s = SIGN[color];
+            occupancy += s * popcount(state.pawns & state.occupied_co(color) & BB_CENTER);
 
             for_each_square(BB_CENTER, [&](Square square) {
-                attacks += SIGN[color] * popcount(state.pawns & BB_PAWN_ATTACKS[!color][square]);
+                attacks += s * popcount(state.pawns & BB_PAWN_ATTACKS[!color][square]);
             });
 
         }
@@ -783,6 +774,8 @@ namespace search
         int outside = 0; /* penalty for king out of ranks [0,1] */
         int shield  = 0; /* pawn shield bonus */
 
+        const auto occupied = state.occupied();
+
         for (auto color : { BLACK, WHITE })
         {
             const auto king = state.king(color);
@@ -818,7 +811,7 @@ namespace search
                 double attacks_value = 0;
 
                 const auto attackers_mask =
-                    state.attacker_pieces_mask(!color, square);
+                    state.attacker_pieces_mask(!color, square, occupied);
 
                 for_each_square(attackers_mask, [&](Square attacking_square) {
                     const auto pt = state.piece_type_at(attacking_square);
@@ -840,7 +833,11 @@ namespace search
     }
 
 
-    static INLINE int eval_material_imbalance(const State& state, int pcs, score_t mat_eval)
+    /*
+     * If the difference in material is with a pawn or less, favor
+     * the side with two minor pieces over the side with extra rook.
+     */
+    static INLINE int eval_redundant_rook(const State& state, int pcs, score_t mat_eval)
     {
         int score = 0;
 
@@ -875,8 +872,12 @@ namespace search
         int open_score = 0;
         int half_open_score = 0;
 
+        const auto occupied = state.occupied();
+
         for (auto color : { BLACK, WHITE })
         {
+            const auto s = SIGN[color];
+
             const auto own_color_mask = state.occupied_co(color);
             const auto their_color_mask = state.occupied_co(!color);
 
@@ -890,12 +891,12 @@ namespace search
                 {
                     if ((file_mask & state.pawns) == BB_EMPTY)
                     {
-                        open_score += SIGN[color];
+                        open_score += s;
                     }
                     else
                         if ((file_mask & state.pawns & own_color_mask) == BB_EMPTY)
                         {
-                            half_open_score += SIGN[color];
+                            half_open_score += s;
                         }
                     else
                         if ((file_mask & state.pawns & their_color_mask) == BB_EMPTY)
@@ -905,9 +906,9 @@ namespace search
                              * to opposite ranks (i.e. in front of its own pawns)? treat it as open file.
                              */
                             if (for_each_square_r<bool>(mask, [&](Square square) {
-                                return bool(state.attacks_mask(square) & file_mask & opposite_backranks[color]);
+                                return bool(state.attacks_mask(square, occupied) & file_mask & opposite_backranks[color]);
                             }))
-                                open_score += SIGN[color];
+                                open_score += s;
                         }
                 }
             }
@@ -940,9 +941,9 @@ namespace search
     }
 
 
-    static INLINE Bitboard pawn_defenders(const State& state, Color defender_color, Square square)
+    static INLINE Bitboard pawn_defenders(const State& state, Color color, Square square)
     {
-        return state.occupied_co(defender_color) & state.pawns & BB_PAWN_ATTACKS[!defender_color][square];
+        return state.occupied_co(color) & state.pawns & BB_PAWN_ATTACKS[!color][square];
     }
 
 
@@ -961,7 +962,7 @@ namespace search
                 });
             }
 
-            score += popcount(state.attacker_pieces_mask(color, pawn));
+            score += popcount(state.attacker_pieces_mask(color, pawn, state.occupied()));
         }
 
         return score;
@@ -978,7 +979,7 @@ namespace search
         };
 
         static
-    #if TUNING_ENABLED
+    #if TUNING_ENABLED || TUNING_PARTIAL
             const
     #else
             constexpr
@@ -1081,15 +1082,17 @@ namespace search
 
         for (auto color : { BLACK, WHITE })
         {
+            const auto sign = SIGN[color];
+
             if (const auto own_pawns = state.pawns & state.occupied_co(color))
             {
                 for (const auto& bb_file : BB_FILES)
                 {
                     auto n = popcount(own_pawns & bb_file);
-                    doubled += SIGN[color] * (n > 1) * (n - 1);
+                    doubled += sign * (n > 1) * (n - 1);
                 }
-                diff += SIGN[color] * popcount(own_pawns);
-                isolated += SIGN[color] * state.count_isolated_pawns(color);
+                diff += sign * popcount(own_pawns);
+                isolated += sign * state.count_isolated_pawns(color);
             }
         }
 
@@ -1103,12 +1106,13 @@ namespace search
     static INLINE int eval_threats(const State& state, int piece_count)
     {
         int diff = 0;
+        const auto occupied = state.occupied();
 
         for (auto color : { BLACK, WHITE })
         {
             const auto sign = SIGN[color];
             for_each_square(state.occupied_co(color) & ~(state.pawns | state.kings), [&](Square square) {
-                diff -= sign * popcount(state.attackers_mask(!color, square));
+                diff -= sign * popcount(state.attackers_mask(!color, square, occupied));
             });
         }
         return diff * interpolate(piece_count, MIDGAME_THREATS, ENDGAME_THREATS);
@@ -1121,7 +1125,7 @@ namespace search
 
         eval += eval_center(state, piece_count);
 
-        eval += eval_material_imbalance(state, piece_count, mat_eval);
+        eval += eval_redundant_rook(state, piece_count, mat_eval);
         eval += eval_open_files(state, piece_count);
         eval += eval_pawn_structure(state, piece_count);
         eval += eval_piece_grading(state, piece_count);
@@ -1248,7 +1252,7 @@ namespace search
      */
     void Context::extend()
     {
-        if (_extension || (_ply && depth() > 6))
+        if (_extension || depth() > 6)
         {
             /*
              * things that could add interestingness along the search path
@@ -1290,12 +1294,6 @@ namespace search
     }
 
 
-    void Context::cancel()
-    {
-        _cancel = true;
-    }
-
-
     /*
      * Reinitialize top context at the start of a new iteration.
      */
@@ -1307,10 +1305,6 @@ namespace search
         ASSERT(iteration());
         ASSERT(_retry_above_alpha == RETRY::None);
 
-    #if 0
-        /* ok to clear only if the iterative search  callback keeps track of best move */
-        _best_move = Move();
-    #endif
         _cancel = false;
         _can_prune = -1;
 
@@ -1392,31 +1386,6 @@ namespace search
     }
 
 
-    /*
-     * Improvement for the side that just moved.
-     */
-    score_t Context::improvement()
-    {
-        if (_ply < 2 || _excluded || is_promotion())
-            return 0;
-
-        if (abs(_tt_entry._eval) < MATE_HIGH &&
-            abs(_parent->_parent->_tt_entry._eval) < MATE_HIGH
-           )
-            return std::max(0, _parent->_parent->_tt_entry._eval - _tt_entry._eval);
-
-        return std::max(0,
-              eval_material_and_piece_squares(*_state)
-            - eval_material_and_piece_squares(*_parent->_parent->_state));
-    }
-
-
-    bool Context::is_evasion() const
-    {
-        return _parent && _parent->is_check();
-    }
-
-
     int Context::repeated_count(const State& state) const
     {
         ASSERT(_history);
@@ -1430,6 +1399,8 @@ namespace search
         {
             ASSERT(_history);
             _repetitions = repeated_count(state());
+
+            ASSERT(_repetitions >= 0);
         }
         return _repetitions;
     }
@@ -1503,6 +1474,9 @@ namespace search
      */
     bool Context::is_leaf()
     {
+        ASSERT(_fifty < 100);
+        ASSERT(is_repeated() <= 0);
+
         if (_ply == 0)
             return false;
 
@@ -1511,9 +1485,6 @@ namespace search
 
         /* the only available move */
         if (is_singleton() && _ply <= 1)
-            return true;
-
-        if (_fifty >= 100 || is_repeated())
             return true;
 
         if (depth() > 0
@@ -1563,7 +1534,7 @@ namespace search
 
         if (_time_limit >= 0 && millisec >= _time_limit)
         {
-            _cancel = true;
+            cancel();
             return -1;
         }
 
@@ -1731,35 +1702,6 @@ namespace search
     }
 
 
-#if USE_MOVES_CACHE
-    struct Moves
-    {
-        static constexpr int _depth = 0; /* unused */
-        static constexpr int _value = 0; /* unused */
-
-        uint16_t    _age = 0;
-        uint64_t    _hash = 0;
-        void*       _lock = nullptr;
-        MovesList   _moves;
-
-        INLINE bool matches(const State& state) const
-        {
-            return _hash == state.hash();
-        }
-
-        INLINE bool is_valid() const { return _hash; }
-
-        INLINE void update(const Context& ctxt, const MovesList& moves)
-        {
-            _hash = ctxt.state().hash();
-            _moves = moves;
-        }
-    };
-
-    auto moves_cache = std::make_shared<MovesCache>(49999);
-#endif /* USE_MOVES_CACHE */
-
-
     void MoveMaker::generate_unordered_moves(Context& ctxt)
     {
         /* pre-conditions */
@@ -1773,22 +1715,7 @@ namespace search
 
         if (ctxt.get_tt()->_initial_moves.empty())
         {
-            if (!USE_MOVES_CACHE || ctxt.state()._hash == 0)
-            {
-                ctxt.state().generate_pseudo_legal_moves(moves_list);
-            }
-#if USE_MOVES_CACHE
-            else if (auto p = moves_cache->lookup(ctxt.state(), Acquire::Read))
-            {
-                moves_list.assign(p->_moves.begin(), p->_moves.end());
-            }
-            else
-            {
-                ctxt.state().generate_pseudo_legal_moves(moves_list);
-
-                (*moves_cache->lookup(ctxt.state(), Acquire::Write)).update(ctxt, moves_list);
-            }
-#endif /* USE_MOVES_CACHE */
+            ctxt.state().generate_pseudo_legal_moves(moves_list);
         }
         else
         {
@@ -1855,6 +1782,9 @@ namespace search
     }
 
 
+    static const auto hist_thresholds = thresholds(std::make_index_sequence<PLY_MAX>{});
+
+
     /*
      * Order moves in multiple phases (passes). The idea is to minimize make_move() calls,
      * which validate the legality of the move. The granularity (number of phases) should
@@ -1862,7 +1792,6 @@ namespace search
      */
     void MoveMaker::order_moves(Context& ctxt, size_t start_at, score_t futility)
     {
-        static const auto hist_thresholds = thresholds(std::make_index_sequence<PLY_MAX>{});
         static constexpr int MAX_PHASE = 4;
 
         ASSERT(_phase <= MAX_PHASE);

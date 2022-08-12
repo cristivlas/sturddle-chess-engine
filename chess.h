@@ -290,8 +290,6 @@ namespace chess
 
     std::vector<int> scan_forward(Bitboard);
 
-    Bitboard square_file_mask(Square);
-    Bitboard square_rank_mask(Square);
 
     INLINE constexpr int square_file(int square)
     {
@@ -308,7 +306,9 @@ namespace chess
         return std::max(abs(square_file(a) - square_file(b)), abs(square_rank(a) - square_rank(b)));
     }
 
-    // https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating
+    /*
+     * https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating
+     */
     INLINE constexpr int square_mirror(int square)
     {
         return square ^ 0x38;
@@ -374,7 +374,7 @@ namespace chess
 
     public:
         BaseMove() = default;
-        BaseMove(Square from, Square to, PieceType promo)
+        BaseMove(Square from, Square to, PieceType promo) noexcept
             : _from_square(from)
             , _to_square(to)
             , _promotion(promo)
@@ -432,7 +432,7 @@ namespace chess
         Move(const Move&) = default;
         Move& operator=(const Move&) = default;
 
-        Move(Square from, Square to, PieceType promo = PieceType::NONE)
+        Move(Square from, Square to, PieceType promo = PieceType::NONE) noexcept
             : BaseMove(from, to, promo)
         {
         }
@@ -525,11 +525,11 @@ namespace chess
         PieceType _piece_types[64] = { PieceType::NONE };
 
         /* Get the bitboard of squares attacked from a given square */
-        Bitboard attacks_mask(Square) const;
+        Bitboard attacks_mask(Square, Bitboard occupied) const;
 
-        Bitboard attackers_mask(Color color, Square square) const
+        INLINE Bitboard attackers_mask(Color color, Square square, Bitboard occupied) const
         {
-            const auto attackers = attacker_pieces_mask(color, square)
+            const auto attackers = attacker_pieces_mask(color, square, occupied)
                 | (kings & BB_KING_ATTACKS[square])
                 | (pawns & BB_PAWN_ATTACKS[!color][square]);
 
@@ -540,14 +540,16 @@ namespace chess
          * Get the bitboard of squares attacked from a given square
          * by pieces other than pawns and kings.
          */
-        Bitboard attacker_pieces_mask(Color color, Square square) const
+        INLINE Bitboard attacker_pieces_mask(Color color, Square square, Bitboard occupied_mask) const
         {
-            const auto occupied_mask = occupied();
     #if USE_MAGIC_BITS
+            const auto bishop_attacks = magic_bits_attacks.Bishop(occupied_mask, square);
+            const auto rook_attacks = magic_bits_attacks.Rook(occupied_mask, square);
+
             const auto attackers = (knights & BB_KNIGHT_ATTACKS[square])
-                | (bishops & magic_bits_attacks.Bishop(occupied_mask, square))
-                | (rooks & magic_bits_attacks.Rook(occupied_mask, square))
-                | (queens & magic_bits_attacks.Queen(occupied_mask, square));
+                | (bishops & bishop_attacks)
+                | (rooks & rook_attacks)
+                | (queens & (bishop_attacks | rook_attacks));
     #else
             const auto rank_pieces = BB_RANK_MASKS[square] & occupied_mask;
             const auto file_pieces = BB_FILE_MASKS[square] & occupied_mask;
@@ -568,7 +570,7 @@ namespace chess
         INLINE Bitboard checkers_mask(Color turn) const
         {
             const auto king_square = king(turn);
-            return attackers_mask(!turn, king_square);
+            return attackers_mask(!turn, king_square, occupied());
         }
 
         INLINE Square king(Color color) const
@@ -649,7 +651,7 @@ namespace chess
     };
 
 
-    INLINE Bitboard Position::attacks_mask(Square square) const
+    INLINE Bitboard Position::attacks_mask(Square square, Bitboard occupied) const
     {
         const auto bb_square = BB_SQUARES[square];
 
@@ -669,7 +671,7 @@ namespace chess
         else
         {
             Bitboard mask = 0;
-            const auto occupied = black | white;
+
     #if USE_MAGIC_BITS
             if ((bb_square & bishops) || (bb_square & queens))
                 mask = magic_bits_attacks.Bishop(occupied, square);
@@ -879,7 +881,7 @@ namespace chess
         bool is_castle = false;
 
         PieceType promotion = PieceType::NONE;
-        mutable score_t simple_score = 0;
+        mutable score_t simple_score = 0; /* material and PST from white's POV */
 
         void apply_move(const BaseMove&);
 
@@ -911,7 +913,7 @@ namespace chess
         }
 
         /* evaluate base score from the perspective of the side to play */
-        score_t eval() const;
+        template<bool EVAL_MOBILITY = true> score_t eval() const;
 
         score_t eval_material() const;
 
@@ -933,20 +935,22 @@ namespace chess
 
         INLINE bool has_connected_rooks(Color color) const
         {
-            auto rook_mask = rooks & occupied_co(color);
+            const auto rook_mask = rooks & occupied_co(color);
+            const auto occupied = black | white;
 
             return for_each_square_r<bool>(rook_mask, [&](Square rook) {
-                return attacks_mask(rook) & rook_mask;
+                return attacks_mask(rook, occupied) & rook_mask;
             });
         }
 
         INLINE bool has_fork(Color color) const
         {
             const auto attacked = occupied_co(!color) & ~pawns;
+            const auto occupied = black | white;
 
             return for_each_square_r<bool>(occupied_co(color) & (pawns | knights | bishops),
                 [&](Square attacking_square) {
-                    return popcount(attacks_mask(attacking_square) & attacked) > 1;
+                    return popcount(attacks_mask(attacking_square, occupied) & attacked) > 1;
                 });
         }
 
@@ -1279,18 +1283,18 @@ namespace chess
     }
 
 
-    INLINE score_t State::eval() const
+    template<bool EVAL_MOBILITY> INLINE score_t State::eval() const
     {
-        if (!simple_score)
+        if (simple_score == 0)
             simple_score = eval_simple();
 
         auto value = simple_score;
 
-    #if EVAL_MOBILITY
-        if (!is_endgame())
-            value += eval_mobility();
-    #endif /* EVAL_MOBILITY */
-
+        if constexpr(EVAL_MOBILITY)
+        {
+            if (!is_endgame())
+                value += eval_mobility();
+        }
         return value * SIGN[turn];
     }
 
@@ -1323,7 +1327,7 @@ namespace chess
             || prev.is_castling(move)
             || prev.is_en_passant(move))
         {
-            simple_score = 0;
+            simple_score = 0; /* clear, eval() will recalculate */
         }
         else
         {

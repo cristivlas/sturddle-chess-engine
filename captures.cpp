@@ -38,7 +38,7 @@ namespace chess
         int             depth,
         Bitboard        counterattacks)
     {
-        auto attackers_mask = board.attackers_mask(color, target_square);
+        auto attackers_mask = board.attackers_mask(color, target_square, board.occupied());
 
         if (color == board.turn && board.is_check())
         {

@@ -66,8 +66,10 @@ static void log_pv(const TranspositionTable& tt, const char* info)
 
 const score_t* TT_Entry::lookup_score(Context& ctxt) const
 {
-    if (is_valid() && _depth >= ctxt.depth())
+    if (_depth >= ctxt.depth())
     {
+        ASSERT(is_valid());
+
         if (is_lower())
         {
             ctxt._alpha = std::max(ctxt._alpha, _value);
@@ -84,6 +86,7 @@ const score_t* TT_Entry::lookup_score(Context& ctxt) const
 
         if (ctxt._alpha >= ctxt._beta)
         {
+            ASSERT(_value >= ctxt._beta);
             return &_value;
         }
     }
@@ -237,10 +240,6 @@ void TranspositionTable::clear()
 /* static */ void TranspositionTable::increment_clock()
 {
     _table->increment_clock();
-
-#if USE_MOVES_CACHE
-    moves_cache->increment_clock();
-#endif /* USE_MOVES_CACHE */
 }
 
 
@@ -256,7 +255,7 @@ void TranspositionTable::clear()
 }
 
 
-Move TranspositionTable::lookup_countermove(const Context& ctxt) const
+BaseMove TranspositionTable::lookup_countermove(const Context& ctxt) const
 {
 #if USE_BUTTERFLY_TABLES
     return _countermoves[ctxt.turn()].lookup(ctxt._move);
@@ -269,14 +268,13 @@ Move TranspositionTable::lookup_countermove(const Context& ctxt) const
 
 const score_t* TranspositionTable::lookup(Context& ctxt)
 {
+    /* expect repetitions to be dealt with before calling into this function */
+    ASSERT(!ctxt.is_repeated());
+
     if (ctxt._excluded)
         return nullptr;
 
-    /* evaluate repetitions rather than using stored value */
-    if (ctxt.is_repeated() > 0)
-        return nullptr;
-
-    if (auto p = _table->lookup(ctxt.state(), Acquire::Read))
+    if (const auto p = _table->lookup<Acquire::Read>(ctxt.state()))
     {
         ASSERT(p->matches(ctxt.state()));
         ctxt._tt_entry = *p;
@@ -324,7 +322,11 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
 
     if (entry.is_valid() && !entry.matches(ctxt.state()))
     {
+#if !NO_ASSERT
         entry = TT_Entry(entry._lock);
+#else
+        entry = TT_Entry();
+#endif /* NO_ASSERT */
     }
    /*
     * Another thread has completed a deeper search from the time the current
@@ -337,11 +339,8 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
 
     ++entry._version;
 
-    /* Store hash move (cutoff or best) */
-    auto move = ctxt._cutoff_move;
-
-    if (!move && ctxt._best_move)
-        move = ctxt._best_move;
+    /* Store or reset hash move */
+    auto move = ctxt._best_move;
 
     if (move
         || (entry.is_lower() && ctxt._score < entry._value)
@@ -371,7 +370,7 @@ void TranspositionTable::store(Context& ctxt, score_t alpha, int depth)
     update_stats(ctxt);
 #endif /* EXTRA_STATS */
 
-    if (auto p = _table->lookup(ctxt.state(), Acquire::Write, depth, ctxt._score))
+    if (auto p = _table->lookup<Acquire::Write>(ctxt.state(), depth, ctxt._score))
     {
         store(ctxt, *p, alpha, depth);
     }
@@ -423,7 +422,7 @@ void TranspositionTable::store_killer_move(const Context& ctxt)
 
 
 template<bool Debug>
-void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, BaseMovesList& pv)
+void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, PV& pv)
 {
     auto state = ctxt.state().clone();
 
@@ -456,7 +455,7 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, B
         /* Add the move to the principal variation. */
         pv.emplace_back(move);
 
-        auto p = _table->lookup(state, Acquire::Read);
+        auto p = _table->lookup<Acquire::Read>(state);
         if (!p)
             break;
 
@@ -464,7 +463,6 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, B
 
         move = p->_hash_move;
     }
-
     if (state.is_checkmate())
     {
         /* The parity of the PV length tells which side is winning. */
@@ -475,13 +473,13 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, B
 
 
 template<bool Debug>
-void TranspositionTable::store_pv(Context& start)
+void TranspositionTable::store_pv(Context& root)
 {
-    BaseMovesList pv;
+    PV pv;
 
-    ASSERT(start._best_move);
+    ASSERT(root._best_move);
 
-    for (auto ctxt = &start; true; )
+    for (auto ctxt = &root; true; )
     {
         pv.emplace_back(ctxt->_move);
 
@@ -510,7 +508,7 @@ void TranspositionTable::store_pv(Context& start)
         if constexpr(Debug)
             std::cout << ctxt->_score << " hash: ";
 
-        get_pv_from_table<Debug>(start, *ctxt, pv);
+        get_pv_from_table<Debug>(root, *ctxt, pv);
         break;
     }
 
@@ -551,6 +549,7 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
 
     if (ctxt.is_cancelled())
         return false;
+
 
     /*
      * null move refuted? update capture_square and mate_detected
@@ -595,6 +594,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
         return false;
 
     const auto& state = ctxt.state();
+
     if (state.passed_pawns(!state.turn, BB_RANK_2 | BB_RANK_7) != BB_EMPTY)
         return false;
 
@@ -605,7 +605,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
     int move_count = 0, cutoffs = 0;
     const auto reduction = (ctxt.depth() - 1) / 2;
 
-    BaseMove best_move, next_best;
+    BaseMove best_move;
     score_t best_score = SCORE_MIN;
 
     /*
@@ -633,7 +633,6 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
             {
                 best_score = score;
                 best_move = next_ctxt->_move;
-                next_best = next_ctxt->_best_move;
             }
 
             if (++cutoffs >= min_cutoffs)
@@ -645,7 +644,6 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
 
                 /* Fix-up best move */
                 ctxt.next_ply()->_move = ctxt._best_move = best_move;
-                ctxt.next_ply()->_best_move = next_best;
 
                 return true;
             }
@@ -664,13 +662,14 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
 }
 
 
-static inline void
-update_pruned(TranspositionTable& table, Context& ctxt, const Context& next, size_t& count)
+static INLINE void update_pruned(Context& ctxt, const Context& next, size_t& count)
 {
     ASSERT(!next.is_capture());
 
     ++ctxt._pruned_count;
-    ++count;
+
+    if constexpr(EXTRA_STATS)
+        ++count;
 }
 
 
@@ -678,8 +677,28 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 {
     ASSERT(ctxt._beta > SCORE_MIN);
     ASSERT(ctxt._score <= ctxt._alpha);
+    ASSERT(ctxt._alpha < ctxt._beta);
 
     ctxt.set_tt(&table);
+
+    if (ctxt._ply != 0)
+    {
+        if (ctxt._fifty >= 100 || ctxt.is_repeated() > 0)
+            return 0;
+
+        /*
+         * Mating distance pruning: skip the search if a shorter mate was found.
+         * https://www.chessprogramming.org/Mate_Distance_Pruning
+         */
+        ctxt._alpha = std::max(checkmated(ctxt._ply), ctxt._alpha);
+        ctxt._beta = std::min(checkmating(ctxt._ply + 1), ctxt._beta);
+
+        if (ctxt._alpha >= ctxt._beta)
+        {
+            return ctxt._score = ctxt._alpha;
+        }
+    }
+
     /*
      * https://www.chessprogramming.org/Node_Types#PV
      */
@@ -688,24 +707,17 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         && (ctxt.is_leftmost() || ctxt._alpha + 1 < ctxt._beta);
 
     /* reduce by one ply at expected cut nodes */
-    ctxt._max_depth -=
-           !ctxt.is_pv_node()
+    if (!ctxt.is_pv_node()
         && !ctxt.is_null_move()
         && ctxt.depth() > 7
-        && ctxt.can_reduce();
+        && ctxt.can_reduce())
+    {
+        --ctxt._max_depth;
+    }
 
     if (ctxt._alpha + 1 < ctxt._beta)
     {
         ASSERT(ctxt._algorithm != NEGASCOUT || ctxt.is_leftmost() || ctxt.is_retry());
-    }
-
-    /* transposition table lookup */
-    if (const auto* p = table.lookup(ctxt))
-    {
-        ASSERT(ctxt._score == *p);
-        ASSERT(!ctxt._excluded);
-
-        return *p;
     }
 
     table._nodes += !COUNT_VALID_MOVES_AS_NODES;
@@ -719,6 +731,14 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
         ASSERT(ctxt._score > SCORE_MIN);
         ASSERT(ctxt._score < SCORE_MAX);
+    }
+    /* transposition table lookup */
+    else if (const auto* p = table.lookup(ctxt))
+    {
+        ASSERT(ctxt._score == *p);
+        ASSERT(!ctxt._excluded);
+
+        return *p;
     }
     else if (multicut(ctxt, table))
     {
@@ -768,8 +788,9 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         table._null_move_not_ok += !null_move;
     #endif /* EXTRA_STATS */
 
+        const auto root_depth = table._iteration;
+
         int move_count = 0, futility = -1;
-        BaseMove next_best;
 
         /* iterate over moves */
         while (auto next_ctxt = ctxt.next(std::exchange(null_move, false), futility))
@@ -792,100 +813,106 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
                         if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune())
                         {
-                            update_pruned(table, ctxt, *next_ctxt, table._futility_prune_count);
+                            update_pruned(ctxt, *next_ctxt, table._futility_prune_count);
                             continue;
                         }
                     }
                 }
 
-            #if SINGULAR_EXTENSION
-               /*
-                * https://www.chessprogramming.org/Singular_Extensions
-                *
-                * Implementation adapted from idea in SF:
-                * Check if the move matches a lower-bound TT entry (beta cutoff);
-                * if it does, search with reduced depth; if the result of the search
-                * does not beat beta, it means the move is singular (the only cutoff
-                * in the current position).
-                */
-                if (ctxt._ply != 0
-                    && !next_ctxt->is_singleton()
-                    && ctxt.depth() >= 7
-                    && ctxt._tt_entry.is_lower()
-                    && abs(ctxt._tt_entry._value) < MATE_HIGH
-                    && next_ctxt->_move == ctxt._tt_entry._hash_move
-                    && ctxt._tt_entry._depth >= ctxt.depth() - 3)
+                /*
+                 * Do not extend at root, or if already deeper than twice the depth at root
+                 */
+
+                if (ctxt._ply != 0 && ctxt._ply < root_depth * 2)
                 {
-                    ASSERT(!ctxt._excluded);
-                    ASSERT(ctxt._tt_entry.is_valid());
-
-                    auto s_beta = std::max(ctxt._tt_entry._value - ctxt.singular_margin(), SCORE_MIN + 1);
-
-                    /*
-                     * Hack: use ply + 2 for the singular search to avoid clobbering
-                     * _move_maker's _moves / _states stacks for the current context.
-                     */
-                    ContextBuffer buf;
-                    auto s_ctxt = ctxt.clone(buf.as_context(), ctxt._ply + 2);
-
-                    s_ctxt->set_tt(ctxt.get_tt());
-                    s_ctxt->set_initial_moves(ctxt);
-                    s_ctxt->_excluded = next_ctxt->_move;
-                    s_ctxt->_max_depth = s_ctxt->_ply + (ctxt.depth() - 1) / 2;
-                    s_ctxt->_alpha = s_beta - 1;
-                    s_ctxt->_beta = s_beta;
-                    s_ctxt->_score = SCORE_MIN;
-
-                    const auto value = negamax(*s_ctxt, table);
-
-                    if (ctxt.is_cancelled())
-                        break;
-
-                    if (value < s_beta && value > SCORE_MIN)
+                #if SINGULAR_EXTENSION
+                   /*
+                    * https://www.chessprogramming.org/Singular_Extensions
+                    *
+                    * Implementation adapted from idea in SF:
+                    * Check if the move matches a lower-bound TT entry (beta cutoff);
+                    * if it does, search with reduced depth; if the result of the search
+                    * does not beat beta, it means the move is singular (the only cutoff
+                    * in the current position).
+                    */
+                    if (!next_ctxt->is_singleton()
+                        && ctxt.depth() >= 7
+                        && ctxt._tt_entry.is_lower()
+                        && abs(ctxt._tt_entry._value) < MATE_HIGH
+                        && next_ctxt->_move == ctxt._tt_entry._hash_move
+                        && ctxt._tt_entry._depth >= ctxt.depth() - 3)
                     {
-                        next_ctxt->_extension += ONE_PLY;
+                        ASSERT(!ctxt._excluded);
+                        ASSERT(ctxt._tt_entry.is_valid());
 
-                        if (ctxt._double_ext <= DOUBLE_EXT_MAX
-                            && !ctxt.is_pv_node()
-                            && value + DOUBLE_EXT_MARGIN < s_beta)
-                        {
-                            ++next_ctxt->_max_depth;
-                            ++next_ctxt->_double_ext;
-                        }
-                    }
-                    /*
-                     * Got another fail-high from the (reduced) search that skipped the known
-                     * cutoff move, so there must be multiple cutoffs, do 2nd multicut pruning.
-                     */
-                    else if (s_beta >= ctxt._beta)
-                    {
-                    #if CACHE_HEURISTIC_CUTOFFS
-                        /* Store it in the TT as a cutoff move. */
-                        ctxt._alpha = ctxt._score = s_beta;
+                        auto s_beta = std::max(ctxt._tt_entry._value - ctxt.singular_margin(), SCORE_MIN + 1);
 
                         /*
-                         * Same as with null move pruning below, make sure that
-                         * the move is updated in the TT when storing the result.
+                         * Hack: use ply + 2 for the singular search to avoid clobbering
+                         * _move_maker's _moves / _states stacks for the current context.
                          */
-                        ctxt._cutoff_move = ctxt._best_move = next_ctxt->_move;
-                        break;
-                    #else
-                        return s_beta;
-                    #endif /* CACHE_HEURISTIC_CUTOFFS */
-                    }
-                    else if (ctxt._tt_entry._value >= ctxt._beta && next_ctxt->can_reduce())
-                    {
-                        next_ctxt->_max_depth -= 2;
-                    }
-                }
-            #endif /* SINGULAR_EXTENSION */
+                        ContextBuffer buf;
+                        auto s_ctxt = ctxt.clone(buf.as_context(), ctxt._ply + 2);
 
-                next_ctxt->extend(); /* apply fractional extensions */
+                        s_ctxt->set_tt(ctxt.get_tt());
+                        s_ctxt->set_initial_moves(ctxt);
+                        s_ctxt->_excluded = next_ctxt->_move;
+                        s_ctxt->_max_depth = s_ctxt->_ply + (ctxt.depth() - 1) / 2;
+                        s_ctxt->_alpha = s_beta - 1;
+                        s_ctxt->_beta = s_beta;
+                        s_ctxt->_score = SCORE_MIN;
+
+                        const auto value = negamax(*s_ctxt, table);
+
+                        if (ctxt.is_cancelled())
+                            break;
+
+                        if (value < s_beta && value > SCORE_MIN)
+                        {
+                            next_ctxt->_extension += ONE_PLY;
+
+                            if (ctxt._double_ext <= DOUBLE_EXT_MAX
+                                && !ctxt.is_pv_node()
+                                && value + DOUBLE_EXT_MARGIN < s_beta)
+                            {
+                                ++next_ctxt->_max_depth;
+                                ++next_ctxt->_double_ext;
+                            }
+                        }
+                        /*
+                         * Got another fail-high from the (reduced) search that skipped the known
+                         * cutoff move, so there must be multiple cutoffs, do 2nd multicut pruning.
+                         */
+                        else if (s_beta >= ctxt._beta)
+                        {
+                        #if CACHE_HEURISTIC_CUTOFFS
+                            /* Store it in the TT as a cutoff move. */
+                            ctxt._alpha = ctxt._score = s_beta;
+
+                            /*
+                             * Same as with null move pruning below, make sure that
+                             * the move is updated in the TT when storing the result.
+                             */
+                            ctxt._cutoff_move = ctxt._best_move = next_ctxt->_move;
+                            break;
+                        #else
+                            return s_beta;
+                        #endif /* CACHE_HEURISTIC_CUTOFFS */
+                        }
+                        else if (ctxt._tt_entry._value >= ctxt._beta && next_ctxt->can_reduce())
+                        {
+                            next_ctxt->_max_depth -= 2;
+                        }
+                    }
+                #endif /* SINGULAR_EXTENSION */
+
+                    next_ctxt->extend(); /* apply fractional extensions */
+                }
 
                 /* Late-move reduction and pruning */
                 if (move_count && next_ctxt->late_move_reduce(move_count) == LMRAction::Prune)
                 {
-                    update_pruned(table, ctxt, *next_ctxt, table._late_move_prune_count);
+                    update_pruned(ctxt, *next_ctxt, table._late_move_prune_count);
                     continue;
                 }
 
@@ -903,7 +930,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 return ctxt._score;
             }
 
-            if (ctxt.is_beta_cutoff(next_ctxt, move_score, next_best))
+            if (ctxt.is_beta_cutoff(next_ctxt, move_score))
             {
                 ASSERT(ctxt._score == move_score);
                 ASSERT(ctxt._cutoff_move || next_ctxt->is_null_move());
@@ -989,28 +1016,26 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             }
 
             /*
-             * If the 1st move fails low at root it may not be likely for
+             * If the 1st move fails low at root it maybe unlikely for the
              * subsequent moves to improve things much (assuming reasonable
-             * move ordering); readjust the aspiration window and retry, so
-             * that the upper bound gets more accurate.
+             * move ordering); readjust the aspiration window and retry.
+             *
              * https://www.chessprogramming.org/PVS_and_Aspiration
              */
-            if (table._iteration <= 7
+            if (ASPIRATION_WINDOW
                 && ctxt._ply == 0
-                && ctxt.tid() == 0
                 && move_count == 1
-                && move_score <= table._w_alpha
-               )
+                && move_score < MATE_HIGH
+                && move_score < table._w_alpha
+                && ctxt.tid() == 0 /* main thread */
+                && ctxt.evaluate() < table._w_alpha)
             {
                 ASSERT(!next_ctxt->is_null_move());
                 table._reset_window = true;
+
                 return move_score;
             }
         }
-
-        /* link up the principal variation */
-        ctxt.next_ply()->_move = ctxt._best_move;
-        ctxt.next_ply()->_best_move = next_best;
 
         ASSERT(ctxt._score <= ctxt._alpha || ctxt._best_move);
 
@@ -1093,7 +1118,7 @@ score_t search::mtdf(Context& ctxt, score_t first, TranspositionTable& table)
 
         ASSERT(g < SCORE_MAX); /* sanity check */
 
-        if (table._reset_window || ctxt.is_cancelled())
+        if (ctxt.is_cancelled())
             break;
 
         if (g < b)
@@ -1303,12 +1328,13 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
     score_t score = 0;
     max_iter_count = std::min(PLY_MAX, max_iter_count);
 
-    for (int i = 1; i != max_iter_count; table.increment_clock())
+    for (int i = 1; i != max_iter_count;)
     {
         table._iteration = i;
         ASSERT(ctxt.iteration() == i);
 
         ctxt.set_search_window(score);
+
         ctxt.reinitialize();
 
         {   /* SMP scope start */
@@ -1322,16 +1348,24 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
 
             if (table._reset_window)
             {
+            #if 0
+                std::cout << "WINDOW RESET(" << i << "): " << score << " (";
+                std::cout << table._w_alpha << ", " << table._w_beta << ")\n";
+            #endif
+
                 ctxt.cancel();
                 table._reset_window = false;
-                continue; /* keep looping at same depth */
+
+                continue;
             }
+
         }   /* SMP scope end */
 
         ASSERT(ctxt.iteration() == ctxt._max_depth);
 
         /* post iteration results to Cython */
-        cython_wrapper::call(Context::_on_iter, Context::_engine, &ctxt, score);
+        if (Context::_on_iter)
+            cython_wrapper::call(Context::_on_iter, Context::_engine, &ctxt, score);
 
         ++i;
     }

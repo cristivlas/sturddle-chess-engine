@@ -26,18 +26,13 @@ fixed_params = {
 }
 
 
-def engine(tweak=False, **kwargs):
-    command = make_path('sturddle.py')
-    if tweak:
-        command += ' --tweak'
-
-    command += ' --no-show-thinking'
+def engine(command, **kwargs):
 
     for p in fixed_params:
         kwargs[p] = fixed_params[p]
 
     return {
-        'command': f'{sys.executable} {command}',
+        'command': command,
         'fixed_parameters': kwargs,
     }
 
@@ -52,6 +47,7 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--rounds', type=int)
     parser.add_argument('-s', '--smp-cores', type=int, default=1)
     parser.add_argument('-t', '--time-control', default='1+0.1')
+    parser.add_argument('--no-args', action='store_true')
 
     params = {}
     groups = set()
@@ -92,10 +88,14 @@ if __name__ == '__main__':
         lo, hi, _ = params[p]
         tune_params[p] = f'({lo}, {hi})'
 
+    command = make_path('sturddle.py')
+    if not args.no_args:
+        command = f'{sys.executable} {command} --tweak --no-show-thinking'
+
     config = {
         'engines': [
-            engine(tweak=True, OwnBook=False, Algorithm='mtdf'),
-            engine(tweak=True, OwnBook=False, Algorithm='negascout' if args.asymmetric else 'mtdf'),
+            engine(command, OwnBook=False, Algorithm='mtdf'),
+            engine(command, OwnBook=False, Algorithm='negascout' if args.asymmetric else 'mtdf'),
         ],
         'parameter_ranges': tune_params,
         'acq_function': 'vr',

@@ -28,26 +28,32 @@ namespace search
 {
     enum class Acquire : int8_t
     {
-        TryLock,
-        Lock,
-
-#if TRY_LOCK_ON_READ
-        Read = TryLock,
-#else
-        Read = Lock,
-#endif /* !TRY_LOCK_ON_READ */
-
-        Write = Lock,
+        Read,
+        Write,
     };
 
+    template<Acquire> struct LockTraits
+    {
+        template<class S> static void lock(S& spin) { spin.lock(); }
+        template<class S> static bool constexpr is_locked(S& spin) { return true; }
+    };
 
-    template<typename T, int BUCKET_SIZE=16> class SharedHashTable
+#if TRY_LOCK_ON_READ
+    template<> struct LockTraits<Acquire::Read>
+    {
+        template<class S> static void lock(S& spin) { spin.try_lock(); }
+        template<class S> static bool is_locked(S& spin) { return spin.is_locked(); }
+    };
+#endif /* TRY_LOCK_ON_READ */
+
+
+    template<typename T, int BUCKET_SIZE = 16> class SharedHashTable
     {
         using entry_t = T;
         using data_t = std::vector<entry_t>;
 
     #if SMP
-        using locks_t = std::vector<std::atomic_bool>;
+        using locks_t = std::vector<std::atomic_flag>;
     #else
         struct locks_t /* dummy */
         {
@@ -65,20 +71,24 @@ namespace search
 
             using table_t = SharedHashTable;
 
+            template<Acquire> friend struct LockTraits;
+
             table_t*        _ht = nullptr;
             const size_t    _ix = 0;
             bool            _locked = false;
 
-        private:
     #if SMP
-            std::atomic_bool* lock_p() { return &_ht->_locks[_ix]; }
+            std::atomic_flag* lock_p() { return &_ht->_locks[_ix]; }
 
             INLINE void lock()
             {
-                while (std::atomic_exchange_explicit(lock_p(), true, ACQUIRE))
+                while (std::atomic_flag_test_and_set_explicit(lock_p(), ACQUIRE))
                     ;
                 _locked = true;
+
+            #if !NO_ASSERT
                 entry()->_lock = this;
+            #endif /* NO_ASSERT */
             }
 
             INLINE void release()
@@ -86,19 +96,19 @@ namespace search
                 ASSERT(_locked);
                 ASSERT(entry()->_lock == this);
 
-                std::atomic_store_explicit(lock_p(), false, RELEASE);
+                std::atomic_flag_clear_explicit(lock_p(), RELEASE);
                 _locked = false;
             }
 
-            INLINE bool try_lock()
+            INLINE void try_lock()
             {
-                if (!std::atomic_exchange_explicit(lock_p(), true, ACQUIRE))
+                if (!std::atomic_flag_test_and_set_explicit(lock_p(), ACQUIRE))
                 {
                     _locked = true;
+                #if !NO_ASSERT
                     entry()->_lock = this;
-                    return true;
+                #endif /* NO_ASSERT */
                 }
-                return false;
             }
     #else
             INLINE void lock() { _locked = true; }
@@ -107,34 +117,21 @@ namespace search
     #endif /* !SMP */
 
         protected:
-            entry_t* entry() { return _locked ? &_ht->_data[_ix] : nullptr; }
-            const entry_t* entry() const { return const_cast<SpinLock*>(this)->entry(); }
+            entry_t* entry() { ASSERT(_locked); return &_ht->_data[_ix]; }
 
             SpinLock() = default;
 
         public:
-            SpinLock(SharedHashTable& ht, size_t ix, Acquire acquire)
+            template<typename LockTraits> SpinLock(SharedHashTable& ht, size_t ix, LockTraits)
                 : _ht(&ht), _ix(ix)
             {
-                switch (acquire)
-                {
-                case Acquire::Lock:
-                    lock();
-                    break;
-
-                case Acquire::TryLock:
-                    try_lock();
-                    break;
-                }
+                LockTraits::lock(*this);
             }
 
             ~SpinLock()
             {
                 if (_locked)
-                {
-                    _ht->_data[_ix]._age = _ht->_clock;
                     release();
-                }
             }
 
             SpinLock(SpinLock&& other)
@@ -143,8 +140,10 @@ namespace search
                 , _locked(other._locked)
             {
                 other._locked = false;
+            #if !NO_ASSERT
                 if (_locked)
                     entry()->_lock = this;
+            #endif /* NO_ASSERT */
             }
             SpinLock(const SpinLock&) = delete;
             SpinLock& operator=(SpinLock&&) = delete;
@@ -152,7 +151,11 @@ namespace search
 
             bool is_locked() const { return _locked; }
             explicit operator bool() const { return is_locked(); }
+
+        protected:
+            uint16_t clock() const { return _ht->_clock; }
         };
+
 
         class Proxy : public SpinLock
         {
@@ -161,15 +164,23 @@ namespace search
         public:
             Proxy() = default;
 
-            Proxy(SharedHashTable& ht, size_t ix, Acquire acquire)
-                : SpinLock(ht, ix, acquire)
-                , _entry(this->entry())
+            template<typename LockTraits>
+            Proxy(SharedHashTable& ht, size_t ix, LockTraits lock_traits)
+                : SpinLock(ht, ix, lock_traits)
+                , _entry(LockTraits::is_locked(*this) ? this->entry() : nullptr)
             {
             }
 
             INLINE const entry_t* operator->() const { return _entry; }
             INLINE const entry_t& operator *() const { return *_entry; }
-            INLINE entry_t& operator *() { return *_entry; }
+
+            INLINE entry_t& operator *()
+            {
+                ASSERT(_entry);
+
+                _entry->_age = this->clock();
+                return *_entry;
+            }
         };
 
     public:
@@ -197,22 +208,29 @@ namespace search
             data_t(capacity).swap(_data);
         }
 
-        Proxy lookup(const chess::State& state, Acquire acquire, int depth = 0, int value = 0)
+        template<Acquire acquire>
+        Proxy lookup(const chess::State& state, int depth = 0, int value = 0)
         {
             const auto h = state.hash();
             size_t index = h % _data.size();
 
             for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
             {
-                Proxy p(*this, i, acquire);
+                Proxy p(*this, i, LockTraits<acquire>{});
 
-                if (p.is_locked())
+                if (LockTraits<acquire>::is_locked(p))
                 {
                     if (!p->is_valid())
                     {
-                        if (acquire == Acquire::Write)
+                        if constexpr (acquire == Acquire::Write)
                         {
-                            ++_used; /* slot is unoccupied, bump up usage count */
+                            /* slot is unoccupied, bump up usage count */
+                        #if SMP
+                            _used.fetch_add(1, std::memory_order_relaxed);
+                        #else
+                            ++_used;
+                        #endif /* SMP */
+
                             return p;
                         }
 
@@ -221,10 +239,11 @@ namespace search
 
                     const auto age = p->_age;
 
-                    if (p->matches(state) && age <= _clock)
+                    if (p->matches(state))
+                    {
                         return p;
-
-                    if (acquire == Acquire::Write)
+                    }
+                    if constexpr (acquire == Acquire::Write)
                     {
                         if (age != _clock)
                             return p;
@@ -237,21 +256,22 @@ namespace search
                     }
                 }
 
-            /*
-             * https://en.wikipedia.org/wiki/Open_addressing
-             */
-            #if QUADRATIC_PROBING
-                i = (h + j * j) % _data.size();
-            #else
-                i = (h + j) % _data.size();
-            #endif
+                /* https://en.wikipedia.org/wiki/Open_addressing */
+                if constexpr(QUADRATIC_PROBING)
+                    i = (h + j * j) % _data.size();
+                else
+                    i = (h + j) % _data.size();
             }
 
             /*
              * acquire == SpinLock::Acquire::Write: lock and return the entry at index;
              * otherwise: return unlocked Proxy, which means nullptr (no match found).
              */
-            return acquire == Acquire::Write ? Proxy(*this, index, acquire) : Proxy();
+
+            if constexpr (acquire == Acquire::Write)
+                return Proxy(*this, index, LockTraits<acquire>{});
+            else
+                return Proxy();
         }
 
         INLINE size_t capacity() const { return _data.size(); }
