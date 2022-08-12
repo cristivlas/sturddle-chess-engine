@@ -20,8 +20,10 @@
  */
 #pragma once
 
-#define QUADRATIC_PROBING   false
-#define TRY_LOCK_ON_READ    true
+static_assert(std::atomic<uint64_t>::is_always_lock_free);
+
+static constexpr uint64_t LOCKED = uint64_t(-1);
+static constexpr auto QUADRATIC_PROBING = false;
 
 
 namespace search
@@ -32,19 +34,29 @@ namespace search
         Write,
     };
 
-    template<Acquire> struct LockTraits
+    template<Acquire> struct LockTraits /* write lock */
     {
-        template<class S> static void lock(S& spin) { spin.lock(); }
-        template<class S> static bool constexpr is_locked(S& spin) { return true; }
+        template<typename S, typename V, typename K>
+        static void lock(S& spin, const V* entry, K key)
+        {
+            spin.write_lock(entry, key);
+        }
+
+        /* write locks should always succeed */
+        template<typename S> static bool constexpr is_locked(S&) { return true; }
     };
 
-#if TRY_LOCK_ON_READ
+
     template<> struct LockTraits<Acquire::Read>
     {
-        template<class S> static void lock(S& spin) { spin.try_lock(); }
-        template<class S> static bool is_locked(S& spin) { return spin.is_locked(); }
+        template<typename S, typename V, typename K>
+        static void lock(S& spin, const V* entry, K key)
+        {
+            spin.read_lock(entry, key);
+        }
+
+        template<typename S> static bool is_locked(S& spin) { return spin.is_locked(); }
     };
-#endif /* TRY_LOCK_ON_READ */
 
 
     template<typename T, int BUCKET_SIZE = 16> class SharedHashTable
@@ -53,7 +65,8 @@ namespace search
         using data_t = std::vector<entry_t>;
 
     #if SMP
-        using locks_t = std::vector<std::atomic_flag>;
+        using lock_t = std::atomic<uint64_t>;
+        using locks_t = std::vector<lock_t>;
     #else
         struct locks_t /* dummy */
         {
@@ -66,9 +79,6 @@ namespace search
     public:
         class SpinLock
         {
-            static constexpr auto ACQUIRE = std::memory_order_acquire;
-            static constexpr auto RELEASE = std::memory_order_release;
-
             using table_t = SharedHashTable;
 
             template<Acquire> friend struct LockTraits;
@@ -78,11 +88,30 @@ namespace search
             bool            _locked = false;
 
     #if SMP
-            std::atomic_flag* lock_p() { return &_ht->_locks[_ix]; }
+            lock_t* lock_p() { return &_ht->_locks[_ix]; }
 
-            INLINE void lock()
+            template<bool STRONG=false>
+            static bool try_lock(lock_t* lock, uint64_t key)
             {
-                while (std::atomic_flag_test_and_set_explicit(lock_p(), ACQUIRE))
+                if constexpr(STRONG)
+                    return lock->compare_exchange_strong(
+                        key,
+                        LOCKED,
+                        std::memory_order_release,
+                        std::memory_order_relaxed);
+                else
+                    return lock->compare_exchange_weak(
+                        key,
+                        LOCKED,
+                        std::memory_order_release,
+                        std::memory_order_relaxed);
+            }
+
+            INLINE void write_lock(const entry_t* e, uint64_t)
+            {
+                auto lock = lock_p();
+
+                for (auto k = e->_hash; !try_lock(lock, k); k = e->_hash)
                     ;
                 _locked = true;
 
@@ -91,18 +120,9 @@ namespace search
             #endif /* NO_ASSERT */
             }
 
-            INLINE void release()
+            INLINE void read_lock(const entry_t*, uint64_t key)
             {
-                ASSERT(_locked);
-                ASSERT(entry()->_lock == this);
-
-                std::atomic_flag_clear_explicit(lock_p(), RELEASE);
-                _locked = false;
-            }
-
-            INLINE void try_lock()
-            {
-                if (!std::atomic_flag_test_and_set_explicit(lock_p(), ACQUIRE))
+                if (try_lock<true>(lock_p(), key))
                 {
                     _locked = true;
                 #if !NO_ASSERT
@@ -110,22 +130,34 @@ namespace search
                 #endif /* NO_ASSERT */
                 }
             }
+
+            INLINE void release()
+            {
+                ASSERT(_locked);
+                ASSERT(*lock_p() == LOCKED);
+                ASSERT(entry()->_lock == this);
+                ASSERT(entry()->_hash);
+
+                lock_p()->store(entry()->_hash, std::memory_order_release);
+                _locked = false;
+            }
     #else
-            INLINE void lock() { _locked = true; }
+            INLINE void write_lock(const entry_t*, uint64_t) { _locked = true; }
+            INLINE bool read_lock(const entry_t* e, uint64_t key) { return e->_hash == key; }
             INLINE void release() { _locked = false; }
-            INLINE bool try_lock() { return true; }
     #endif /* !SMP */
 
         protected:
-            entry_t* entry() { ASSERT(_locked); return &_ht->_data[_ix]; }
+            entry_t* entry() { return &_ht->_data[_ix]; }
 
             SpinLock() = default;
 
         public:
-            template<typename LockTraits> SpinLock(SharedHashTable& ht, size_t ix, LockTraits)
+            template<typename LockTraits>
+            SpinLock(SharedHashTable& ht, size_t ix, uint64_t key, LockTraits)
                 : _ht(&ht), _ix(ix)
             {
-                LockTraits::lock(*this);
+                LockTraits::lock(*this, entry(), key);
             }
 
             ~SpinLock()
@@ -165,8 +197,8 @@ namespace search
             Proxy() = default;
 
             template<typename LockTraits>
-            Proxy(SharedHashTable& ht, size_t ix, LockTraits lock_traits)
-                : SpinLock(ht, ix, lock_traits)
+            Proxy(SharedHashTable& ht, size_t ix, uint64_t key, LockTraits lock_traits)
+                : SpinLock(ht, ix, key, lock_traits)
                 , _entry(LockTraits::is_locked(*this) ? this->entry() : nullptr)
             {
             }
@@ -197,7 +229,9 @@ namespace search
         {
             if (_used > 0)
             {
+                ASSERT(_locks.size() == _data.size());
                 std::fill_n(&_data[0], _data.size(), entry_t());
+                std::fill_n(&_locks[0], _locks.size(), 0);
                 _used = 0;
             }
         }
@@ -216,13 +250,19 @@ namespace search
 
             for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
             {
-                Proxy p(*this, i, LockTraits<acquire>{});
+                Proxy p(*this, i, h, LockTraits<acquire>{});
 
                 if (LockTraits<acquire>::is_locked(p))
                 {
-                    if (!p->is_valid())
+                    if constexpr (acquire == Acquire::Read)
                     {
-                        if constexpr (acquire == Acquire::Write)
+                        ASSERT(p->matches(state));
+                        return p;
+                    }
+
+                    if constexpr (acquire == Acquire::Write)
+                    {
+                        if (!p->is_valid())
                         {
                             /* slot is unoccupied, bump up usage count */
                         #if SMP
@@ -234,18 +274,10 @@ namespace search
                             return p;
                         }
 
-                        return Proxy(); /* no match found */
-                    }
+                        if (p->_age != _clock)
+                            return p;
 
-                    const auto age = p->_age;
-
-                    if (p->matches(state))
-                    {
-                        return p;
-                    }
-                    if constexpr (acquire == Acquire::Write)
-                    {
-                        if (age != _clock)
+                        if (p->matches(state))
                             return p;
 
                         if (depth >= p->_depth && p->_value < value)
@@ -263,13 +295,8 @@ namespace search
                     i = (h + j) % _data.size();
             }
 
-            /*
-             * acquire == SpinLock::Acquire::Write: lock and return the entry at index;
-             * otherwise: return unlocked Proxy, which means nullptr (no match found).
-             */
-
             if constexpr (acquire == Acquire::Write)
-                return Proxy(*this, index, LockTraits<acquire>{});
+                return Proxy(*this, index, 0, LockTraits<Acquire::Write>{});
             else
                 return Proxy();
         }

@@ -153,9 +153,12 @@ namespace search
         BaseMove    _hash_move;
         bool        _singleton = false;
         uint32_t    _version = 0;
-        void*       _lock = nullptr;
-
+    #if !NO_ASSERT
+        void*       _lock = nullptr; /* owner */
         explicit TT_Entry(void* lock = nullptr) : _lock(lock) {}
+    #else
+        explicit TT_Entry(void* = nullptr) {}
+    #endif /* NO_ASSERT */
 
         inline bool is_lower() const { return _value >= _beta; }
         inline bool is_upper() const { return _value <= _alpha; }
