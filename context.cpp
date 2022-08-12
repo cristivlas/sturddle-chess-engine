@@ -1331,9 +1331,9 @@ namespace search
     }
 
 
-    void Context::set_search_window(score_t score, bool reset)
+    void Context::set_search_window(score_t score)
     {
-        if (!ASPIRATION_WINDOW || reset || iteration() == 1)
+        if (!ASPIRATION_WINDOW || iteration() == 1)
         {
             _alpha = SCORE_MIN;
             _beta = SCORE_MAX;
