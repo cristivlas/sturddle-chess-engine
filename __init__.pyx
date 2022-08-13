@@ -375,13 +375,12 @@ cdef extern from 'context.h':
 
 cdef extern from 'search.h':
     score_t CHECKMATE
-    score_t MATE_LOW
-    score_t MATE_HIGH
 
 
 SCORE_CHECKMATE = CHECKMATE
-SCORE_MATE_HIGH = MATE_HIGH
-SCORE_MATE_LOW  = MATE_LOW
+
+SCORE_MATE_HIGH = CHECKMATE - 1000
+SCORE_MATE_LOW  = -SCORE_MATE_HIGH
 
 
 cdef extern from 'context.h' namespace 'search':
