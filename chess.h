@@ -1244,7 +1244,7 @@ namespace chess
         return count_pawns(pawns, _occupied_co[color], mask, false);
     }
 
-
+#if 0
     INLINE int State::diff_bishop_pairs() const
     {
         int count = 0;
@@ -1258,7 +1258,25 @@ namespace chess
         }
         return count;
     }
+#else
+    INLINE int State::diff_bishop_pairs() const
+    {
+        int count[] = { 0, 0 };
 
+        if (popcount(bishops) == 3)
+        {
+            for (auto color : { BLACK, WHITE })
+            {
+                if (popcount(bishops & occupied_co(color)) == 2)
+                {
+                    count[color] = 1;
+                    break;
+                }
+            }
+        }
+        return count[WHITE] - count[BLACK];
+    }
+#endif /* 0 */
 
     INLINE int State::diff_doubled_pawns() const
     {
