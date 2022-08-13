@@ -1247,20 +1247,16 @@ namespace chess
 
     INLINE int State::diff_bishop_pairs() const
     {
-        int count[] = { 0, 0 };
+        int count = 0;
 
-        if (popcount(bishops) == 3)
+        for (auto color : { BLACK, WHITE })
         {
-            for (auto color : { BLACK, WHITE })
+            if (popcount(bishops & occupied_co(color)) == 1)
             {
-                if (popcount(bishops & occupied_co(color)) == 2)
-                {
-                    count[color] = 1;
-                    break;
-                }
+                count -= SIGN[color];
             }
         }
-        return count[WHITE] - count[BLACK];
+        return count;
     }
 
 

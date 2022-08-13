@@ -36,7 +36,13 @@ constexpr score_t SCORE_MIN = -100000;
 constexpr score_t SCORE_MAX =  100000;
 
 constexpr score_t CHECKMATE = SCORE_MAX - 1;
-constexpr score_t MATE_HIGH = SCORE_MAX - PLY_MAX;
+
+#if MTDF_CSTAR_BISECT
+    constexpr score_t MATE_HIGH = SCORE_MAX / 2;
+#else
+    constexpr score_t MATE_HIGH = SCORE_MAX - PLY_MAX;
+#endif /* MTDF_CSTAR_BISECT */
+
 constexpr score_t MATE_LOW  = -MATE_HIGH;
 
 /* Aspiration window */

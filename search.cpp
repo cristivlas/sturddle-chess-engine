@@ -463,7 +463,8 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
 
         move = p->_hash_move;
     }
-    if (state.is_checkmate())
+
+    if (abs(root._score) < MATE_HIGH && state.is_checkmate())
     {
         /* The parity of the PV length tells which side is winning. */
         /* Subtract one for the move that lead to the root position */

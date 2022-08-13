@@ -28,35 +28,7 @@ static constexpr auto QUADRATIC_PROBING = false;
 
 namespace search
 {
-    enum class Acquire : int8_t
-    {
-        Read,
-        Write,
-    };
-
-    template<Acquire> struct LockTraits /* write lock */
-    {
-        template<typename S, typename V, typename K>
-        static void lock(S& spin, const V* entry, K key)
-        {
-            spin.write_lock(entry, key);
-        }
-
-        /* write locks should always succeed */
-        template<typename S> static bool constexpr is_locked(S&) { return true; }
-    };
-
-
-    template<> struct LockTraits<Acquire::Read>
-    {
-        template<typename S, typename V, typename K>
-        static void lock(S& spin, const V* entry, K key)
-        {
-            spin.read_lock(entry, key);
-        }
-
-        template<typename S> static bool is_locked(S& spin) { return spin.is_locked(); }
-    };
+    enum class Acquire : int8_t { Read, Write };
 
 
     template<typename T, int BUCKET_SIZE = 16> class SharedHashTable
@@ -81,19 +53,17 @@ namespace search
         {
             using table_t = SharedHashTable;
 
-            template<Acquire> friend struct LockTraits;
-
             table_t*        _ht = nullptr;
             const size_t    _ix = 0;
             bool            _locked = false;
 
     #if SMP
-            lock_t* lock_p() { return &_ht->_locks[_ix]; }
+            INLINE lock_t* lock_p() { return &_ht->_locks[_ix]; }
 
-            template<bool STRONG=false>
+            template<bool strong=false>
             static bool try_lock(lock_t* lock, uint64_t key)
             {
-                if constexpr(STRONG)
+                if constexpr(strong)
                     return lock->compare_exchange_strong(
                         key,
                         LOCKED,
@@ -107,7 +77,7 @@ namespace search
                         std::memory_order_relaxed);
             }
 
-            INLINE void write_lock(const entry_t* e, uint64_t)
+            INLINE void write_lock(const entry_t* e)
             {
                 auto lock = lock_p();
 
@@ -142,22 +112,23 @@ namespace search
                 _locked = false;
             }
     #else
-            INLINE void write_lock(const entry_t*, uint64_t) { _locked = true; }
+            INLINE void write_lock(const entry_t*) { _locked = true; }
             INLINE bool read_lock(const entry_t* e, uint64_t key) { return e->_hash == key; }
             INLINE void release() { _locked = false; }
     #endif /* !SMP */
 
         protected:
-            entry_t* entry() { return &_ht->_data[_ix]; }
-
             SpinLock() = default;
 
-        public:
-            template<typename LockTraits>
-            SpinLock(SharedHashTable& ht, size_t ix, uint64_t key, LockTraits)
-                : _ht(&ht), _ix(ix)
+            SpinLock(SharedHashTable& ht, size_t ix) : _ht(&ht), _ix(ix)
             {
-                LockTraits::lock(*this, entry(), key);
+                write_lock(this->entry());
+                ASSERT(_locked);
+            }
+
+            SpinLock(SharedHashTable& ht, size_t ix, uint64_t hash) : _ht(&ht), _ix(ix)
+            {
+                read_lock(this->entry(), hash);
             }
 
             ~SpinLock()
@@ -177,15 +148,17 @@ namespace search
                     entry()->_lock = this;
             #endif /* NO_ASSERT */
             }
+
             SpinLock(const SpinLock&) = delete;
             SpinLock& operator=(SpinLock&&) = delete;
             SpinLock& operator=(const SpinLock&) = delete;
 
-            bool is_locked() const { return _locked; }
-            explicit operator bool() const { return is_locked(); }
-
-        protected:
             uint16_t clock() const { return _ht->_clock; }
+            entry_t* entry() { return &_ht->_data[_ix]; }
+            bool is_locked() const { return _locked; }
+
+        public:
+            explicit operator bool() const { return is_locked(); }
         };
 
 
@@ -196,10 +169,16 @@ namespace search
         public:
             Proxy() = default;
 
-            template<typename LockTraits>
-            Proxy(SharedHashTable& ht, size_t ix, uint64_t key, LockTraits lock_traits)
-                : SpinLock(ht, ix, key, lock_traits)
-                , _entry(LockTraits::is_locked(*this) ? this->entry() : nullptr)
+            Proxy(SharedHashTable& ht, size_t ix) /* write */
+                : SpinLock(ht, ix)
+                , _entry(this->entry())
+            {
+                ASSERT(this->is_locked());
+            }
+
+            Proxy(SharedHashTable& ht, size_t ix, uint64_t hash) /* read */
+                : SpinLock(ht, ix, hash)
+                , _entry(this->is_locked() ? this->entry() : nullptr)
             {
             }
 
@@ -242,63 +221,82 @@ namespace search
             data_t(capacity).swap(_data);
         }
 
-        template<Acquire acquire>
-        Proxy lookup(const chess::State& state, int depth = 0, int value = 0)
+        template<bool quadratic> INLINE size_t next(uint64_t hash, size_t j) const
+        {
+            /*
+             * https://en.wikipedia.org/wiki/Open_addressing
+             */
+            if constexpr(quadratic)
+                return (hash + j * j) % _data.size();
+            else
+                return (hash + j) % _data.size();
+        }
+
+        Proxy lookup_read(const chess::State& state)
+        {
+            const auto h = state.hash();
+            const size_t index = h % _data.size();
+
+            for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
+            {
+                Proxy p(*this, i, h);
+
+                if (p)
+                {
+                    ASSERT(p->matches(state));
+                    return p;
+                }
+                i = next<QUADRATIC_PROBING>(h, j);
+            }
+
+            return Proxy();
+        }
+
+        Proxy lookup_write(const chess::State& state, int depth, int value)
         {
             const auto h = state.hash();
             size_t index = h % _data.size();
 
             for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
             {
-                Proxy p(*this, i, h, LockTraits<acquire>{});
+                Proxy p(*this, i);
+                ASSERT(p);
 
-                if (LockTraits<acquire>::is_locked(p))
+                if (!p->is_valid())
                 {
-                    if constexpr (acquire == Acquire::Read)
-                    {
-                        ASSERT(p->matches(state));
-                        return p;
-                    }
+                    /* slot is unoccupied, bump up usage count */
+                #if SMP
+                    _used.fetch_add(1, std::memory_order_relaxed);
+                #else
+                    ++_used;
+                #endif /* SMP */
 
-                    if constexpr (acquire == Acquire::Write)
-                    {
-                        if (!p->is_valid())
-                        {
-                            /* slot is unoccupied, bump up usage count */
-                        #if SMP
-                            _used.fetch_add(1, std::memory_order_relaxed);
-                        #else
-                            ++_used;
-                        #endif /* SMP */
-
-                            return p;
-                        }
-
-                        if (p->_age != _clock)
-                            return p;
-
-                        if (p->matches(state))
-                            return p;
-
-                        if (depth >= p->_depth && p->_value < value)
-                        {
-                            index = i;
-                            depth = p->_depth;
-                        }
-                    }
+                    return p;
                 }
 
-                /* https://en.wikipedia.org/wiki/Open_addressing */
-                if constexpr(QUADRATIC_PROBING)
-                    i = (h + j * j) % _data.size();
-                else
-                    i = (h + j) % _data.size();
-            }
+                if (p->_age != _clock)
+                    return p;
 
-            if constexpr (acquire == Acquire::Write)
-                return Proxy(*this, index, 0, LockTraits<Acquire::Write>{});
+                if (p->_hash == h)
+                    return p;
+
+                if (depth >= p->_depth && p->_value < value)
+                {
+                    index = i;
+                    depth = p->_depth;
+                }
+                i = next<QUADRATIC_PROBING>(h, j);
+            }
+            return Proxy(*this, index);
+        }
+
+        template<Acquire acquire>
+        Proxy lookup(const chess::State& state, int depth = 0, int value = 0)
+        {
+            if constexpr (acquire == Acquire::Read)
+                return lookup_read(state);
             else
-                return Proxy();
+                return lookup_write(state, depth, value);
         }
 
         INLINE size_t capacity() const { return _data.size(); }
