@@ -543,6 +543,7 @@ namespace chess
         INLINE Bitboard attacker_pieces_mask(Color color, Square square, Bitboard occupied_mask) const
         {
     #if USE_MAGIC_BITS
+        #if 0
             const auto bishop_attacks = magic_bits_attacks.Bishop(occupied_mask, square);
             const auto rook_attacks = magic_bits_attacks.Rook(occupied_mask, square);
 
@@ -550,6 +551,15 @@ namespace chess
                 | (bishops & bishop_attacks)
                 | (rooks & rook_attacks)
                 | (queens & (bishop_attacks | rook_attacks));
+        #else
+            auto attackers = (knights & BB_KNIGHT_ATTACKS[square]);
+
+            if (const auto queens_and_rooks = queens | rooks)
+                attackers |= queens_and_rooks & magic_bits_attacks.Rook(occupied_mask, square);
+
+            if (const auto queens_and_bishops = queens | bishops)
+                attackers |= queens_and_bishops & magic_bits_attacks.Bishop(occupied_mask, square);
+        #endif /* 0 */
     #else
             auto attackers = (knights & BB_KNIGHT_ATTACKS[square]);
 
