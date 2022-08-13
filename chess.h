@@ -551,17 +551,23 @@ namespace chess
                 | (rooks & rook_attacks)
                 | (queens & (bishop_attacks | rook_attacks));
     #else
-            const auto rank_pieces = BB_RANK_MASKS[square] & occupied_mask;
-            const auto file_pieces = BB_FILE_MASKS[square] & occupied_mask;
-            const auto diag_pieces = BB_DIAG_MASKS[square] & occupied_mask;
+            auto attackers = (knights & BB_KNIGHT_ATTACKS[square]);
 
-            const auto queens_and_rooks = queens | rooks;
-            const auto queens_and_bishops = queens | bishops;
+            if (const auto queens_and_rooks = queens | rooks)
+            {
+                const auto rank_pieces = BB_RANK_MASKS[square] & occupied_mask;
+                const auto file_pieces = BB_FILE_MASKS[square] & occupied_mask;
 
-            const auto attackers = (knights & BB_KNIGHT_ATTACKS[square])
-                | (queens_and_rooks & BB_RANK_ATTACKS.get(square, rank_pieces))
-                | (queens_and_rooks & BB_FILE_ATTACKS.get(square, file_pieces))
-                | (queens_and_bishops & BB_DIAG_ATTACKS.get(square, diag_pieces));
+                attackers |=
+                    (queens_and_rooks & BB_RANK_ATTACKS.get(square, rank_pieces)) |
+                    (queens_and_rooks & BB_FILE_ATTACKS.get(square, file_pieces));
+            }
+
+            if (const auto queens_and_bishops = queens | bishops)
+            {
+                const auto diag_pieces = BB_DIAG_MASKS[square] & occupied_mask;
+                attackers |= (queens_and_bishops & BB_DIAG_ATTACKS.get(square, diag_pieces));
+            }
     #endif /* !USE_MAGIC_BITS */
 
             return attackers & occupied_co(color);

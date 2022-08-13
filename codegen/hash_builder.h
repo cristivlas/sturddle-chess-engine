@@ -557,7 +557,7 @@ namespace
              * Try a bunch of strategies and see which one fits the data best.
              * The idea is to maximize performance with minimum memory.
              */
-        #if 0
+        #if 1
             for (size_t table_size : { 64 })
                 add_group_reversed<Identity>(table_size);
         #endif

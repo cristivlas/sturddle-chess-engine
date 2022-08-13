@@ -7,6 +7,22 @@
 namespace chess {
 
 namespace impl {
+INLINE uint64_t id(uint64_t key) {
+    return key;
+}
+
+INLINE uint64_t id_rshift_50(uint64_t key) {
+    return id(key) >> 50;
+}
+
+INLINE uint64_t id_rshift_57(uint64_t key) {
+    return id(key) >> 57;
+}
+
+INLINE uint64_t id_rshift_58(uint64_t key) {
+    return id(key) >> 58;
+}
+
 INLINE uint64_t mul_16387092464288213399(uint64_t key) {
     return key * 16387092464288213399ULL;
 }
@@ -73,6 +89,30 @@ INLINE uint64_t mul_9357036318526133325_rshift_53(uint64_t key) {
 
 INLINE uint64_t mul_9357036318526133325_rshift_55(uint64_t key) {
     return mul_9357036318526133325(key) >> 55;
+}
+
+template<size_t Mask, bool MaskRequired>
+INLINE size_t id_rshift_50_mixin(uint64_t key) {
+    if constexpr(MaskRequired)
+        return id_rshift_50(key) & Mask;
+    else
+        return id_rshift_50(key);
+}
+
+template<size_t Mask, bool MaskRequired>
+INLINE size_t id_rshift_57_mixin(uint64_t key) {
+    if constexpr(MaskRequired)
+        return id_rshift_57(key) & Mask;
+    else
+        return id_rshift_57(key);
+}
+
+template<size_t Mask, bool MaskRequired>
+INLINE size_t id_rshift_58_mixin(uint64_t key) {
+    if constexpr(MaskRequired)
+        return id_rshift_58(key) & Mask;
+    else
+        return id_rshift_58(key);
 }
 
 template<size_t Mask, bool MaskRequired>
@@ -179,7 +219,7 @@ INLINE size_t hash(int i, uint64_t u) noexcept
 {
     switch (i)
     {
-    case 0: /* usage: 139 */
+    case 0: /* usage: 130 */
         return mul_9357036318526133325_rshift_55_mixin<511, false>(u);
     case 1: /* usage: 15 */
         return mul_6108988338655542853_rshift_55_mixin<511, false>(u);
@@ -187,22 +227,28 @@ INLINE size_t hash(int i, uint64_t u) noexcept
         return mul_9202493588570546565_rshift_55_mixin<511, false>(u);
     case 3: /* usage: 9 */
         return mul_9357036318526133325_rshift_53_mixin<2047, false>(u);
-    case 4: /* usage: 5 */
+    case 4: /* usage: 7 */
+        return id_rshift_57_mixin<63, false>(u);
+    case 5: /* usage: 5 */
         return mul_6108988338655542853_rshift_53_mixin<2047, false>(u);
-    case 5: /* usage: 4 */
+    case 6: /* usage: 4 */
         return mul_16387092464288213399_rshift_55_mixin<511, false>(u);
-    case 6: /* usage: 1 */
-        return mul_9202493588570546565_rshift_52_mixin<4095, false>(u);
     case 7: /* usage: 1 */
-        return mul_9357036318526133325_rshift_30_mixin<4095, true>(u);
+        return id_rshift_58_mixin<63, false>(u);
     case 8: /* usage: 1 */
-        return mul_9202493588570546565_rshift_50_mixin<4095, true>(u);
+        return mul_9202493588570546565_rshift_52_mixin<4095, false>(u);
     case 9: /* usage: 1 */
-        return mul_9357036318526133325_rshift_35_mixin<4095, true>(u);
+        return mul_9357036318526133325_rshift_30_mixin<4095, true>(u);
     case 10: /* usage: 1 */
         return mul_6108988338655542853_rshift_38_mixin<4095, true>(u);
     case 11: /* usage: 1 */
+        return mul_9357036318526133325_rshift_35_mixin<4095, true>(u);
+    case 12: /* usage: 1 */
         return mul_7268107520634073559_rshift_50_mixin<4095, true>(u);
+    case 13: /* usage: 1 */
+        return id_rshift_50_mixin<63, false>(u);
+    case 14: /* usage: 1 */
+        return mul_9202493588570546565_rshift_50_mixin<4095, true>(u);
     }
     return 0;
 }
@@ -2361,40 +2407,40 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[499] = 0x0002000000000000ULL;
         data[500] = 0x000e000000000000ULL;
     }),
-    AttackTable(0, [](uint64_t *& data) {
-        data = new uint64_t [501]();
+    AttackTable(13, [](uint64_t *& data) {
+        data = new uint64_t [32]();
         data[0] = 0x00fd000000000000ULL;
+        data[1] = 0x0005000000000000ULL;
+        data[2] = 0x000d000000000000ULL;
+        data[3] = 0x0005000000000000ULL;
+        data[4] = 0x001d000000000000ULL;
+        data[5] = 0x0005000000000000ULL;
+        data[6] = 0x000d000000000000ULL;
+        data[7] = 0x0005000000000000ULL;
+        data[8] = 0x003d000000000000ULL;
+        data[9] = 0x0005000000000000ULL;
+        data[10] = 0x000d000000000000ULL;
+        data[11] = 0x0005000000000000ULL;
+        data[12] = 0x001d000000000000ULL;
         data[13] = 0x0005000000000000ULL;
-        data[38] = 0x007d000000000000ULL;
-        data[63] = 0x0005000000000000ULL;
-        data[88] = 0x000d000000000000ULL;
-        data[101] = 0x0005000000000000ULL;
-        data[112] = 0x0005000000000000ULL;
-        data[126] = 0x000d000000000000ULL;
-        data[137] = 0x001d000000000000ULL;
-        data[151] = 0x0005000000000000ULL;
-        data[162] = 0x0005000000000000ULL;
-        data[176] = 0x001d000000000000ULL;
-        data[200] = 0x0005000000000000ULL;
-        data[225] = 0x000d000000000000ULL;
-        data[250] = 0x0005000000000000ULL;
-        data[264] = 0x000d000000000000ULL;
-        data[275] = 0x003d000000000000ULL;
-        data[288] = 0x0005000000000000ULL;
-        data[300] = 0x0005000000000000ULL;
-        data[313] = 0x003d000000000000ULL;
-        data[324] = 0x000d000000000000ULL;
-        data[338] = 0x0005000000000000ULL;
-        data[363] = 0x000d000000000000ULL;
-        data[388] = 0x0005000000000000ULL;
-        data[412] = 0x001d000000000000ULL;
-        data[426] = 0x0005000000000000ULL;
-        data[437] = 0x0005000000000000ULL;
-        data[451] = 0x001d000000000000ULL;
-        data[462] = 0x000d000000000000ULL;
-        data[476] = 0x0005000000000000ULL;
-        data[487] = 0x0005000000000000ULL;
-        data[500] = 0x000d000000000000ULL;
+        data[14] = 0x000d000000000000ULL;
+        data[15] = 0x0005000000000000ULL;
+        data[16] = 0x007d000000000000ULL;
+        data[17] = 0x0005000000000000ULL;
+        data[18] = 0x000d000000000000ULL;
+        data[19] = 0x0005000000000000ULL;
+        data[20] = 0x001d000000000000ULL;
+        data[21] = 0x0005000000000000ULL;
+        data[22] = 0x000d000000000000ULL;
+        data[23] = 0x0005000000000000ULL;
+        data[24] = 0x003d000000000000ULL;
+        data[25] = 0x0005000000000000ULL;
+        data[26] = 0x000d000000000000ULL;
+        data[27] = 0x0005000000000000ULL;
+        data[28] = 0x001d000000000000ULL;
+        data[29] = 0x0005000000000000ULL;
+        data[30] = 0x000d000000000000ULL;
+        data[31] = 0x0005000000000000ULL;
     }),
     AttackTable(0, [](uint64_t *& data) {
         data = new uint64_t [501]();
@@ -2638,349 +2684,349 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[499] = 0x007c000000000000ULL;
         data[500] = 0x0040000000000000ULL;
     }),
-    AttackTable(0, [](uint64_t *& data) {
-        data = new uint64_t [461]();
+    AttackTable(4, [](uint64_t *& data) {
+        data = new uint64_t [64]();
         data[0] = 0xfe00000000000000ULL;
-        data[4] = 0x0200000000000000ULL;
-        data[8] = 0x0600000000000000ULL;
-        data[12] = 0x0200000000000000ULL;
-        data[16] = 0x0e00000000000000ULL;
-        data[20] = 0x0200000000000000ULL;
-        data[24] = 0x0600000000000000ULL;
-        data[28] = 0x0200000000000000ULL;
-        data[32] = 0x1e00000000000000ULL;
-        data[36] = 0x0200000000000000ULL;
-        data[40] = 0x0600000000000000ULL;
-        data[44] = 0x0200000000000000ULL;
-        data[48] = 0x0e00000000000000ULL;
-        data[104] = 0x0600000000000000ULL;
-        data[108] = 0x0200000000000000ULL;
-        data[112] = 0x0e00000000000000ULL;
-        data[116] = 0x0200000000000000ULL;
-        data[120] = 0x0600000000000000ULL;
-        data[124] = 0x0200000000000000ULL;
-        data[128] = 0x7e00000000000000ULL;
-        data[132] = 0x0200000000000000ULL;
-        data[136] = 0x0600000000000000ULL;
-        data[140] = 0x0200000000000000ULL;
-        data[144] = 0x0e00000000000000ULL;
-        data[148] = 0x0200000000000000ULL;
-        data[152] = 0x0600000000000000ULL;
-        data[208] = 0x0e00000000000000ULL;
-        data[212] = 0x0200000000000000ULL;
-        data[216] = 0x0600000000000000ULL;
-        data[220] = 0x0200000000000000ULL;
-        data[224] = 0x1e00000000000000ULL;
-        data[228] = 0x0200000000000000ULL;
-        data[232] = 0x0600000000000000ULL;
-        data[236] = 0x0200000000000000ULL;
-        data[240] = 0x0e00000000000000ULL;
-        data[244] = 0x0200000000000000ULL;
-        data[248] = 0x0600000000000000ULL;
-        data[252] = 0x0200000000000000ULL;
-        data[308] = 0x0200000000000000ULL;
-        data[312] = 0x0600000000000000ULL;
-        data[316] = 0x0200000000000000ULL;
-        data[320] = 0x3e00000000000000ULL;
-        data[324] = 0x0200000000000000ULL;
-        data[328] = 0x0600000000000000ULL;
-        data[332] = 0x0200000000000000ULL;
-        data[336] = 0x0e00000000000000ULL;
-        data[340] = 0x0200000000000000ULL;
-        data[344] = 0x0600000000000000ULL;
-        data[348] = 0x0200000000000000ULL;
-        data[352] = 0x1e00000000000000ULL;
-        data[356] = 0x0200000000000000ULL;
-        data[412] = 0x0200000000000000ULL;
-        data[416] = 0x1e00000000000000ULL;
-        data[420] = 0x0200000000000000ULL;
-        data[424] = 0x0600000000000000ULL;
-        data[428] = 0x0200000000000000ULL;
-        data[432] = 0x0e00000000000000ULL;
-        data[436] = 0x0200000000000000ULL;
-        data[440] = 0x0600000000000000ULL;
-        data[444] = 0x0200000000000000ULL;
-        data[448] = 0x3e00000000000000ULL;
-        data[452] = 0x0200000000000000ULL;
-        data[456] = 0x0600000000000000ULL;
-        data[460] = 0x0200000000000000ULL;
+        data[1] = 0x0200000000000000ULL;
+        data[2] = 0x0600000000000000ULL;
+        data[3] = 0x0200000000000000ULL;
+        data[4] = 0x0e00000000000000ULL;
+        data[5] = 0x0200000000000000ULL;
+        data[6] = 0x0600000000000000ULL;
+        data[7] = 0x0200000000000000ULL;
+        data[8] = 0x1e00000000000000ULL;
+        data[9] = 0x0200000000000000ULL;
+        data[10] = 0x0600000000000000ULL;
+        data[11] = 0x0200000000000000ULL;
+        data[12] = 0x0e00000000000000ULL;
+        data[13] = 0x0200000000000000ULL;
+        data[14] = 0x0600000000000000ULL;
+        data[15] = 0x0200000000000000ULL;
+        data[16] = 0x3e00000000000000ULL;
+        data[17] = 0x0200000000000000ULL;
+        data[18] = 0x0600000000000000ULL;
+        data[19] = 0x0200000000000000ULL;
+        data[20] = 0x0e00000000000000ULL;
+        data[21] = 0x0200000000000000ULL;
+        data[22] = 0x0600000000000000ULL;
+        data[23] = 0x0200000000000000ULL;
+        data[24] = 0x1e00000000000000ULL;
+        data[25] = 0x0200000000000000ULL;
+        data[26] = 0x0600000000000000ULL;
+        data[27] = 0x0200000000000000ULL;
+        data[28] = 0x0e00000000000000ULL;
+        data[29] = 0x0200000000000000ULL;
+        data[30] = 0x0600000000000000ULL;
+        data[31] = 0x0200000000000000ULL;
+        data[32] = 0x7e00000000000000ULL;
+        data[33] = 0x0200000000000000ULL;
+        data[34] = 0x0600000000000000ULL;
+        data[35] = 0x0200000000000000ULL;
+        data[36] = 0x0e00000000000000ULL;
+        data[37] = 0x0200000000000000ULL;
+        data[38] = 0x0600000000000000ULL;
+        data[39] = 0x0200000000000000ULL;
+        data[40] = 0x1e00000000000000ULL;
+        data[41] = 0x0200000000000000ULL;
+        data[42] = 0x0600000000000000ULL;
+        data[43] = 0x0200000000000000ULL;
+        data[44] = 0x0e00000000000000ULL;
+        data[45] = 0x0200000000000000ULL;
+        data[46] = 0x0600000000000000ULL;
+        data[47] = 0x0200000000000000ULL;
+        data[48] = 0x3e00000000000000ULL;
+        data[49] = 0x0200000000000000ULL;
+        data[50] = 0x0600000000000000ULL;
+        data[51] = 0x0200000000000000ULL;
+        data[52] = 0x0e00000000000000ULL;
+        data[53] = 0x0200000000000000ULL;
+        data[54] = 0x0600000000000000ULL;
+        data[55] = 0x0200000000000000ULL;
+        data[56] = 0x1e00000000000000ULL;
+        data[57] = 0x0200000000000000ULL;
+        data[58] = 0x0600000000000000ULL;
+        data[59] = 0x0200000000000000ULL;
+        data[60] = 0x0e00000000000000ULL;
+        data[61] = 0x0200000000000000ULL;
+        data[62] = 0x0600000000000000ULL;
+        data[63] = 0x0200000000000000ULL;
     }),
-    AttackTable(0, [](uint64_t *& data) {
-        data = new uint64_t [457]();
+    AttackTable(7, [](uint64_t *& data) {
+        data = new uint64_t [32]();
         data[0] = 0xfd00000000000000ULL;
-        data[8] = 0x0500000000000000ULL;
-        data[16] = 0x0d00000000000000ULL;
-        data[24] = 0x0500000000000000ULL;
-        data[32] = 0x1d00000000000000ULL;
-        data[40] = 0x0500000000000000ULL;
-        data[48] = 0x0d00000000000000ULL;
-        data[104] = 0x0500000000000000ULL;
-        data[112] = 0x0d00000000000000ULL;
-        data[120] = 0x0500000000000000ULL;
-        data[128] = 0x7d00000000000000ULL;
-        data[136] = 0x0500000000000000ULL;
-        data[144] = 0x0d00000000000000ULL;
-        data[152] = 0x0500000000000000ULL;
-        data[208] = 0x0d00000000000000ULL;
-        data[216] = 0x0500000000000000ULL;
-        data[224] = 0x1d00000000000000ULL;
-        data[232] = 0x0500000000000000ULL;
-        data[240] = 0x0d00000000000000ULL;
-        data[248] = 0x0500000000000000ULL;
-        data[312] = 0x0500000000000000ULL;
-        data[320] = 0x3d00000000000000ULL;
-        data[328] = 0x0500000000000000ULL;
-        data[336] = 0x0d00000000000000ULL;
-        data[344] = 0x0500000000000000ULL;
-        data[352] = 0x1d00000000000000ULL;
-        data[416] = 0x1d00000000000000ULL;
-        data[424] = 0x0500000000000000ULL;
-        data[432] = 0x0d00000000000000ULL;
-        data[440] = 0x0500000000000000ULL;
-        data[448] = 0x3d00000000000000ULL;
-        data[456] = 0x0500000000000000ULL;
+        data[1] = 0x0500000000000000ULL;
+        data[2] = 0x0d00000000000000ULL;
+        data[3] = 0x0500000000000000ULL;
+        data[4] = 0x1d00000000000000ULL;
+        data[5] = 0x0500000000000000ULL;
+        data[6] = 0x0d00000000000000ULL;
+        data[7] = 0x0500000000000000ULL;
+        data[8] = 0x3d00000000000000ULL;
+        data[9] = 0x0500000000000000ULL;
+        data[10] = 0x0d00000000000000ULL;
+        data[11] = 0x0500000000000000ULL;
+        data[12] = 0x1d00000000000000ULL;
+        data[13] = 0x0500000000000000ULL;
+        data[14] = 0x0d00000000000000ULL;
+        data[15] = 0x0500000000000000ULL;
+        data[16] = 0x7d00000000000000ULL;
+        data[17] = 0x0500000000000000ULL;
+        data[18] = 0x0d00000000000000ULL;
+        data[19] = 0x0500000000000000ULL;
+        data[20] = 0x1d00000000000000ULL;
+        data[21] = 0x0500000000000000ULL;
+        data[22] = 0x0d00000000000000ULL;
+        data[23] = 0x0500000000000000ULL;
+        data[24] = 0x3d00000000000000ULL;
+        data[25] = 0x0500000000000000ULL;
+        data[26] = 0x0d00000000000000ULL;
+        data[27] = 0x0500000000000000ULL;
+        data[28] = 0x1d00000000000000ULL;
+        data[29] = 0x0500000000000000ULL;
+        data[30] = 0x0d00000000000000ULL;
+        data[31] = 0x0500000000000000ULL;
     }),
-    AttackTable(0, [](uint64_t *& data) {
-        data = new uint64_t [453]();
+    AttackTable(4, [](uint64_t *& data) {
+        data = new uint64_t [62]();
         data[0] = 0xfb00000000000000ULL;
-        data[4] = 0x0a00000000000000ULL;
-        data[16] = 0x0b00000000000000ULL;
-        data[20] = 0x1a00000000000000ULL;
-        data[32] = 0x1b00000000000000ULL;
-        data[36] = 0x0a00000000000000ULL;
-        data[48] = 0x0b00000000000000ULL;
-        data[112] = 0x0b00000000000000ULL;
-        data[116] = 0x3a00000000000000ULL;
-        data[128] = 0x7b00000000000000ULL;
-        data[132] = 0x0a00000000000000ULL;
-        data[144] = 0x0b00000000000000ULL;
-        data[148] = 0x1a00000000000000ULL;
-        data[208] = 0x0b00000000000000ULL;
-        data[212] = 0x1a00000000000000ULL;
-        data[224] = 0x1b00000000000000ULL;
-        data[228] = 0x0a00000000000000ULL;
-        data[240] = 0x0b00000000000000ULL;
-        data[244] = 0x3a00000000000000ULL;
-        data[308] = 0xfa00000000000000ULL;
-        data[320] = 0x3b00000000000000ULL;
-        data[324] = 0x0a00000000000000ULL;
-        data[336] = 0x0b00000000000000ULL;
-        data[340] = 0x1a00000000000000ULL;
-        data[352] = 0x1b00000000000000ULL;
-        data[356] = 0x0a00000000000000ULL;
-        data[416] = 0x1b00000000000000ULL;
-        data[420] = 0x0a00000000000000ULL;
-        data[432] = 0x0b00000000000000ULL;
-        data[436] = 0x7a00000000000000ULL;
-        data[448] = 0x3b00000000000000ULL;
-        data[452] = 0x0a00000000000000ULL;
+        data[1] = 0xfa00000000000000ULL;
+        data[4] = 0x0b00000000000000ULL;
+        data[5] = 0x0a00000000000000ULL;
+        data[8] = 0x1b00000000000000ULL;
+        data[9] = 0x1a00000000000000ULL;
+        data[12] = 0x0b00000000000000ULL;
+        data[13] = 0x0a00000000000000ULL;
+        data[16] = 0x3b00000000000000ULL;
+        data[17] = 0x3a00000000000000ULL;
+        data[20] = 0x0b00000000000000ULL;
+        data[21] = 0x0a00000000000000ULL;
+        data[24] = 0x1b00000000000000ULL;
+        data[25] = 0x1a00000000000000ULL;
+        data[28] = 0x0b00000000000000ULL;
+        data[29] = 0x0a00000000000000ULL;
+        data[32] = 0x7b00000000000000ULL;
+        data[33] = 0x7a00000000000000ULL;
+        data[36] = 0x0b00000000000000ULL;
+        data[37] = 0x0a00000000000000ULL;
+        data[40] = 0x1b00000000000000ULL;
+        data[41] = 0x1a00000000000000ULL;
+        data[44] = 0x0b00000000000000ULL;
+        data[45] = 0x0a00000000000000ULL;
+        data[48] = 0x3b00000000000000ULL;
+        data[49] = 0x3a00000000000000ULL;
+        data[52] = 0x0b00000000000000ULL;
+        data[53] = 0x0a00000000000000ULL;
+        data[56] = 0x1b00000000000000ULL;
+        data[57] = 0x1a00000000000000ULL;
+        data[60] = 0x0b00000000000000ULL;
+        data[61] = 0x0a00000000000000ULL;
     }),
-    AttackTable(0, [](uint64_t *& data) {
-        data = new uint64_t [457]();
+    AttackTable(4, [](uint64_t *& data) {
+        data = new uint64_t [60]();
         data[0] = 0xf700000000000000ULL;
-        data[8] = 0x1400000000000000ULL;
-        data[20] = 0x1600000000000000ULL;
-        data[28] = 0x7400000000000000ULL;
-        data[32] = 0x1700000000000000ULL;
-        data[40] = 0x3400000000000000ULL;
-        data[104] = 0xf400000000000000ULL;
-        data[116] = 0x3600000000000000ULL;
-        data[124] = 0x1400000000000000ULL;
-        data[128] = 0x7700000000000000ULL;
-        data[136] = 0x1400000000000000ULL;
-        data[148] = 0x1600000000000000ULL;
-        data[212] = 0x1600000000000000ULL;
-        data[220] = 0x3400000000000000ULL;
-        data[224] = 0x1700000000000000ULL;
-        data[232] = 0x7400000000000000ULL;
-        data[244] = 0x3600000000000000ULL;
-        data[252] = 0x1400000000000000ULL;
-        data[308] = 0xf600000000000000ULL;
-        data[316] = 0x1400000000000000ULL;
-        data[320] = 0x3700000000000000ULL;
-        data[328] = 0x1400000000000000ULL;
-        data[340] = 0x1600000000000000ULL;
-        data[348] = 0x3400000000000000ULL;
-        data[352] = 0x1700000000000000ULL;
-        data[412] = 0xf400000000000000ULL;
-        data[416] = 0x1700000000000000ULL;
-        data[424] = 0x3400000000000000ULL;
-        data[436] = 0x7600000000000000ULL;
-        data[444] = 0x1400000000000000ULL;
-        data[448] = 0x3700000000000000ULL;
-        data[456] = 0x1400000000000000ULL;
+        data[1] = 0xf600000000000000ULL;
+        data[2] = 0xf400000000000000ULL;
+        data[3] = 0xf400000000000000ULL;
+        data[8] = 0x1700000000000000ULL;
+        data[9] = 0x1600000000000000ULL;
+        data[10] = 0x1400000000000000ULL;
+        data[11] = 0x1400000000000000ULL;
+        data[16] = 0x3700000000000000ULL;
+        data[17] = 0x3600000000000000ULL;
+        data[18] = 0x3400000000000000ULL;
+        data[19] = 0x3400000000000000ULL;
+        data[24] = 0x1700000000000000ULL;
+        data[25] = 0x1600000000000000ULL;
+        data[26] = 0x1400000000000000ULL;
+        data[27] = 0x1400000000000000ULL;
+        data[32] = 0x7700000000000000ULL;
+        data[33] = 0x7600000000000000ULL;
+        data[34] = 0x7400000000000000ULL;
+        data[35] = 0x7400000000000000ULL;
+        data[40] = 0x1700000000000000ULL;
+        data[41] = 0x1600000000000000ULL;
+        data[42] = 0x1400000000000000ULL;
+        data[43] = 0x1400000000000000ULL;
+        data[48] = 0x3700000000000000ULL;
+        data[49] = 0x3600000000000000ULL;
+        data[50] = 0x3400000000000000ULL;
+        data[51] = 0x3400000000000000ULL;
+        data[56] = 0x1700000000000000ULL;
+        data[57] = 0x1600000000000000ULL;
+        data[58] = 0x1400000000000000ULL;
+        data[59] = 0x1400000000000000ULL;
     }),
-    AttackTable(0, [](uint64_t *& data) {
-        data = new uint64_t [453]();
+    AttackTable(4, [](uint64_t *& data) {
+        data = new uint64_t [56]();
         data[0] = 0xef00000000000000ULL;
+        data[1] = 0xee00000000000000ULL;
+        data[2] = 0xec00000000000000ULL;
+        data[3] = 0xec00000000000000ULL;
         data[4] = 0xe800000000000000ULL;
-        data[16] = 0x2800000000000000ULL;
-        data[28] = 0x6c00000000000000ULL;
-        data[40] = 0x2c00000000000000ULL;
-        data[44] = 0x2800000000000000ULL;
-        data[104] = 0xec00000000000000ULL;
-        data[108] = 0xe800000000000000ULL;
-        data[116] = 0x2e00000000000000ULL;
-        data[120] = 0x2800000000000000ULL;
-        data[128] = 0x6f00000000000000ULL;
-        data[132] = 0x6800000000000000ULL;
-        data[144] = 0x2800000000000000ULL;
-        data[208] = 0xe800000000000000ULL;
-        data[220] = 0x2c00000000000000ULL;
-        data[232] = 0x6c00000000000000ULL;
-        data[236] = 0x6800000000000000ULL;
-        data[244] = 0x2e00000000000000ULL;
-        data[248] = 0x2800000000000000ULL;
-        data[308] = 0xee00000000000000ULL;
-        data[312] = 0xe800000000000000ULL;
-        data[320] = 0x2f00000000000000ULL;
-        data[324] = 0x2800000000000000ULL;
-        data[336] = 0x6800000000000000ULL;
-        data[348] = 0x2c00000000000000ULL;
-        data[412] = 0xec00000000000000ULL;
-        data[424] = 0x2c00000000000000ULL;
-        data[428] = 0x2800000000000000ULL;
-        data[436] = 0x6e00000000000000ULL;
-        data[440] = 0x6800000000000000ULL;
-        data[448] = 0x2f00000000000000ULL;
-        data[452] = 0x2800000000000000ULL;
+        data[5] = 0xe800000000000000ULL;
+        data[6] = 0xe800000000000000ULL;
+        data[7] = 0xe800000000000000ULL;
+        data[16] = 0x2f00000000000000ULL;
+        data[17] = 0x2e00000000000000ULL;
+        data[18] = 0x2c00000000000000ULL;
+        data[19] = 0x2c00000000000000ULL;
+        data[20] = 0x2800000000000000ULL;
+        data[21] = 0x2800000000000000ULL;
+        data[22] = 0x2800000000000000ULL;
+        data[23] = 0x2800000000000000ULL;
+        data[32] = 0x6f00000000000000ULL;
+        data[33] = 0x6e00000000000000ULL;
+        data[34] = 0x6c00000000000000ULL;
+        data[35] = 0x6c00000000000000ULL;
+        data[36] = 0x6800000000000000ULL;
+        data[37] = 0x6800000000000000ULL;
+        data[38] = 0x6800000000000000ULL;
+        data[39] = 0x6800000000000000ULL;
+        data[48] = 0x2f00000000000000ULL;
+        data[49] = 0x2e00000000000000ULL;
+        data[50] = 0x2c00000000000000ULL;
+        data[51] = 0x2c00000000000000ULL;
+        data[52] = 0x2800000000000000ULL;
+        data[53] = 0x2800000000000000ULL;
+        data[54] = 0x2800000000000000ULL;
+        data[55] = 0x2800000000000000ULL;
     }),
-    AttackTable(0, [](uint64_t *& data) {
-        data = new uint64_t [445]();
+    AttackTable(4, [](uint64_t *& data) {
+        data = new uint64_t [48]();
         data[0] = 0xdf00000000000000ULL;
+        data[1] = 0xde00000000000000ULL;
+        data[2] = 0xdc00000000000000ULL;
+        data[3] = 0xdc00000000000000ULL;
         data[4] = 0xd800000000000000ULL;
+        data[5] = 0xd800000000000000ULL;
+        data[6] = 0xd800000000000000ULL;
+        data[7] = 0xd800000000000000ULL;
         data[8] = 0xd000000000000000ULL;
+        data[9] = 0xd000000000000000ULL;
+        data[10] = 0xd000000000000000ULL;
+        data[11] = 0xd000000000000000ULL;
         data[12] = 0xd000000000000000ULL;
-        data[28] = 0x5c00000000000000ULL;
-        data[32] = 0x5000000000000000ULL;
-        data[36] = 0x5000000000000000ULL;
-        data[104] = 0xdc00000000000000ULL;
-        data[108] = 0xd800000000000000ULL;
-        data[112] = 0xd000000000000000ULL;
-        data[128] = 0x5f00000000000000ULL;
-        data[132] = 0x5800000000000000ULL;
-        data[136] = 0x5000000000000000ULL;
-        data[140] = 0x5000000000000000ULL;
-        data[208] = 0xd800000000000000ULL;
-        data[212] = 0xd000000000000000ULL;
-        data[216] = 0xd000000000000000ULL;
-        data[232] = 0x5c00000000000000ULL;
-        data[236] = 0x5800000000000000ULL;
-        data[240] = 0x5000000000000000ULL;
-        data[308] = 0xde00000000000000ULL;
-        data[312] = 0xd800000000000000ULL;
-        data[316] = 0xd000000000000000ULL;
-        data[336] = 0x5800000000000000ULL;
-        data[340] = 0x5000000000000000ULL;
-        data[344] = 0x5000000000000000ULL;
-        data[412] = 0xdc00000000000000ULL;
-        data[416] = 0xd000000000000000ULL;
-        data[420] = 0xd000000000000000ULL;
-        data[436] = 0x5e00000000000000ULL;
-        data[440] = 0x5800000000000000ULL;
-        data[444] = 0x5000000000000000ULL;
+        data[13] = 0xd000000000000000ULL;
+        data[14] = 0xd000000000000000ULL;
+        data[15] = 0xd000000000000000ULL;
+        data[32] = 0x5f00000000000000ULL;
+        data[33] = 0x5e00000000000000ULL;
+        data[34] = 0x5c00000000000000ULL;
+        data[35] = 0x5c00000000000000ULL;
+        data[36] = 0x5800000000000000ULL;
+        data[37] = 0x5800000000000000ULL;
+        data[38] = 0x5800000000000000ULL;
+        data[39] = 0x5800000000000000ULL;
+        data[40] = 0x5000000000000000ULL;
+        data[41] = 0x5000000000000000ULL;
+        data[42] = 0x5000000000000000ULL;
+        data[43] = 0x5000000000000000ULL;
+        data[44] = 0x5000000000000000ULL;
+        data[45] = 0x5000000000000000ULL;
+        data[46] = 0x5000000000000000ULL;
+        data[47] = 0x5000000000000000ULL;
     }),
-    AttackTable(0, [](uint64_t *& data) {
-        data = new uint64_t [433]();
+    AttackTable(4, [](uint64_t *& data) {
+        data = new uint64_t [32]();
         data[0] = 0xbf00000000000000ULL;
+        data[1] = 0xbe00000000000000ULL;
+        data[2] = 0xbc00000000000000ULL;
+        data[3] = 0xbc00000000000000ULL;
         data[4] = 0xb800000000000000ULL;
+        data[5] = 0xb800000000000000ULL;
+        data[6] = 0xb800000000000000ULL;
+        data[7] = 0xb800000000000000ULL;
         data[8] = 0xb000000000000000ULL;
+        data[9] = 0xb000000000000000ULL;
+        data[10] = 0xb000000000000000ULL;
+        data[11] = 0xb000000000000000ULL;
         data[12] = 0xb000000000000000ULL;
+        data[13] = 0xb000000000000000ULL;
+        data[14] = 0xb000000000000000ULL;
+        data[15] = 0xb000000000000000ULL;
         data[16] = 0xa000000000000000ULL;
+        data[17] = 0xa000000000000000ULL;
+        data[18] = 0xa000000000000000ULL;
+        data[19] = 0xa000000000000000ULL;
         data[20] = 0xa000000000000000ULL;
+        data[21] = 0xa000000000000000ULL;
+        data[22] = 0xa000000000000000ULL;
+        data[23] = 0xa000000000000000ULL;
         data[24] = 0xa000000000000000ULL;
-        data[104] = 0xbc00000000000000ULL;
-        data[108] = 0xb800000000000000ULL;
-        data[112] = 0xb000000000000000ULL;
-        data[116] = 0xa000000000000000ULL;
-        data[120] = 0xa000000000000000ULL;
-        data[124] = 0xa000000000000000ULL;
-        data[208] = 0xb800000000000000ULL;
-        data[212] = 0xb000000000000000ULL;
-        data[216] = 0xb000000000000000ULL;
-        data[220] = 0xa000000000000000ULL;
-        data[224] = 0xa000000000000000ULL;
-        data[228] = 0xa000000000000000ULL;
-        data[308] = 0xbe00000000000000ULL;
-        data[312] = 0xb800000000000000ULL;
-        data[316] = 0xb000000000000000ULL;
-        data[320] = 0xa000000000000000ULL;
-        data[324] = 0xa000000000000000ULL;
-        data[328] = 0xa000000000000000ULL;
-        data[332] = 0xa000000000000000ULL;
-        data[412] = 0xbc00000000000000ULL;
-        data[416] = 0xb000000000000000ULL;
-        data[420] = 0xb000000000000000ULL;
-        data[424] = 0xa000000000000000ULL;
-        data[428] = 0xa000000000000000ULL;
-        data[432] = 0xa000000000000000ULL;
+        data[25] = 0xa000000000000000ULL;
+        data[26] = 0xa000000000000000ULL;
+        data[27] = 0xa000000000000000ULL;
+        data[28] = 0xa000000000000000ULL;
+        data[29] = 0xa000000000000000ULL;
+        data[30] = 0xa000000000000000ULL;
+        data[31] = 0xa000000000000000ULL;
     }),
-    AttackTable(0, [](uint64_t *& data) {
-        data = new uint64_t [461]();
+    AttackTable(4, [](uint64_t *& data) {
+        data = new uint64_t [64]();
         data[0] = 0x7f00000000000000ULL;
+        data[1] = 0x7e00000000000000ULL;
+        data[2] = 0x7c00000000000000ULL;
+        data[3] = 0x7c00000000000000ULL;
         data[4] = 0x7800000000000000ULL;
+        data[5] = 0x7800000000000000ULL;
+        data[6] = 0x7800000000000000ULL;
+        data[7] = 0x7800000000000000ULL;
         data[8] = 0x7000000000000000ULL;
+        data[9] = 0x7000000000000000ULL;
+        data[10] = 0x7000000000000000ULL;
+        data[11] = 0x7000000000000000ULL;
         data[12] = 0x7000000000000000ULL;
+        data[13] = 0x7000000000000000ULL;
+        data[14] = 0x7000000000000000ULL;
+        data[15] = 0x7000000000000000ULL;
         data[16] = 0x6000000000000000ULL;
+        data[17] = 0x6000000000000000ULL;
+        data[18] = 0x6000000000000000ULL;
+        data[19] = 0x6000000000000000ULL;
         data[20] = 0x6000000000000000ULL;
+        data[21] = 0x6000000000000000ULL;
+        data[22] = 0x6000000000000000ULL;
+        data[23] = 0x6000000000000000ULL;
         data[24] = 0x6000000000000000ULL;
-        data[28] = 0x4000000000000000ULL;
+        data[25] = 0x6000000000000000ULL;
+        data[26] = 0x6000000000000000ULL;
+        data[27] = 0x6000000000000000ULL;
+        data[28] = 0x6000000000000000ULL;
+        data[29] = 0x6000000000000000ULL;
+        data[30] = 0x6000000000000000ULL;
+        data[31] = 0x6000000000000000ULL;
         data[32] = 0x4000000000000000ULL;
+        data[33] = 0x4000000000000000ULL;
+        data[34] = 0x4000000000000000ULL;
+        data[35] = 0x4000000000000000ULL;
         data[36] = 0x4000000000000000ULL;
+        data[37] = 0x4000000000000000ULL;
+        data[38] = 0x4000000000000000ULL;
+        data[39] = 0x4000000000000000ULL;
         data[40] = 0x4000000000000000ULL;
+        data[41] = 0x4000000000000000ULL;
+        data[42] = 0x4000000000000000ULL;
+        data[43] = 0x4000000000000000ULL;
         data[44] = 0x4000000000000000ULL;
+        data[45] = 0x4000000000000000ULL;
+        data[46] = 0x4000000000000000ULL;
+        data[47] = 0x4000000000000000ULL;
         data[48] = 0x4000000000000000ULL;
-        data[104] = 0x7c00000000000000ULL;
-        data[108] = 0x7800000000000000ULL;
-        data[112] = 0x7000000000000000ULL;
-        data[116] = 0x6000000000000000ULL;
-        data[120] = 0x6000000000000000ULL;
-        data[124] = 0x6000000000000000ULL;
-        data[128] = 0x4000000000000000ULL;
-        data[132] = 0x4000000000000000ULL;
-        data[136] = 0x4000000000000000ULL;
-        data[140] = 0x4000000000000000ULL;
-        data[144] = 0x4000000000000000ULL;
-        data[148] = 0x4000000000000000ULL;
-        data[152] = 0x4000000000000000ULL;
-        data[208] = 0x7800000000000000ULL;
-        data[212] = 0x7000000000000000ULL;
-        data[216] = 0x7000000000000000ULL;
-        data[220] = 0x6000000000000000ULL;
-        data[224] = 0x6000000000000000ULL;
-        data[228] = 0x6000000000000000ULL;
-        data[232] = 0x4000000000000000ULL;
-        data[236] = 0x4000000000000000ULL;
-        data[240] = 0x4000000000000000ULL;
-        data[244] = 0x4000000000000000ULL;
-        data[248] = 0x4000000000000000ULL;
-        data[252] = 0x4000000000000000ULL;
-        data[308] = 0x7e00000000000000ULL;
-        data[312] = 0x7800000000000000ULL;
-        data[316] = 0x7000000000000000ULL;
-        data[320] = 0x6000000000000000ULL;
-        data[324] = 0x6000000000000000ULL;
-        data[328] = 0x6000000000000000ULL;
-        data[332] = 0x6000000000000000ULL;
-        data[336] = 0x4000000000000000ULL;
-        data[340] = 0x4000000000000000ULL;
-        data[344] = 0x4000000000000000ULL;
-        data[348] = 0x4000000000000000ULL;
-        data[352] = 0x4000000000000000ULL;
-        data[356] = 0x4000000000000000ULL;
-        data[412] = 0x7c00000000000000ULL;
-        data[416] = 0x7000000000000000ULL;
-        data[420] = 0x7000000000000000ULL;
-        data[424] = 0x6000000000000000ULL;
-        data[428] = 0x6000000000000000ULL;
-        data[432] = 0x6000000000000000ULL;
-        data[436] = 0x4000000000000000ULL;
-        data[440] = 0x4000000000000000ULL;
-        data[444] = 0x4000000000000000ULL;
-        data[448] = 0x4000000000000000ULL;
-        data[452] = 0x4000000000000000ULL;
-        data[456] = 0x4000000000000000ULL;
-        data[460] = 0x4000000000000000ULL;
+        data[49] = 0x4000000000000000ULL;
+        data[50] = 0x4000000000000000ULL;
+        data[51] = 0x4000000000000000ULL;
+        data[52] = 0x4000000000000000ULL;
+        data[53] = 0x4000000000000000ULL;
+        data[54] = 0x4000000000000000ULL;
+        data[55] = 0x4000000000000000ULL;
+        data[56] = 0x4000000000000000ULL;
+        data[57] = 0x4000000000000000ULL;
+        data[58] = 0x4000000000000000ULL;
+        data[59] = 0x4000000000000000ULL;
+        data[60] = 0x4000000000000000ULL;
+        data[61] = 0x4000000000000000ULL;
+        data[62] = 0x4000000000000000ULL;
+        data[63] = 0x4000000000000000ULL;
     }),
 };
 
@@ -5944,7 +5990,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[480] = 0x0000000000002800ULL;
         data[498] = 0x0000000000402800ULL;
     }),
-    AttackTable(5, [](uint64_t *& data) {
+    AttackTable(6, [](uint64_t *& data) {
         data = new uint64_t [511]();
         data[0] = 0x0000010204885000ULL;
         data[45] = 0x0000000000085000ULL;
@@ -6185,7 +6231,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[501] = 0x00000020110a000aULL;
         data[504] = 0x00000000000a000aULL;
     }),
-    AttackTable(5, [](uint64_t *& data) {
+    AttackTable(6, [](uint64_t *& data) {
         data = new uint64_t [504]();
         data[0] = 0x0000804122140014ULL;
         data[52] = 0x0000000000140014ULL;
@@ -6255,7 +6301,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[495] = 0x0000008040280028ULL;
         data[499] = 0x0000000040280028ULL;
     }),
-    AttackTable(5, [](uint64_t *& data) {
+    AttackTable(6, [](uint64_t *& data) {
         data = new uint64_t [510]();
         data[0] = 0x0001020488500050ULL;
         data[28] = 0x0000000000500050ULL;
@@ -6559,7 +6605,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[2021] = 0x004020100a000a11ULL;
         data[2045] = 0x000000000a000a10ULL;
     }),
-    AttackTable(9, [](uint64_t *& data) {
+    AttackTable(11, [](uint64_t *& data) {
         data = new uint64_t [4052]();
         data[0] = 0x0080412214001422ULL;
         data[30] = 0x0000002014001422ULL;
@@ -6690,7 +6736,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[4031] = 0x0000002214001402ULL;
         data[4051] = 0x0080402014001400ULL;
     }),
-    AttackTable(7, [](uint64_t *& data) {
+    AttackTable(9, [](uint64_t *& data) {
         data = new uint64_t [4071]();
         data[0] = 0x0001824428002844ULL;
         data[38] = 0x0000804028002800ULL;
@@ -6821,7 +6867,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[4039] = 0x0000000028002804ULL;
         data[4070] = 0x0000004428002804ULL;
     }),
-    AttackTable(4, [](uint64_t *& data) {
+    AttackTable(5, [](uint64_t *& data) {
         data = new uint64_t [2001]();
         data[0] = 0x0102048850005088ULL;
         data[4] = 0x0000000050005000ULL;
@@ -7092,7 +7138,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[481] = 0x0000000500050810ULL;
         data[493] = 0x0000000500050000ULL;
     }),
-    AttackTable(4, [](uint64_t *& data) {
+    AttackTable(5, [](uint64_t *& data) {
         data = new uint64_t [2030]();
         data[0] = 0x4020110a000a1120ULL;
         data[8] = 0x0000100a000a1120ULL;
@@ -7223,7 +7269,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[2000] = 0x0000100a000a1020ULL;
         data[2029] = 0x0000000a000a0100ULL;
     }),
-    AttackTable(8, [](uint64_t *& data) {
+    AttackTable(14, [](uint64_t *& data) {
         data = new uint64_t [4086]();
         data[0] = 0x8041221400142241ULL;
         data[2] = 0x0000001400142240ULL;
@@ -8655,7 +8701,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[2036] = 0x00010a000a110000ULL;
         data[2039] = 0x00000a000a100000ULL;
     }),
-    AttackTable(6, [](uint64_t *& data) {
+    AttackTable(8, [](uint64_t *& data) {
         data = new uint64_t [4095]();
         data[0] = 0x4122140014224180ULL;
         data[4] = 0x4022140014000000ULL;
@@ -9170,7 +9216,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[4077] = 0x0000140014020100ULL;
         data[4094] = 0x0002140014000000ULL;
     }),
-    AttackTable(11, [](uint64_t *& data) {
+    AttackTable(12, [](uint64_t *& data) {
         data = new uint64_t [4086]();
         data[0] = 0x8244280028448201ULL;
         data[6] = 0x0004280028040000ULL;
@@ -9685,7 +9731,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[4081] = 0x0004280028440000ULL;
         data[4085] = 0x0040280028000000ULL;
     }),
-    AttackTable(4, [](uint64_t *& data) {
+    AttackTable(5, [](uint64_t *& data) {
         data = new uint64_t [2043]();
         data[0] = 0x0488500050880402ULL;
         data[12] = 0x0008500050080000ULL;
@@ -10087,7 +10133,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[2044] = 0x100a000a10200000ULL;
         data[2045] = 0x010a000a00000000ULL;
     }),
-    AttackTable(4, [](uint64_t *& data) {
+    AttackTable(5, [](uint64_t *& data) {
         data = new uint64_t [2045]();
         data[0] = 0x2214001422418000ULL;
         data[4] = 0x2214001422010000ULL;
@@ -10349,7 +10395,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[501] = 0x4428002804000000ULL;
         data[506] = 0x4028002840000000ULL;
     }),
-    AttackTable(4, [](uint64_t *& data) {
+    AttackTable(5, [](uint64_t *& data) {
         data = new uint64_t [2044]();
         data[0] = 0x8850005088040201ULL;
         data[32] = 0x0050005000000000ULL;
@@ -10967,7 +11013,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[484] = 0x000a010000000000ULL;
         data[508] = 0x000a000000000000ULL;
     }),
-    AttackTable(5, [](uint64_t *& data) {
+    AttackTable(6, [](uint64_t *& data) {
         data = new uint64_t [512]();
         data[0] = 0x0014224180000000ULL;
         data[4] = 0x0014000000000000ULL;
@@ -11186,7 +11232,7 @@ template<> struct Attacks<AttacksType::Rank>
 {
     INLINE static uint64_t get(int square, uint64_t mask) noexcept
     {
-        return impl::_RANK_ATTACKS[square]._data[impl::mul_9357036318526133325_rshift_55_mixin<511, false>(mask)];
+        return impl::_RANK_ATTACKS[square][mask];
     }
 };
 
