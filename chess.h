@@ -866,6 +866,7 @@ namespace chess
     #endif
     }
 
+
 #if TUNING_ENABLED || defined(TUNING_PARTIAL)
     INLINE constexpr double interpolate(int pc, int mg, int eg)
     {
@@ -1260,6 +1261,7 @@ namespace chess
         return count_pawns(pawns, _occupied_co[color], mask, false);
     }
 
+
 #if 0
     INLINE int State::diff_bishop_pairs() const
     {
@@ -1293,6 +1295,7 @@ namespace chess
         return count[WHITE] - count[BLACK];
     }
 #endif /* 0 */
+
 
     INLINE int State::diff_doubled_pawns() const
     {
@@ -1371,7 +1374,7 @@ namespace chess
         if ((castling_rights != BB_EMPTY) && (kings & BB_SQUARES[move.from_square()]))
         {
             const auto diff = square_file(move.from_square()) - square_file(move.to_square());
-            return abs(diff) > 1 /* || (rooks & occupied_co(turn) & BB_SQUARES[move.to_square()]) != 0 */;
+            return abs(diff) > 1;
         }
         return false;
     }
