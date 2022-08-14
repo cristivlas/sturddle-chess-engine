@@ -684,7 +684,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
     if (ctxt._ply != 0)
     {
-        if (ctxt._fifty >= 100 || ctxt.is_repeated() > 0)
+        if (ctxt._fifty >= 100 || ctxt.is_repeated() > 0 || ctxt.is_cancelled())
             return 0;
 
         /*
