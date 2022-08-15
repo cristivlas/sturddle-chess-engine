@@ -765,7 +765,7 @@ namespace search
         const bool retry = _retry_next;
         _retry_next = false;
 
-        if (!_excluded && !on_next())
+        if (!_excluded && !on_next() && next_move_index() > 0)
             return nullptr;
 
         /* null move must be tried before actual moves */

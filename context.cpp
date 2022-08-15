@@ -317,7 +317,7 @@ namespace search
     score_t Context::evaluate()
     {
         ASSERT(_fifty < 100);
-        ASSERT(!is_repeated());
+        ASSERT(_ply == 0 || !is_repeated());
 
         ++_tt->_eval_count;
 
@@ -1475,10 +1475,11 @@ namespace search
     bool Context::is_leaf()
     {
         ASSERT(_fifty < 100);
-        ASSERT(is_repeated() <= 0);
 
         if (_ply == 0)
             return false;
+        else
+            ASSERT(is_repeated() <= 0);
 
         if (_ply + 1 >= PLY_MAX)
             return true;

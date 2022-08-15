@@ -17,19 +17,20 @@ Compiler args.
 """
 inc_dirs = ['-I./libpopcnt', '-I./magic-bits/include']
 
-# Assert-enabled build (requires TUNING_ENABLED)
-# args = ['-DTUNING_ENABLED=true']
 link = []
-
-# Debug build
-# if platform.startswith('win'):
-#      args = [ '/Od', '/Zi' ]
-#      link = ['/DEBUG']
-# else:
-#      args = [ '-O0', '-D_DEBUG' ]
 
 # Release build
 args = ['-DNO_ASSERT']
+
+# Assert-enabled build (requires TUNING_ENABLED)
+# args = ['-DTUNING_ENABLED=true']
+
+# Debug build
+#if platform.startswith('win'):
+#     args = [ '/Od', '/Zi' ]
+#     link = ['/DEBUG']
+#else:
+#     args = [ '-O0', '-D_DEBUG', '-DTUNING_ENABLED' ]
 
 
 if platform.startswith('win'):

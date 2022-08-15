@@ -268,11 +268,11 @@ BaseMove TranspositionTable::lookup_countermove(const Context& ctxt) const
 
 const score_t* TranspositionTable::lookup(Context& ctxt)
 {
+    if (ctxt._ply == 0 || ctxt._excluded)
+        return nullptr;
+
     /* expect repetitions to be dealt with before calling into this function */
     ASSERT(!ctxt.is_repeated());
-
-    if (ctxt._excluded)
-        return nullptr;
 
     if (const auto p = _table->lookup<Acquire::Read>(ctxt.state()))
     {
@@ -551,7 +551,6 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
     if (ctxt.is_cancelled())
         return false;
 
-
     /*
      * null move refuted? update capture_square and mate_detected
      */
@@ -684,7 +683,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
     if (ctxt._ply != 0)
     {
-        if (ctxt._fifty >= 100 || ctxt.is_repeated() > 0 || ctxt.is_cancelled())
+        if (ctxt._fifty >= 100 || ctxt.is_repeated() > 0)
             return 0;
 
         /*
@@ -748,7 +747,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         return ctxt._score;
 #endif /* !CACHE_HEURISTIC_CUTOFFS */
     }
-    else if (!ctxt.is_cancelled())
+    else
     {
         ASSERT(ctxt._alpha < ctxt._beta);
 
@@ -865,9 +864,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
                         const auto value = negamax(*s_ctxt, table);
 
-                        if (ctxt.is_cancelled())
-                            break;
-
                         if (value < s_beta && value > SCORE_MIN)
                         {
                             next_ctxt->_extension += ONE_PLY;
@@ -928,7 +924,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
             if (ctxt.is_cancelled())
             {
-                return ctxt._score;
+                return ctxt._score = move_score;
             }
 
             if (ctxt.is_beta_cutoff(next_ctxt, move_score))
@@ -989,7 +985,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     {
                         if (ctxt._ply < PLY_HISTORY_MAX)
                             table._plyHistory[ctxt._ply][ctxt.turn()][next_ctxt->_move]
-                                += 0.01 * ctxt.depth() * next_ctxt->improvement() + (move_score > MATE_HIGH);
+                                += 0.01 * ctxt.depth() * next_ctxt->improvement()
+                                + (move_score > MATE_HIGH);
 
                         if (ctxt.depth() >= COUNTER_MOVE_MIN_DEPTH)
                             table.store_countermove(ctxt);
