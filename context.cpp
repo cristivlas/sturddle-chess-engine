@@ -1662,10 +1662,7 @@ namespace search
                     break;
                 }
 
-                /* retain previously calculated capture score */
-                if (move._state->capture_value == 0)
-                    move._score = 0;
-
+                move._score = 0;
                 move._group = MoveOrder::UNORDERED_MOVES;
             }
         }
@@ -1793,8 +1790,6 @@ namespace search
      */
     void MoveMaker::order_moves(Context& ctxt, size_t start_at, score_t futility)
     {
-        static constexpr int MAX_PHASE = 4;
-
         ASSERT(_phase <= MAX_PHASE);
         ASSERT(ctxt._tt);
         ASSERT(ctxt.moves()[start_at]._group == MoveOrder::UNORDERED_MOVES);
@@ -1854,6 +1849,7 @@ namespace search
                     if (move._state ? move._state->capture_value : ctxt.state().is_capture(move))
                     {
                         make_capture(ctxt, move);
+                        ASSERT(move._group != MoveOrder::UNORDERED_MOVES);
                     }
                     else if (auto k_move = match_killer(killer_moves, move))
                     {
@@ -1883,7 +1879,7 @@ namespace search
                     break;
 
                 case 4:
-                    if (!make_move(ctxt, move, futility))
+                    if (!make_move<true>(ctxt, move, futility))
                     {
                         break;
                     }

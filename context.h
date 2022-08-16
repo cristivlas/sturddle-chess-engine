@@ -85,6 +85,8 @@ namespace search
      */
     class MoveMaker
     {
+        static constexpr int MAX_PHASE = 4;
+
     public:
         MoveMaker() = default;
 
@@ -107,7 +109,7 @@ namespace search
         const Move* get_move_at(Context& ctxt, int index, score_t futility = 0);
 
         void make_capture(Context&, Move&);
-        bool make_move(Context&, Move&, score_t futility = 0);
+        template<bool LateMovePrune> bool make_move(Context&, Move&, score_t futility = 0);
         bool make_move(Context&, Move&, MoveOrder, score_t = 0);
         void mark_as_illegal(Move&);
         void order_moves(Context&, size_t start_at, score_t futility);
@@ -278,7 +280,8 @@ namespace search
         int64_t     nanosleep(int nanosec);
 
         Context*    next(bool null_move = false, score_t = 0);
-        Context*    next_ply(bool init = false) const;
+
+        template<bool Construct = false> Context* next_ply() const;
 
         int         next_move_index() { return _move_maker.current(*this); }
         bool        on_next();
@@ -783,7 +786,7 @@ namespace search
         ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
         ASSERT(null_move || move->_group < MoveOrder::UNORDERED_MOVES);
 
-        auto ctxt = next_ply(true);
+        auto ctxt = next_ply<true>();
 
         if (move)
         {
@@ -934,14 +937,13 @@ namespace search
     }
 
 
-    INLINE Context* Context::next_ply(bool init) const
+    template<bool Construct> INLINE Context* Context::next_ply() const
     {
-        if (_ply >= PLY_MAX)
-            return nullptr;
+        ASSERT(_ply < PLY_MAX);
 
         auto* buffer = _context_stacks[tid()][_ply].as_context();
 
-        if (init)
+        if constexpr(Construct)
             return new (buffer) Context;
         else
             return buffer;
@@ -1105,7 +1107,7 @@ namespace search
 
     INLINE void MoveMaker::make_capture(Context& ctxt, Move& move)
     {
-        if (make_move(ctxt, move) && move._score == 0)
+        if (make_move<false>(ctxt, move))
         {
             ASSERT(move._state->capture_value);
 
@@ -1159,6 +1161,7 @@ namespace search
     /*
      * Return false if the move is not legal, or pruned.
      */
+    template<bool LateMovePrune>
     INLINE bool MoveMaker::make_move(Context& ctxt, Move& move, score_t futility)
     {
         ASSERT(move);
@@ -1181,27 +1184,26 @@ namespace search
          * Prune (before verifying move legality, thus saving is_check() calls).
          * Late-move prune before making the move.
          */
-        if (_phase > 2
-            && ctxt.depth() > 0
-            && _current >= LMP[ctxt.depth()]
-            && ctxt.can_forward_prune())
-        {
-            _have_pruned_moves = true;
-            ++ctxt._pruned_count;
-            move._group = MoveOrder::PRUNED_MOVES;
-            return false;
-        }
-
-        ctxt.state().clone_into(*move._state);
-
-        ASSERT(move._state->capture_value == 0);
+        if constexpr(LateMovePrune)
+            if (_phase > 2
+                && ctxt.depth() > 0
+                && _current >= LMP[ctxt.depth()]
+                && ctxt.can_forward_prune())
+            {
+                _have_pruned_moves = true;
+                ++ctxt._pruned_count;
+                move._group = MoveOrder::PRUNED_MOVES;
+                return false;
+            }
 
         /* capturing the king is an illegal move (Louis XV?) */
-        if (move._state->kings & chess::BB_SQUARES[move.to_square()])
+        if (ctxt.state().kings & chess::BB_SQUARES[move.to_square()])
         {
             mark_as_illegal(move);
             return false;
         }
+        ctxt.state().clone_into(*move._state);
+        ASSERT(move._state->capture_value == 0);
 
         move._state->apply_move(move);
 
@@ -1250,14 +1252,16 @@ namespace search
         /* consistency check */
         ASSERT((move._state->capture_value != 0) == ctxt.state().is_capture(move));
 
-        ctxt.get_tt()->_nodes += COUNT_VALID_MOVES_AS_NODES;
+        if constexpr(COUNT_VALID_MOVES_AS_NODES)
+            ++ctxt.get_tt()->_nodes;
+
         return (_have_move = true);
     }
 
 
     INLINE bool MoveMaker::make_move(Context& ctxt, Move& move, MoveOrder group, score_t score)
     {
-        if (!make_move(ctxt, move))
+        if (!make_move<true>(ctxt, move))
         {
             ASSERT(move._group >= MoveOrder::QUIET_MOVES);
             return false;

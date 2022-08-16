@@ -22,15 +22,17 @@ link = []
 # Release build
 args = ['-DNO_ASSERT']
 
-# Assert-enabled build (requires TUNING_ENABLED)
-# args = ['-DTUNING_ENABLED=true']
+# Assert-enabled build
+if environ.get('BUILD_ASSERT', None):
+    args = ['-DTUNING_ENABLED=true']
 
 # Debug build
-#if platform.startswith('win'):
-#     args = [ '/Od', '/Zi' ]
-#     link = ['/DEBUG']
-#else:
-#     args = [ '-O0', '-D_DEBUG', '-DTUNING_ENABLED' ]
+if environ.get('BUILD_DEBUG', None):
+    if platform.startswith('win'):
+         args = [ '/Od', '/Zi' ]
+         link = ['/DEBUG']
+    else:
+         args = [ '-O0', '-D_DEBUG', '-DTUNING_ENABLED' ]
 
 
 if platform.startswith('win'):

@@ -720,7 +720,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         ASSERT(ctxt._algorithm != NEGASCOUT || ctxt.is_leftmost() || ctxt.is_retry());
     }
 
-    table._nodes += !COUNT_VALID_MOVES_AS_NODES;
+    if constexpr(!COUNT_VALID_MOVES_AS_NODES)
+        ++table._nodes;
 
     const auto alpha = ctxt._alpha;
 
@@ -924,7 +925,10 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
             if (ctxt.is_cancelled())
             {
-                return ctxt._score = move_score;
+                if (move_score < SCORE_MAX)
+                    ctxt._score = move_score;
+
+                return ctxt._score;
             }
 
             if (ctxt.is_beta_cutoff(next_ctxt, move_score))
@@ -1037,7 +1041,13 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
         ASSERT(ctxt._score <= ctxt._alpha || ctxt._best_move);
 
+    #if 0
+        /*
+         * since v0.98 Context::next() checks that at least one move
+         * has been searched before returning nullptr on cancellation
+         */
         if (!ctxt.is_cancelled())
+    #endif
         {
             if (!ctxt.has_moves())
             {
@@ -1047,13 +1057,15 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 ASSERT(ctxt._score > SCORE_MIN);
                 ASSERT(ctxt._score < SCORE_MAX);
             }
-            else if (!ctxt._excluded)
+    #if !NO_ASSERT
+            else if (!ctxt._excluded && !ctxt.is_cancelled())
             {
                 /* algorithm invariants */
                 ASSERT(ctxt._score > SCORE_MIN);
                 ASSERT(ctxt._score < SCORE_MAX);
                 ASSERT(ctxt._alpha >= ctxt._score);
             }
+    #endif /* NO_ASSERT */
         }
     }
 
