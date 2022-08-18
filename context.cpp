@@ -1417,10 +1417,11 @@ namespace search
 
         const int depth = this->depth();
 
-        /* no reduction / pruning in qsearch */
-        if (depth < 0)
-            return LMRAction::None;
+        /* late move pruning */
+        if (depth > 0 && count >= LMP[depth] && can_prune())
+            return LMRAction::Prune;
 
+        /* no reductions at very low depth and in qsearch */
         if (depth < 3 || count < _parent->_full_depth_count || !can_reduce())
             return LMRAction::None;
 
@@ -1801,7 +1802,11 @@ namespace search
 
         _have_move = false;
 
-        while (!_have_move && start_at < size_t(_count) && _phase < MAX_PHASE)
+        auto& moves_list = ctxt.moves();
+        const auto count = size_t(_count);
+        ASSERT(count <= moves_list.size());
+
+        while (!_have_move && start_at < count && _phase < MAX_PHASE)
         {
             if (++_phase == 2)
             {
@@ -1811,14 +1816,11 @@ namespace search
             /********************************************************************/
             /* iterate over pseudo-legal moves                                  */
             /********************************************************************/
-            auto& moves_list = ctxt.moves();
-            const auto n = moves_list.size();
-
-            for (size_t i = start_at; i < n; ++i)
+            for (size_t i = start_at; i < count; ++i)
             {
                 auto& move = moves_list[i];
 
-                if (move._group >= MoveOrder::QUIET_MOVES)
+                if (move._group >= MoveOrder::PRUNED_MOVES)
                 {
                     if (_need_sort)
                         continue;
@@ -1859,41 +1861,37 @@ namespace search
 
                 case 3:
                     {   /* top historical scores, including counter-move bonus */
-                        const auto score = ctxt.history_score(move);
-                        if (score > hist_high)
+                        const auto hist_score = ctxt.history_score(move);
+                        if (hist_score > hist_high)
                         {
-                            make_move(ctxt, move, MoveOrder::HISTORY_COUNTERS, score);
+                            make_move(ctxt, move, MoveOrder::HISTORY_COUNTERS, hist_score);
                             break;
                         }
-                    }
 
-                    if ((ctxt.is_counter_move(move)
-                        || move.from_square() == ctxt._capture_square
-                        || is_pawn_push(ctxt, move)
-                        || is_attack_on_king(ctxt, move)
-                        )
-                        && make_move(ctxt, move, MoveOrder::TACTICAL_MOVES))
-                    {
-                        move._score = ctxt.history_score(move);
+                        if ((ctxt.is_counter_move(move)
+                            || move.from_square() == ctxt._capture_square
+                            || is_pawn_push(ctxt, move)
+                            || is_attack_on_king(ctxt, move)
+                            )
+                            && make_move(ctxt, move, MoveOrder::TACTICAL_MOVES, hist_score))
+                        {
+                            ASSERT(move._score == hist_score);
+                            break;
+                        }
+
+                        if (move._score >= HISTORY_LOW
+                            && make_move<true>(ctxt, move, futility)
+                            && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
+                        {
+                            move._group = MoveOrder::TACTICAL_MOVES;
+                            move._score = hist_score;
+                        }
                     }
                     break;
 
                 case 4:
-                    if (!make_move<true>(ctxt, move, futility))
-                    {
-                        break;
-                    }
-                    move._score = ctxt.history_score(move);
-
-                    if (move._score >= HISTORY_LOW
-                        && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
-                    {
-                        move._group = MoveOrder::TACTICAL_MOVES;
-                    }
-                    else
-                    {
+                    if (make_move<true>(ctxt, move, futility))
                         move._group = MoveOrder::LATE_MOVES;
-                    }
                     break;
 
                 default:
@@ -1907,18 +1905,22 @@ namespace search
 
         if (size_t(_count) <= start_at)
         {
-            ASSERT(ctxt.moves()[start_at]._group >= MoveOrder::QUIET_MOVES);
+            ASSERT(moves_list[start_at]._group >= MoveOrder::PRUNED_MOVES);
             _need_sort = false;
         }
         else if (_need_sort)
         {
-            sort_moves(ctxt, start_at);
+            sort_moves(ctxt, start_at, count);
         }
 
     #if !defined(NO_ASSERT)
-        for (size_t i = _count; i < ctxt.moves().size(); ++i)
+        for (size_t i = _count; i < moves_list.size(); ++i)
         {
-            ASSERT(ctxt.moves()[i]._group >= MoveOrder::QUIET_MOVES);
+            ASSERT(moves_list[i]._group >= MoveOrder::PRUNED_MOVES);
+        }
+        for (size_t i = 1; i < moves_list.size(); ++i)
+        {
+            ASSERT(compare_moves_ge(moves_list[i-1], moves_list[i]));
         }
     #endif /* NO_ASSERT */
     }

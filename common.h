@@ -172,8 +172,8 @@ namespace search
         TACTICAL_MOVES = 10, /* pushed pawns, checks, etc. */
         LATE_MOVES = 11, /* all other legal moves not covered above */
         UNORDERED_MOVES = 12,
-        QUIET_MOVES = 13,
-        PRUNED_MOVES = 14, /* futility-prune at move ordering level */
+        PRUNED_MOVES = 13,
+        QUIET_MOVES = 14,
         ILLEGAL_MOVES = 15,
     };
 }
