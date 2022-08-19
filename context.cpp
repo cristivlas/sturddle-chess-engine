@@ -833,29 +833,42 @@ namespace search
     }
 
 
+    static INLINE int eval_material_imbalance(const State& state, int pcs)
+    {
+        if ((state.rooks | state.queens) == 0)
+        {
+            const int pawn_cnt[] = {
+                popcount(state.pawns & state.occupied_co(BLACK)),
+                popcount(state.pawns & state.occupied_co(WHITE))
+            };
+
+            for (auto side : { BLACK, WHITE })
+            {
+                if (pawn_cnt[side] < pawn_cnt[!side]
+                    && ((state.bishops | state.knights) & state.occupied_co(side))
+                   )
+                {
+                    return SIGN[side] * MATERIAL_IMBALANCE;
+                }
+            }
+        }
+        return 0;
+    }
+
+
     /*
      * If the difference in material is with a pawn or less, favor
      * the side with two minor pieces over the side with extra rook.
      */
-    static INLINE int eval_redundant_rook(const State& state, int pcs, score_t mat_eval)
+    static INLINE int eval_redundant_rook(const State& state, int pcs)
     {
         int score = 0;
 
-        if (abs(mat_eval) <= WEIGHT[PAWN])
+        for (auto color : { BLACK, WHITE })
         {
-            for (auto color : { BLACK, WHITE })
-            {
-                score += SIGN[color]
-                    * (popcount((state.bishops | state.knights) & state.occupied_co(!color)) >= 2)
-                    * (popcount(state.rooks & state.occupied_co(color)) >= 2);
-            }
-
-            if (DEBUG_MATERIAL && score)
-            {
-                std::ostringstream out;
-                out << "rook: " << Context::epd(state) << ": " << score << ", mat: " << mat_eval;
-                Context::log_message(LogLevel::DEBUG, out.str());
-            }
+            score += SIGN[color]
+                * (popcount((state.bishops | state.knights) & state.occupied_co(!color)) >= 2)
+                * (popcount(state.rooks & state.occupied_co(color)) >= 2);
         }
 
         return score * interpolate(pcs, 0, REDUNDANT_ROOK);
@@ -1125,7 +1138,12 @@ namespace search
 
         eval += eval_center(state, piece_count);
 
-        eval += eval_redundant_rook(state, piece_count, mat_eval);
+        if (abs(mat_eval) < WEIGHT[PAWN])
+        {
+            eval += eval_material_imbalance(state, piece_count);
+            eval += eval_redundant_rook(state, piece_count);
+        }
+
         eval += eval_open_files(state, piece_count);
         eval += eval_pawn_structure(state, piece_count);
         eval += eval_piece_grading(state, piece_count);
@@ -1133,8 +1151,10 @@ namespace search
         eval += state.diff_connected_rooks()
              * interpolate(piece_count, MIDGAME_CONNECTED_ROOKS, ENDGAME_CONNECTED_ROOKS);
 
-        eval += BISHOP_PAIR * state.diff_bishop_pairs();
-
+        if (state.bishops)
+        {
+            eval += BISHOP_PAIR * state.diff_bishop_pairs();
+        }
         return eval;
     }
 

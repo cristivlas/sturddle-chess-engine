@@ -96,7 +96,7 @@ class UCI:
             self.book = chess.polyglot.MemoryMappedReader(self.args.book)
             self.use_opening_book = True
         except FileNotFoundError as e:
-            logging.warning(e)
+            pass
         except:
             logging.exception('opening book')
 
