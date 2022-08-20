@@ -52,20 +52,19 @@ struct Config
 };
 
 std::string Config::_group;
+#define GROUP(x) Config::Group __##x(_TOSTR(x));
 
 Config::Namespace Config::_namespace = {
 #if MOBILITY_TUNING_ENABLED
     /* Piece mobility coefficients */
-    { "MOBILITY_PAWN", Config::Param{ &chess::MOBILITY[chess::PieceType::PAWN], 0, 50 } },
-    { "MOBILITY_KNIGHT", Config::Param{ &chess::MOBILITY[chess::PieceType::KNIGHT], 0, 50 } },
-    { "MOBILITY_BISHOP", Config::Param{ &chess::MOBILITY[chess::PieceType::BISHOP], 0, 50 } },
-    { "MOBILITY_ROOK", Config::Param{ &chess::MOBILITY[chess::PieceType::ROOK], 0, 50 } },
-    { "MOBILITY_QUEEN", Config::Param{ &chess::MOBILITY[chess::PieceType::QUEEN], 0, 50 } },
-    { "MOBILITY_KING", Config::Param{ &chess::MOBILITY[chess::PieceType::KING], 0, 50 } },
+    { "MOBILITY_PAWN", Config::Param{ &chess::MOBILITY[chess::PieceType::PAWN], 0, 50, "Eval" } },
+    { "MOBILITY_KNIGHT", Config::Param{ &chess::MOBILITY[chess::PieceType::KNIGHT], 0, 50, "Eval" } },
+    { "MOBILITY_BISHOP", Config::Param{ &chess::MOBILITY[chess::PieceType::BISHOP], 0, 50, "Eval" } },
+    { "MOBILITY_ROOK", Config::Param{ &chess::MOBILITY[chess::PieceType::ROOK], 0, 50, "Eval" } },
+    { "MOBILITY_QUEEN", Config::Param{ &chess::MOBILITY[chess::PieceType::QUEEN], 0, 50, "Eval" } },
+    { "MOBILITY_KING", Config::Param{ &chess::MOBILITY[chess::PieceType::KING], 0, 50, "Eval" } },
 #endif /* MOBILITY_TUNING_ENABLED */
 };
-
-  #define GROUP(x) Config::Group __##x(_TOSTR(x));
 
 #else
 
@@ -140,8 +139,8 @@ DECLARE_VALUE(  COUNTER_MOVE_MIN_DEPTH,               3,    0,      20)
 DECLARE_VALUE(  HISTORY_COUNT_HIGH,                8915,    1,   20000)
 DECLARE_VALUE(  HISTORY_FAIL_LOW_MARGIN,            918,    0,    2000)
 DECLARE_VALUE(  HISTORY_FAIL_LOW_PENALTY,            62,    0,     100)
-DECLARE_VALUE(  HISTORY_HIGH,                        87,    0,     100)
-DECLARE_VALUE(  HISTORY_LOW,                         61,    0, HISTORY_HIGH)
+DECLARE_VALUE(  HISTORY_HIGH,                        60,    0,     100)
+DECLARE_VALUE(  HISTORY_LOW,                         30,    0, HISTORY_HIGH)
 DECLARE_VALUE(  HISTORY_MIN_DEPTH,                   11,    0,     100)
 
 GROUP(Eval)

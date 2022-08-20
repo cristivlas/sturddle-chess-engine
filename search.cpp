@@ -803,20 +803,16 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             #endif /* EXTRA_STATS */
 
                 /* Futility pruning */
-                if (move_count > 0)
+                if (futility > 0)
                 {
-                    if (futility < 0)
-                        futility = ctxt.futility_margin();
+                    ASSERT(move_count > 0);
 
-                    if (futility > 0)
+                    const auto val = futility - next_ctxt->evaluate_material();
+
+                    if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune())
                     {
-                        const auto val = futility - next_ctxt->evaluate_material();
-
-                        if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune())
-                        {
-                            update_pruned(ctxt, *next_ctxt, table._futility_prune_count);
-                            continue;
-                        }
+                        update_pruned(ctxt, *next_ctxt, table._futility_prune_count);
+                        continue;
                     }
                 }
 
@@ -915,7 +911,12 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 }
 
                 if (!next_ctxt->is_retry())
+                {
                     ++move_count;
+
+                    if (futility < 0)
+                        futility = ctxt.futility_margin();
+                }
             }
 
             /*

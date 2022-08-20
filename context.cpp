@@ -1677,7 +1677,7 @@ namespace search
                     break;
                 }
 
-                if (move._group >= MoveOrder::QUIET_MOVES)
+                if (move._group == MoveOrder::ILLEGAL_MOVES)
                 {
                     _count = i;
                     break;
@@ -1759,7 +1759,7 @@ namespace search
          * If in check, no need to determine "quieteness", since
          * all legal moves are about getting out of check.
          */
-        _group_quiet_moves = (ctxt.is_qsearch() && !ctxt.is_check());
+        _group_quiet_moves = (ctxt.depth() <= 0 && !ctxt.is_check());
 
         if (ctxt._ply * !ctxt.is_null_move() * !ctxt._excluded)
         {
@@ -1911,7 +1911,10 @@ namespace search
 
                 case 4:
                     if (make_move<true>(ctxt, move, futility))
+                    {
                         move._group = MoveOrder::LATE_MOVES;
+                        move._score = ctxt.history_score(move);
+                    }
                     break;
 
                 default:

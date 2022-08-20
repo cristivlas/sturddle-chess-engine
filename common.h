@@ -118,9 +118,15 @@ using score_t = int32_t;
   constexpr size_t TRANSPOSITION_TABLE_SLOTS = 16 * 1024 * 1024;
 #endif /* LOW_MEMORY_PROFILE */
 
-#define MOBILITY_TUNING_ENABLED             false
+#if !defined(MOBILITY_TUNING_ENABLED)
+  #define MOBILITY_TUNING_ENABLED           false
+#endif
 
-/* Export parameters to Python scripts? */
+/*
+ * When TUNING_ENABLED is true, values introduced by DECLARE_VALUE in config.h
+ * become visible to Python scripts (via set_param, get_params, get_param_info)
+ * and can be tweaked at runtime.
+ */
 #if !defined(TUNING_ENABLED)
   #define TUNING_ENABLED                    false
 #endif

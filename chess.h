@@ -79,6 +79,9 @@ namespace chess
 
     static constexpr auto BB_SQUARES = bb_squares(std::make_index_sequence<64>{});
 
+    static constexpr Bitboard BB_LIGHT_SQUARES = 0x55aa55aa55aa55aaULL;
+    static constexpr Bitboard BB_DARK_SQUARES  = 0xaa55aa55aa55aa55ULL;
+
     extern Bitboard BB_KING_ATTACKS[64];
     extern Bitboard BB_KNIGHT_ATTACKS[64];
     extern Bitboard BB_PAWN_ATTACKS[2][64];
@@ -224,10 +227,10 @@ namespace chess
     };
 
 #if 1
-  #define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 2, 1, 3, 2 }
+  #define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 7, 1, 3, 2 }
 #else
   /* do not include pawns in mobility evals */
-  #define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 2, 2, 1, 3, 2 }
+  #define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 2, 7, 1, 3, 2 }
 #endif
 
 #if MOBILITY_TUNING_ENABLED
@@ -1262,21 +1265,6 @@ namespace chess
     }
 
 
-#if 0
-    INLINE int State::diff_bishop_pairs() const
-    {
-        int count = 0;
-
-        for (auto color : { BLACK, WHITE })
-        {
-            if (popcount(bishops & occupied_co(color)) == 1)
-            {
-                count -= SIGN[color];
-            }
-        }
-        return count;
-    }
-#else
     INLINE int State::diff_bishop_pairs() const
     {
         int count[] = { 0, 0 };
@@ -1294,7 +1282,6 @@ namespace chess
         }
         return count[WHITE] - count[BLACK];
     }
-#endif /* 0 */
 
 
     INLINE int State::diff_doubled_pawns() const

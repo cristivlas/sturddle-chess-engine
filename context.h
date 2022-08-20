@@ -614,14 +614,6 @@ namespace search
         if (_ply == 0 || !_futility_pruning || depth() < 1)
             return 0;
 
-        /*
-         * No need to check for futile moves when material is above alpha,
-         * since no move can immediately result in decrease of material
-         * (margin of one PAWN for piece-square evaluation).
-         */
-        if (evaluate_material() > std::max(_alpha, _score) + chess::WEIGHT[chess::PAWN])
-            return 0;
-
         static const auto fp_margins = margins(std::make_index_sequence<PLY_MAX>{});
 
         return fp_margins[depth()] * can_forward_prune();
@@ -1261,6 +1253,7 @@ namespace search
             move._group = MoveOrder::QUIET_MOVES;
             return false;
         }
+
         /* consistency check */
         ASSERT((move._state->capture_value != 0) == ctxt.state().is_capture(move));
 

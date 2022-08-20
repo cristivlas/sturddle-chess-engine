@@ -1090,7 +1090,7 @@ def perft3(fen, repeat=1):
     start = time.perf_counter()
 
     for i in range(0, repeat):
-        node._ctxt._max_depth = i % 100
+        node._ctxt._max_depth = max(1, i % 100)
         while node._ctxt.next(False, 0) != NULL:
             count += 1
         node._ctxt.rewind(0, True)
