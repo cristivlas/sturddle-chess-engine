@@ -820,6 +820,8 @@ namespace chess
     }
 
 
+    template<typename T> INLINE T constexpr pow2(T x) { return x * x; }
+
     namespace
     {
         template<int N> struct _exp {

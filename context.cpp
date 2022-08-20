@@ -146,7 +146,6 @@ namespace search
      * Context
      *---------------------------------------------------------------------*/
     atomic_bool Context::_cancel(false);
-    atomic_bool Context::_reset_window(false);
 
     atomic_int  Context::_time_limit = -1; /* milliseconds */
     atomic_time Context::_time_start;
@@ -258,11 +257,9 @@ namespace search
                     if (next_ctxt->_retry_above_alpha == RETRY::Reduced)
                     {
                         _retry_next = true;
-
                     #if EXTRA_STATS
                         ++_tt->_retry_reductions;
                     #endif /* EXTRA_STATS */
-
                         /* increment, so that late_move_reduce() skips it */
                         _full_depth_count = next_move_index() + 1;
                     }
@@ -963,39 +960,30 @@ namespace search
     }
 
 
-    static Bitboard pawn_chain(
-        const State&    state,
-        Color           color,
-        Square          pawn_square,
-        Bitboard        (&cache)[64])
+    static INLINE int eval_pawn_chain(const State& state, Color color, Square pawn, int (&pawn_chain_evals)[64])
     {
-        auto& chain = cache[pawn_square];
+        int& score = pawn_chain_evals[pawn];
 
-        if (chain == BB_ALL)
+        if (score == SCORE_MIN)
         {
-            const auto defenders = pawn_defenders(state, color, pawn_square);
+            score = 0;
 
-            chain = defenders;
+            if (const auto defenders = pawn_defenders(state, color, pawn))
+            {
+                for_each_square(defenders, [&](Square square) {
+                    score += 1 + eval_pawn_chain(state, color, square, pawn_chain_evals);
+                });
+            }
 
             score += popcount(state.attacker_pieces_mask(color, pawn, state.occupied()));
         }
-        return chain;
-    }
 
-    static INLINE int eval_pawn_chain(
-        const State&    state,
-        Color           color,
-        Square          pawn_square,
-        Bitboard        (&cache)[64])
-    {
-        const auto chain = pawn_chain(state, color, pawn_square, cache);
-        return chain == BB_EMPTY ? 0 : pow(2, 1 + popcount(chain));
+        return score;
     }
 
 
-    /* Evaluate unblocked, passed pawns */
-    template<int i> static INLINE
-    int eval_passed_pawns(const State& state, int piece_count, Bitboard (&pawn_chain)[2][64])
+    template<int i>
+    static INLINE int eval_passed_pawns(const State& state, int piece_count, int (&pawn_chain_evals)[2][64])
     {
         struct PassedPawnRank
         {
@@ -1045,8 +1033,8 @@ namespace search
                 }
 
                 score += sign
-                    * eval_pawn_chain(state, color, square, pawn_chain[color])
-                    * interpolate(piece_count, MIDGAME_PAWN_CHAIN, ENDGAME_PAWN_CHAIN);
+                    * eval_pawn_chain(state, color, square, pawn_chain_evals[color])
+                    * interpolate(piece_count, MIDGAME_DEFENDED_PASSED, ENDGAME_DEFENDED_PASSED);
             });
         }
 
@@ -1095,16 +1083,15 @@ namespace search
     {
         int eval = eval_passed_formation(state, pc);
 
-        Bitboard pawn_chain_cache[2][64];
-        std::fill_n(&pawn_chain_cache[0][0], 2 * 64, BB_ALL);
+        int pawn_chain_evals[2][64];
+        std::fill_n(&pawn_chain_evals[0][0], 2 * 64, SCORE_MIN);
 
-        eval += eval_passed_pawns<0>(state, pc, pawn_chain_cache);
-        eval += eval_passed_pawns<1>(state, pc, pawn_chain_cache);
+        eval += eval_passed_pawns<0>(state, pc, pawn_chain_evals);
+        eval += eval_passed_pawns<1>(state, pc, pawn_chain_evals);
 
-        int doubled_pawn_count = 0;
-        int isolated_pawn_count = 0;
-        int diff = 0; /* for pawn majority */
-        int pawn_chain = 0;
+        int doubled = 0;
+        int isolated = 0;
+        int diff = 0;
 
         for (auto color : { BLACK, WHITE })
         {
@@ -1123,29 +1110,9 @@ namespace search
         }
 
         return eval
-            + doubled_pawn_count * interpolate(pc, MIDGAME_DOUBLED_PAWNS, ENDGAME_DOUBLED_PAWNS)
-            + isolated_pawn_count * interpolate(pc, MIDGAME_ISOLATED_PAWNS, ENDGAME_ISOLATED_PAWNS)
-            + pawn_chain * interpolate(pc, MIDGAME_PAWN_CHAIN, ENDGAME_PAWN_CHAIN)
+            + doubled * interpolate(pc, MIDGAME_DOUBLED_PAWNS, ENDGAME_DOUBLED_PAWNS)
+            + isolated * interpolate(pc, MIDGAME_ISOLATED_PAWNS, ENDGAME_ISOLATED_PAWNS)
             + (diff != 0) * SIGN[diff > 0] * interpolate(pc, MIDGAME_PAWN_MAJORITY, ENDGAME_PAWN_MAJORITY);
-    }
-
-
-    /*
-     * Discourage exchanging queens if the "other" side's king is less safe than "ours".
-     */
-    static INLINE int eval_queen_exchange(const Context& ctxt, int king_safety)
-    {
-        if (king_safety
-            && ctxt._parent
-            && ctxt.state().capture_value == WEIGHT[QUEEN]
-            && ctxt._parent->state().capture_value == WEIGHT[QUEEN]
-            && ctxt.state().queens == BB_EMPTY
-            && ctxt.turn() == (king_safety > 0))
-        {
-            return king_safety + SIGN[ctxt.turn()] * QUEEN_EXCHANGE_PENALTY;
-        }
-
-        return king_safety;
     }
 
 
@@ -1154,12 +1121,9 @@ namespace search
         int diff = 0;
         const auto occupied = state.occupied();
 
-        const auto occupied = state.occupied();
-
         for (auto color : { BLACK, WHITE })
         {
             const auto sign = SIGN[color];
-
             for_each_square(state.occupied_co(color) & ~(state.pawns | state.kings), [&](Square square) {
                 diff -= sign * popcount(state.attackers_mask(!color, square, occupied));
             });
@@ -1181,7 +1145,6 @@ namespace search
         }
 
         eval += eval_open_files(state, piece_count);
-
         eval += eval_pawn_structure(state, piece_count);
         eval += eval_piece_grading(state, piece_count);
 
@@ -1202,7 +1165,7 @@ namespace search
         const auto mat_eval = ctxt.evaluate_material();
 
         return eval_tactical(ctxt.state(), mat_eval, piece_count)
-            + eval_queen_exchange(ctxt, ctxt.eval_king_safety(piece_count))
+            + ctxt.eval_king_safety(piece_count)
             + ctxt.eval_threats(piece_count);
     }
 
@@ -1221,11 +1184,8 @@ namespace search
         {
             _tt->_eval_depth = _ply;
 
-            /* 1. Material + piece-squares + mobility, if PV node */
-            if (is_pv_node())
-                eval = state().eval();
-            else
-                eval = state().eval<false>();
+            /* 1. Material + piece-squares + mobility */
+            eval = state().eval();
 
             ASSERT(eval > SCORE_MIN);
             ASSERT(eval < SCORE_MAX);
@@ -1249,13 +1209,11 @@ namespace search
                     }
                     _tt_entry._eval = eval;
                 }
-
                 /* 2. Tactical (skip in midgame at low depth) */
-                else if (is_pv_node() || state().is_endgame() || depth() > TACTICAL_LOW_DEPTH)
+                else if (state().is_endgame() || depth() > TACTICAL_LOW_DEPTH)
                 {
                     eval -= CHECK_BONUS * is_check();
                     eval += SIGN[turn] * eval_tactical(*this);
-
                     ASSERT(eval < SCORE_MAX);
 
                     _tt_entry._eval = eval;
@@ -1325,8 +1283,6 @@ namespace search
             _extension += is_recapture() * (is_pv_node() * (ONE_PLY - 1) + 1);
             _extension += is_singleton() * (is_pv_node() + 1) * ONE_PLY / 2;
 
-            _extension += !state().promotion * !state().capture_value * (improvement() / IMPROVEMENT_EXT_DIV);
-
             /*
              * extend if move has historically high cutoff percentages and counts
              */
@@ -1349,7 +1305,7 @@ namespace search
 
 
     /*
-     * Used when the search failed to find a move before time ran out.
+     * Used when the search has fails to find a move before the time runs out.
      */
     const Move* Context::first_valid_move()
     {
@@ -1388,7 +1344,6 @@ namespace search
 
         _repetitions = -1;
 
-        _reset_window = false;
         _retry_next = false;
         _retry_beta = SCORE_MAX;
 
@@ -1417,31 +1372,22 @@ namespace search
             }
             else if (score <= _tt->_w_alpha)
             {
-                _alpha = std::max(SCORE_MIN, score - wnd_ext_bounds[iteration()]);
+                _alpha = std::max(SCORE_MIN, score - HALF_WINDOW * pow2(iteration()));
                 _beta = _tt->_w_beta;
             }
             else if (score >= _tt->_w_beta)
             {
                 _alpha = _tt->_w_alpha;
-                _beta = std::min(SCORE_MAX, score + wnd_ext_bounds[iteration()]);
+                _beta = std::min(SCORE_MAX, score + HALF_WINDOW * pow2(iteration()));
             }
             else
             {
-                _alpha = std::max(SCORE_MIN, score - wnd_bounds[iteration()]);
-                _beta = std::min(SCORE_MAX, score + wnd_bounds[iteration()]);
-            #if 0
-                if (_alpha > _tt->_w_alpha || _beta < _tt->_w_beta)
-                {
-                    /*
-                     * bump up the clock if the window is shrinking, so that entries
-                     * from previous searches are first choice candidates for overwrite
-                     */
-                    TranspositionTable::increment_clock();
-                }
-            #endif /* 0 */
+                _alpha = std::max(SCORE_MIN, score - HALF_WINDOW);
+                _beta = std::min(SCORE_MAX, score + HALF_WINDOW);
             }
         }
 
+        /* save iteration bounds */
         _tt->_w_alpha = _alpha;
         _tt->_w_beta = _beta;
 
@@ -1525,8 +1471,7 @@ namespace search
          * "Classical implementation assumes a re-search at full depth
          * if the reduced depth search returns a score above alpha."
          */
-        if (_algorithm == Algorithm::NEGASCOUT)
-            _retry_above_alpha = RETRY::Reduced;
+        _retry_above_alpha = RETRY::Reduced;
 
     #if EXTRA_STATS
         ++_tt->_reductions;
@@ -1621,8 +1566,6 @@ namespace search
 
     /* static */ void Context::set_time_limit_ms(int time_limit)
     {
-        ASSERT_ALWAYS(time_limit >= 0);
-
         /*
          * Time limits can be updated from a different
          * thread, to support pondering in the background.

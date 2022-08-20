@@ -204,6 +204,7 @@ void TranspositionTable::clear()
 
     _w_alpha = SCORE_MIN;
     _w_beta = SCORE_MAX;
+    _reset_window = false;
 
     _check_nodes = 0;
     _eval_count = 0;
@@ -549,7 +550,6 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
 
     if (ctxt.is_cancelled())
         return false;
-
 
     /*
      * null move refuted? update capture_square and mate_detected
@@ -1163,7 +1163,7 @@ static score_t search_iteration(Context& ctxt, TranspositionTable& table, score_
         ASSERT_ALWAYS(false);
     }
 
-    if (ctxt._best_move && !ctxt.is_window_reset())
+    if (ctxt._best_move)
     {
         ctxt._prev = ctxt._best_move; /* save for next iteration */
         table.store_pv(ctxt);
@@ -1352,12 +1352,12 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
             SMPTasks tasks(ctxt, table, score);
             const auto iter_score = search_iteration(ctxt, table, score);
 
-            if (ctxt.is_cancelled() && !ctxt.is_window_reset())
+            if (ctxt.is_cancelled())
                 break;
 
             score = iter_score; /* retain the score for completed iterations */
 
-            if (ctxt.is_window_reset())
+            if (table._reset_window)
             {
             #if 0
                 std::cout << "WINDOW RESET(" << i << "): " << score << " (";

@@ -53,8 +53,6 @@ namespace search
         {
             using table_t = SharedHashTable;
 
-            template<Acquire> friend struct LockTraits;
-
             table_t*        _ht = nullptr;
             const size_t    _ix = 0;
             bool            _locked = false;
@@ -161,9 +159,6 @@ namespace search
 
         public:
             explicit operator bool() const { return is_locked(); }
-
-        protected:
-            uint16_t clock() const { return _ht->_clock; }
         };
 
 

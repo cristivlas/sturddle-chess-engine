@@ -11232,7 +11232,7 @@ template<> struct Attacks<AttacksType::Rank>
 {
     INLINE static uint64_t get(int square, uint64_t mask) noexcept
     {
-        return impl::_RANK_ATTACKS[square]._data[impl::mul_9357036318526133325_rshift_55_mixin<511, false>(mask)];
+        return impl::_RANK_ATTACKS[square][mask];
     }
 };
 

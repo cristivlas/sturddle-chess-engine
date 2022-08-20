@@ -187,7 +187,6 @@ namespace search
 
         static void* operator new(size_t, void* p) { return p; }
         static void* operator new(size_t) = delete;
-        static void operator delete(void*, void*) noexcept;
         static void operator delete(void*, size_t) noexcept = delete;
 
         /* parent move in the graph */
@@ -289,8 +288,6 @@ namespace search
         int         is_repeated() const;
         bool        is_retry() const { return _is_retry; }
         bool        is_singleton() const { return _is_singleton; }
-        static bool is_window_reset() { return _reset_window.load(std::memory_order_relaxed); }
-
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
 
         LMRAction   late_move_reduce(int move_count);
@@ -318,8 +315,6 @@ namespace search
         void        set_tt(TranspositionTable* tt) { _tt = tt; }
 
         bool        should_verify_null_move() const;
-        static void reset_window() { _reset_window.store(true, std::memory_order_relaxed); }
-
         int         singular_margin() const;
 
         int         tid() const { return _tt->_tid; }
@@ -385,7 +380,6 @@ namespace search
         static atomic_bool  _cancel;
 
         static size_t       _callback_count;
-        static atomic_bool  _reset_window;
         static atomic_int   _time_limit; /* milliseconds */
         static atomic_time  _time_start;
 
@@ -564,12 +558,12 @@ namespace search
     {
         ASSERT(move && move._state && move != _move);
 
-        return can_forward_prune()
-            && (move != _tt_entry._hash_move)
+        return (move != _tt_entry._hash_move)
             && (move._state->capture_value == 0)
             && (move.promotion() == chess::PieceType::NONE)
             && (move.from_square() != _capture_square)
             && !is_counter_move(move)
+            && can_forward_prune()
             && !move._state->is_check();
     }
 
@@ -586,21 +580,6 @@ namespace search
             && (_move.from_square() != _parent->_capture_square)
             && !is_recapture()
             && !state().is_check();
-    }
-
-
-    INLINE score_t Context::evaluate()
-    {
-        ASSERT(_fifty < 100);
-
-        ++_tt->_eval_count;
-
-        const auto score = _evaluate();
-
-        ASSERT(score > SCORE_MIN);
-        ASSERT(score < SCORE_MAX);
-
-        return score;
     }
 
 
@@ -1232,17 +1211,6 @@ namespace search
         }
         ctxt.state().clone_into(*move._state);
         ASSERT(move._state->capture_value == 0);
-
-        ctxt.state().clone_into(*move._state);
-
-        ASSERT(move._state->capture_value == 0);
-
-        /* capturing the king is an illegal move (Louis XV?) */
-        if (move._state->kings & chess::BB_SQUARES[move.to_square()])
-        {
-            mark_as_illegal(move);
-            return false;
-        }
 
         move._state->apply_move(move);
 
