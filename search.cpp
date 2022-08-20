@@ -267,11 +267,11 @@ BaseMove TranspositionTable::lookup_countermove(const Context& ctxt) const
 
 const score_t* TranspositionTable::lookup(Context& ctxt)
 {
-    /* expect repetitions to be dealt with before calling into this function */
-    ASSERT(ctxt.is_repeated() <= 0);
-
-    if (ctxt._excluded)
+    if (ctxt._ply == 0 || ctxt._excluded)
         return nullptr;
+
+    /* expect repetitions to be dealt with before calling into this function */
+    ASSERT(!ctxt.is_repeated());
 
     if (const auto p = _table->lookup<Acquire::Read>(ctxt.state()))
     {
@@ -462,7 +462,8 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
 
         move = p->_hash_move;
     }
-    if (state.is_checkmate())
+
+    if (abs(root._score) < MATE_HIGH && state.is_checkmate())
     {
         /* The parity of the PV length tells which side is winning. */
         /* Subtract one for the move that lead to the root position */
@@ -719,7 +720,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         ASSERT(ctxt._algorithm != NEGASCOUT || ctxt.is_leftmost() || ctxt.is_retry());
     }
 
-    table._nodes += !COUNT_VALID_MOVES_AS_NODES;
+    if constexpr(!COUNT_VALID_MOVES_AS_NODES)
+        ++table._nodes;
 
     const auto alpha = ctxt._alpha;
 
@@ -746,7 +748,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         return ctxt._score;
 #endif /* !CACHE_HEURISTIC_CUTOFFS */
     }
-    else if (!ctxt.is_cancelled())
+    else
     {
         ASSERT(ctxt._alpha < ctxt._beta);
 
@@ -801,20 +803,16 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             #endif /* EXTRA_STATS */
 
                 /* Futility pruning */
-                if (move_count > 0)
+                if (futility > 0)
                 {
-                    if (futility < 0)
-                        futility = ctxt.futility_margin();
+                    ASSERT(move_count > 0);
 
-                    if (futility > 0)
+                    const auto val = futility - next_ctxt->evaluate_material();
+
+                    if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune())
                     {
-                        const auto val = futility - next_ctxt->evaluate_material();
-
-                        if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune())
-                        {
-                            update_pruned(ctxt, *next_ctxt, table._futility_prune_count);
-                            continue;
-                        }
+                        update_pruned(ctxt, *next_ctxt, table._futility_prune_count);
+                        continue;
                     }
                 }
 
@@ -862,9 +860,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         s_ctxt->_score = SCORE_MIN;
 
                         const auto value = negamax(*s_ctxt, table);
-
-                        if (ctxt.is_cancelled())
-                            break;
 
                         if (value < s_beta && value > SCORE_MIN)
                         {
@@ -916,7 +911,12 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 }
 
                 if (!next_ctxt->is_retry())
+                {
                     ++move_count;
+
+                    if (futility < 0)
+                        futility = ctxt.futility_margin();
+                }
             }
 
             /*
@@ -926,6 +926,9 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
             if (ctxt.is_cancelled())
             {
+                if (move_score < SCORE_MAX)
+                    ctxt._score = move_score;
+
                 return ctxt._score;
             }
 
@@ -987,7 +990,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     {
                         if (ctxt._ply < PLY_HISTORY_MAX)
                             table._plyHistory[ctxt._ply][ctxt.turn()][next_ctxt->_move]
-                                += 0.01 * ctxt.depth() * next_ctxt->improvement() + (move_score > MATE_HIGH);
+                                += 0.01 * ctxt.depth() * next_ctxt->improvement()
+                                + (move_score > MATE_HIGH);
 
                         if (ctxt.depth() >= COUNTER_MOVE_MIN_DEPTH)
                             table.store_countermove(ctxt);
@@ -1030,7 +1034,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 && ctxt.evaluate() < table._w_alpha)
             {
                 ASSERT(!next_ctxt->is_null_move());
-                ctxt.reset_window();
+                table._reset_window = true;
 
                 return move_score;
             }
@@ -1038,7 +1042,13 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
         ASSERT(ctxt._score <= ctxt._alpha || ctxt._best_move);
 
+    #if 0
+        /*
+         * since v0.98 Context::next() checks that at least one move
+         * has been searched before returning nullptr on cancellation
+         */
         if (!ctxt.is_cancelled())
+    #endif
         {
             if (!ctxt.has_moves())
             {
@@ -1048,13 +1058,15 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 ASSERT(ctxt._score > SCORE_MIN);
                 ASSERT(ctxt._score < SCORE_MAX);
             }
-            else if (!ctxt._excluded)
+    #if !NO_ASSERT
+            else if (!ctxt._excluded && !ctxt.is_cancelled())
             {
                 /* algorithm invariants */
                 ASSERT(ctxt._score > SCORE_MIN);
                 ASSERT(ctxt._score < SCORE_MAX);
                 ASSERT(ctxt._alpha >= ctxt._score);
             }
+    #endif /* NO_ASSERT */
         }
     }
 
@@ -1327,17 +1339,12 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
     score_t score = 0;
     max_iter_count = std::min(PLY_MAX, max_iter_count);
 
-    bool reset_window = false;
-
     for (int i = 1; i != max_iter_count;)
     {
         table._iteration = i;
         ASSERT(ctxt.iteration() == i);
 
-        if constexpr(FULL_WINDOW_RESET)
-            ctxt.set_search_window(score, std::exchange(reset_window, false));
-        else
-            ctxt.set_search_window(score, false);
+        ctxt.set_search_window(score);
 
         ctxt.reinitialize();
 
@@ -1357,8 +1364,8 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
                 std::cout << table._w_alpha << ", " << table._w_beta << ")\n";
             #endif
 
-                if constexpr(FULL_WINDOW_RESET)
-                    reset_window = true;
+                ctxt.cancel();
+                table._reset_window = false;
 
                 continue;
             }

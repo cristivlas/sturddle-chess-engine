@@ -41,7 +41,7 @@ constexpr score_t CHECKMATE = SCORE_MAX - 1;
     constexpr score_t MATE_HIGH = SCORE_MAX / 2;
 #else
     constexpr score_t MATE_HIGH = SCORE_MAX - PLY_MAX;
-#endif
+#endif /* MTDF_CSTAR_BISECT */
 
 constexpr score_t MATE_LOW  = -MATE_HIGH;
 
@@ -61,11 +61,22 @@ constexpr score_t checkmating(int ply)
 }
 
 
+constexpr score_t checkmated(int ply)
+{
+    return -CHECKMATE + ply;
+}
+
+
+constexpr score_t checkmating(int ply)
+{
+    return CHECKMATE + ply;
+}
+
+
 namespace search
 {
     struct Context;
     class TranspositionTable;
-
 
     /*
      * Search algorithms
@@ -161,11 +172,10 @@ namespace search
         bool        _singleton = false;
         uint32_t    _version = 0;
     #if !NO_ASSERT
-        void*       _lock = nullptr;
-
-        explicit TT_Entry(void* lock = nullptr): _lock(lock) {}
+        void*       _lock = nullptr; /* owner */
+        explicit TT_Entry(void* lock = nullptr) : _lock(lock) {}
     #else
-        explicit TT_Entry() {}
+        explicit TT_Entry(void* = nullptr) {}
     #endif /* NO_ASSERT */
 
         INLINE bool is_lower() const { return _value >= _beta; }

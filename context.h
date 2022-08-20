@@ -81,15 +81,33 @@ namespace search
 
 
     /*
+     * Late-move pruning counts (initialization idea borrowed from Crafty)
+     */
+    template<std::size_t... I>
+    static constexpr std::array<int, sizeof ... (I)> lmp(std::index_sequence<I...>)
+    {
+        return { static_cast<int>(LMP_BASE + pow(I + .5, 1.9)) ... };
+    }
+
+
+    static const auto LMP = lmp(std::make_index_sequence<PLY_MAX>{});
+
+
+    /*
      * Helper for making and ordering moves
      */
     class MoveMaker
     {
+        static constexpr int MAX_PHASE = 4;
+
     public:
         MoveMaker() = default;
 
         const Move* get_next_move(Context& ctxt, score_t futility = 0);
 
+        /*
+         * upperbound of legal moves, which may include pruned and quiet moves
+         */
         int count() const { return _count; }
         int current(Context&);
 
@@ -101,17 +119,19 @@ namespace search
         int rewind(Context&, int where, bool reorder);
 
     private:
+        bool can_late_move_prune(const Context& ctxt) const;
         void ensure_moves(Context&);
 
         void generate_unordered_moves(Context&);
         const Move* get_move_at(Context& ctxt, int index, score_t futility = 0);
 
         void make_capture(Context&, Move&);
-        bool make_move(Context&, Move&, score_t futility = 0);
-        bool make_move(Context&, Move&, MoveOrder, score_t = 0);
+        template<bool LateMovePrune> bool make_move(Context&, Move&, score_t futility = 0);
+        bool make_move(Context&, Move&, MoveOrder, float = 0);
         void mark_as_illegal(Move&);
+        void mark_as_pruned(Context&, Move&);
         void order_moves(Context&, size_t start_at, score_t futility);
-        void sort_moves(Context&, size_t start_at);
+        void sort_moves(Context&, size_t start_at, size_t count);
 
         MoveMaker(const MoveMaker&) = delete;
         MoveMaker& operator=(const MoveMaker&) = delete;
@@ -239,9 +259,7 @@ namespace search
         const Move* first_valid_move();
         score_t     futility_margin();
 
-        bool        has_improved(score_t margin = 0) const
-                    { return improvement() > margin; }
-
+        bool        has_improved(score_t margin = 0) const { return improvement() > margin; }
         bool        has_moves() { return _move_maker.has_moves(*this); }
 
         int         history_count(const Move&) const;
@@ -250,7 +268,7 @@ namespace search
         score_t     improvement() const;
         static void init();
         bool        is_beta_cutoff(Context*, score_t);
-        static bool is_cancelled();
+        static bool is_cancelled() { return _cancel.load(std::memory_order_relaxed); }
         bool        is_capture() const { return state().capture_value != 0; }
         bool        is_check() const { return state().is_check(); }
         bool        is_counter_move(const Move&) const;
@@ -283,7 +301,8 @@ namespace search
         int64_t     nanosleep(int nanosec);
 
         Context*    next(bool null_move = false, score_t = 0);
-        Context*    next_ply(bool init = false) const;
+
+        template<bool Construct = false> Context* next_ply() const;
 
         int         next_move_index() { return _move_maker.current(*this); }
         bool        on_next();
@@ -292,7 +311,7 @@ namespace search
         int         rewind(int where = 0, bool reorder = false);
 
         void        set_counter_move(const BaseMove& move) { _counter_move = move; }
-        void        set_search_window(score_t, bool);
+        void        set_search_window(score_t);
 
         static void set_time_limit_ms(int milliseconds);
         void        set_time_info(int time_left /* millisec */, int moves_left);
@@ -387,16 +406,6 @@ namespace search
     };
 
 
-    /*
-     * Late-move pruning counts (initialization idea borrowed from Crafty)
-     */
-    template<std::size_t... I>
-    static constexpr std::array<int, sizeof ... (I)> lmp(std::index_sequence<I...>)
-    {
-        return { static_cast<int>(LMP_BASE + pow(I + .5, 1.9)) ... };
-    }
-
-
     template<bool Debug = false>
     int do_exchanges(const State&, Bitboard, score_t, int tid, int ply = FIRST_EXCHANGE_PLY);
 
@@ -479,7 +488,6 @@ namespace search
         ASSERT(move._state);
 
         const auto& state = *move._state;
-
         if (state.attacks_mask(move.to_square(), state.occupied()) & state.kings & state.occupied_co(state.turn))
         {
             ASSERT(state.is_check());
@@ -627,14 +635,6 @@ namespace search
         if (_ply == 0 || !_futility_pruning || depth() < 1)
             return 0;
 
-        /*
-         * No need to check for futile moves when material is above alpha,
-         * since no move can immediately result in decrease of material
-         * (margin of one PAWN for piece-square evaluation).
-         */
-        if (evaluate_material() > std::max(_alpha, _score) + chess::WEIGHT[chess::PAWN])
-            return 0;
-
         static const auto fp_margins = margins(std::make_index_sequence<PLY_MAX>{});
 
         return fp_margins[depth()] * can_forward_prune();
@@ -687,12 +687,6 @@ namespace search
         return std::max(0,
               eval_material_and_piece_squares(*_state)
             - eval_material_and_piece_squares(*prev->_state));
-    }
-
-
-    /* static */ INLINE bool Context::is_cancelled()
-    {
-        return _cancel.load(std::memory_order_relaxed) || is_window_reset();
     }
 
 
@@ -795,7 +789,7 @@ namespace search
         const bool retry = _retry_next;
         _retry_next = false;
 
-        if (!_excluded && !on_next())
+        if (!_excluded && !on_next() && next_move_index() > 0)
             return nullptr;
 
         /* null move must be tried before actual moves */
@@ -813,7 +807,7 @@ namespace search
         ASSERT(null_move || move->_group != MoveOrder::UNDEFINED);
         ASSERT(null_move || move->_group < MoveOrder::UNORDERED_MOVES);
 
-        auto ctxt = next_ply(true);
+        auto ctxt = next_ply<true>();
 
         if (move)
         {
@@ -964,14 +958,13 @@ namespace search
     }
 
 
-    INLINE Context* Context::next_ply(bool init) const
+    template<bool Construct> INLINE Context* Context::next_ply() const
     {
-        if (_ply >= PLY_MAX)
-            return nullptr;
+        ASSERT(_ply < PLY_MAX);
 
         auto* buffer = _context_stacks[tid()][_ply].as_context();
 
-        if (init)
+        if constexpr(Construct)
             return new (buffer) Context;
         else
             return buffer;
@@ -993,6 +986,15 @@ namespace search
         ASSERT(size_t(ply) < PLY_MAX);
 
         return _state_stacks[tid][ply];
+    }
+
+
+    INLINE bool MoveMaker::can_late_move_prune(const Context& ctxt) const
+    {
+        return _phase > 2
+            && ctxt.depth() > 1 /* do not LMP leaf nodes */
+            && _current >= LMP[ctxt.depth() - 1]
+            && ctxt.can_forward_prune();
     }
 
 
@@ -1036,7 +1038,7 @@ namespace search
         }
         else
         {
-            ASSERT(_current == _count);
+            ASSERT(_current == _count || ctxt.moves()[_current]._group >= PRUNED_MOVES);
         }
         return move;
     }
@@ -1051,24 +1053,30 @@ namespace search
             return nullptr;
         }
 
-        const auto& moves_list = ctxt.moves();
+        auto& moves_list = ctxt.moves();
         ASSERT(!moves_list.empty());
 
-        const Move* move = &moves_list[index];
+        auto move = &moves_list[index];
         ASSERT(move->_group != MoveOrder::UNDEFINED);
 
         while (move->_group == MoveOrder::UNORDERED_MOVES)
         {
+#if 1
+            if (can_late_move_prune(ctxt))
+            {
+                mark_as_pruned(ctxt, *move);
+                return nullptr;
+            }
+#endif
             order_moves(ctxt, index, futility);
             move = &moves_list[index];
         }
 
         ASSERT(move->_group != MoveOrder::UNORDERED_MOVES);
 
-        if (move->_group >= MoveOrder::QUIET_MOVES)
+        if (move->_group >= MoveOrder::PRUNED_MOVES)
         {
             ASSERT(index <= _count);
-            _count = index;
             move = nullptr;
         }
 
@@ -1135,7 +1143,7 @@ namespace search
 
     INLINE void MoveMaker::make_capture(Context& ctxt, Move& move)
     {
-        if (make_move(ctxt, move) && move._score == 0)
+        if (make_move<false>(ctxt, move))
         {
             ASSERT(move._state->capture_value);
 
@@ -1186,6 +1194,7 @@ namespace search
     /*
      * Return false if the move is not legal, or pruned.
      */
+    template<bool LateMovePrune>
     INLINE bool MoveMaker::make_move(Context& ctxt, Move& move, score_t futility)
     {
         ASSERT(move);
@@ -1204,22 +1213,25 @@ namespace search
             return (_have_move = true);
         }
 
-        static const auto LMP = lmp(std::make_index_sequence<PLY_MAX>{});
-
         /*
          * Prune (before verifying move legality, thus saving is_check() calls).
          * Late-move prune before making the move.
          */
-        if (_phase > 2
-            && ctxt.depth() > 0
-            && _current >= LMP[ctxt.depth()]
-            && ctxt.can_forward_prune())
+        if constexpr(LateMovePrune)
+            if (can_late_move_prune(ctxt))
+            {
+                mark_as_pruned(ctxt, move);
+                return false;
+            }
+
+        /* capturing the king is an illegal move (Louis XV?) */
+        if (ctxt.state().kings & chess::BB_SQUARES[move.to_square()])
         {
-            _have_pruned_moves = true;
-            ++ctxt._pruned_count;
-            move._group = MoveOrder::PRUNED_MOVES;
+            mark_as_illegal(move);
             return false;
         }
+        ctxt.state().clone_into(*move._state);
+        ASSERT(move._state->capture_value == 0);
 
         ctxt.state().clone_into(*move._state);
 
@@ -1250,16 +1262,13 @@ namespace search
 
             if ((val < ctxt._alpha || val < ctxt._score) && ctxt.can_prune_move(move))
             {
-                _have_pruned_moves = true;
-                ++ctxt._pruned_count;
-                move._group = MoveOrder::PRUNED_MOVES;
-
             #if EXTRA_STATS
 
                 ++ctxt.get_tt()->_futility_prune_count;
 
             #endif /* EXTRA_STATS */
 
+                mark_as_pruned(ctxt, move);
                 return false;
             }
         }
@@ -1280,16 +1289,18 @@ namespace search
         /* consistency check */
         ASSERT((move._state->capture_value != 0) == ctxt.state().is_capture(move));
 
-        ctxt.get_tt()->_nodes += COUNT_VALID_MOVES_AS_NODES;
+        if constexpr(COUNT_VALID_MOVES_AS_NODES)
+            ++ctxt.get_tt()->_nodes;
+
         return (_have_move = true);
     }
 
 
-    INLINE bool MoveMaker::make_move(Context& ctxt, Move& move, MoveOrder group, score_t score)
+    INLINE bool MoveMaker::make_move(Context& ctxt, Move& move, MoveOrder group, float score)
     {
-        if (!make_move(ctxt, move))
+        if (!make_move<true>(ctxt, move))
         {
-            ASSERT(move._group >= MoveOrder::QUIET_MOVES);
+            ASSERT(move._group >= MoveOrder::PRUNED_MOVES);
             return false;
         }
 
@@ -1310,19 +1321,43 @@ namespace search
     }
 
 
-    INLINE void MoveMaker::sort_moves(Context& ctxt, size_t start_at)
+    INLINE void MoveMaker::mark_as_pruned(Context& ctxt, Move& move)
+    {
+        move._group = MoveOrder::PRUNED_MOVES;
+        _have_pruned_moves = true;
+        ++ctxt._pruned_count;
+    }
+
+
+    /*
+     * Sort moves ascending by group, descending by score within each group.
+     */
+    INLINE bool compare_moves_gt(const Move& lhs, const Move& rhs)
+    {
+        return (lhs._group == rhs._group && lhs._score > rhs._score) || (lhs._group < rhs._group);
+    }
+
+
+    INLINE bool compare_moves_ge(const Move& lhs, const Move& rhs)
+    {
+    #if 0
+        return (lhs._group < rhs._group) || (lhs._group == rhs._group && lhs._score >= rhs._score);
+    #else
+        return !compare_moves_gt(rhs, lhs);
+    #endif
+    }
+
+
+    INLINE void MoveMaker::sort_moves(Context& ctxt, size_t start_at, size_t count)
     {
         ASSERT(start_at < ctxt.moves().size());
+        ASSERT(count <= ctxt.moves().size());
 
         auto& moves_list = ctxt.moves();
-        const auto last = moves_list.end();
         const auto first = moves_list.begin() + start_at;
+        const auto last = moves_list.begin() + count;
 
-        insertion_sort(first, last, [&](const Move& lhs, const Move& rhs)
-            {
-                return (lhs._group == rhs._group && lhs._score > rhs._score)
-                    || (lhs._group < rhs._group);
-            });
+        insertion_sort(first, last, compare_moves_gt);
 
         _need_sort = false;
     }

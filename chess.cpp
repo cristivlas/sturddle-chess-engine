@@ -32,9 +32,6 @@
 const magic_bits::Attacks magic_bits_attacks;
 #endif /* USE_MAGIC_BITS */
 
-static constexpr chess::Bitboard BB_LIGHT_SQUARES = 0x55aa55aa55aa55aaULL;
-static constexpr chess::Bitboard BB_DARK_SQUARES  = 0xaa55aa55aa55aa55ULL;
-
 
 namespace chess
 {
@@ -272,7 +269,7 @@ namespace chess
          */
         for (const auto color: {BLACK, WHITE})
         {
-            if constexpr(MOBILITY[PieceType::PAWN] != 0)
+            if constexpr(MOBILITY_TUNING_ENABLED || MOBILITY[PieceType::PAWN] != 0)
             {
                 /* pawns moves... */
                 const auto own_pawns = pawns & occupied_co(color) & ~pinned[color];

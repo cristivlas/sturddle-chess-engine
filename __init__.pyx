@@ -375,13 +375,12 @@ cdef extern from 'context.h':
 
 cdef extern from 'search.h':
     score_t CHECKMATE
-    score_t MATE_LOW
-    score_t MATE_HIGH
 
 
 SCORE_CHECKMATE = CHECKMATE
-SCORE_MATE_HIGH = MATE_HIGH
-SCORE_MATE_LOW  = MATE_LOW
+
+SCORE_MATE_HIGH = CHECKMATE - 1000
+SCORE_MATE_LOW  = -SCORE_MATE_HIGH
 
 
 cdef extern from 'context.h' namespace 'search':
@@ -1091,7 +1090,7 @@ def perft3(fen, repeat=1):
     start = time.perf_counter()
 
     for i in range(0, repeat):
-        node._ctxt._max_depth = i % 100
+        node._ctxt._max_depth = max(1, i % 100)
         while node._ctxt.next(False, 0) != NULL:
             count += 1
         node._ctxt.rewind(0, True)
@@ -1117,7 +1116,7 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0
-__minor__   = 97
+__minor__   = 98
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
 

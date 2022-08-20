@@ -52,20 +52,19 @@ struct Config
 };
 
 std::string Config::_group;
+#define GROUP(x) Config::Group __##x(_TOSTR(x));
 
 Config::Namespace Config::_namespace = {
-#if MOBILITY_TUNING_ENABLED && EVAL_MOBILITY
+#if MOBILITY_TUNING_ENABLED
     /* Piece mobility coefficients */
-    { "MOBILITY_PAWN", Config::Param{ &chess::MOBILITY[chess::PieceType::PAWN], 0, 50 } },
-    { "MOBILITY_KNIGHT", Config::Param{ &chess::MOBILITY[chess::PieceType::KNIGHT], 0, 50 } },
-    { "MOBILITY_BISHOP", Config::Param{ &chess::MOBILITY[chess::PieceType::BISHOP], 0, 50 } },
-    { "MOBILITY_ROOK", Config::Param{ &chess::MOBILITY[chess::PieceType::ROOK], 0, 50 } },
-    { "MOBILITY_QUEEN", Config::Param{ &chess::MOBILITY[chess::PieceType::QUEEN], 0, 50 } },
-    { "MOBILITY_KING", Config::Param{ &chess::MOBILITY[chess::PieceType::KING], 0, 50 } },
-#endif /* MOBILITY_TUNING_ENABLED && EVAL_MOBILITY */
+    { "MOBILITY_PAWN", Config::Param{ &chess::MOBILITY[chess::PieceType::PAWN], 0, 50, "Eval" } },
+    { "MOBILITY_KNIGHT", Config::Param{ &chess::MOBILITY[chess::PieceType::KNIGHT], 0, 50, "Eval" } },
+    { "MOBILITY_BISHOP", Config::Param{ &chess::MOBILITY[chess::PieceType::BISHOP], 0, 50, "Eval" } },
+    { "MOBILITY_ROOK", Config::Param{ &chess::MOBILITY[chess::PieceType::ROOK], 0, 50, "Eval" } },
+    { "MOBILITY_QUEEN", Config::Param{ &chess::MOBILITY[chess::PieceType::QUEEN], 0, 50, "Eval" } },
+    { "MOBILITY_KING", Config::Param{ &chess::MOBILITY[chess::PieceType::KING], 0, 50, "Eval" } },
+#endif /* MOBILITY_TUNING_ENABLED */
 };
-
-  #define GROUP(x) Config::Group __##x(_TOSTR(x));
 
 #else
 
@@ -112,7 +111,6 @@ static constexpr int HASH_MIN = 16; /* MB */
 GROUP(Settings)
 DECLARE_VALUE(  ASPIRATION_WINDOW,                    1,    0,       1)
 DECLARE_CONST(  DEBUG_CAPTURES,                       0,    0,       1)
-DECLARE_CONST(  DEBUG_MATERIAL,                       0,    0,       1)
 DECLARE_PARAM(  EVAL_FUZZ,                            0,    0,     100)
 DECLARE_CONST(  FIFTY_MOVES_RULE,                     1,    0,       1)
 DECLARE_CONST(  FULL_WINDOW_RESET,                    0,    0,       1)
@@ -143,8 +141,8 @@ DECLARE_VALUE(  COUNTER_MOVE_MIN_DEPTH,               3,    0,      20)
 DECLARE_VALUE(  HISTORY_COUNT_HIGH,                8915,    1,   20000)
 DECLARE_VALUE(  HISTORY_FAIL_LOW_MARGIN,            918,    0,    2000)
 DECLARE_VALUE(  HISTORY_FAIL_LOW_PENALTY,            62,    0,     100)
-DECLARE_VALUE(  HISTORY_HIGH,                        87,    0,     100)
-DECLARE_VALUE(  HISTORY_LOW,                         61,    0,     100)
+DECLARE_VALUE(  HISTORY_HIGH,                        60,    0,     100)
+DECLARE_VALUE(  HISTORY_LOW,                         30,    0, HISTORY_HIGH)
 DECLARE_VALUE(  HISTORY_MIN_DEPTH,                   11,    0,     100)
 
 GROUP(Eval)
@@ -156,7 +154,7 @@ DECLARE_VALUE(  CENTER_OCCUPANCY,                    27,    0,     150)
 DECLARE_VALUE(  KING_ATTACK_DIV,                     28,    1,     100)
 DECLARE_VALUE(  KING_OUT_PENALTY,                  -150, -500,       0)
 DECLARE_VALUE(  PAWN_SHIELD,                         22,    0,     100)
-DECLARE_VALUE(  QUEEN_EXCHANGE_PENALTY,             -31, -100,       0)
+DECLARE_VALUE(  MATERIAL_IMBALANCE,                -256, -500,       0)
 DECLARE_VALUE(  REDUNDANT_ROOK,                    -119, -500,       0)
 DECLARE_VALUE(  TACTICAL_LOW_DEPTH,                  11,    0,     100)
 

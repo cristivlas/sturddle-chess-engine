@@ -79,6 +79,9 @@ namespace chess
 
     static constexpr auto BB_SQUARES = bb_squares(std::make_index_sequence<64>{});
 
+    static constexpr Bitboard BB_LIGHT_SQUARES = 0x55aa55aa55aa55aaULL;
+    static constexpr Bitboard BB_DARK_SQUARES  = 0xaa55aa55aa55aa55ULL;
+
     extern Bitboard BB_KING_ATTACKS[64];
     extern Bitboard BB_KNIGHT_ATTACKS[64];
     extern Bitboard BB_PAWN_ATTACKS[2][64];
@@ -224,10 +227,10 @@ namespace chess
     };
 
 #if 1
-  #define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 2, 1, 3, 2 }
+  #define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 7, 1, 3, 2 }
 #else
   /* do not include pawns in mobility evals */
-  #define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 2, 2, 1, 3, 2 }
+  #define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 2, 7, 1, 3, 2 }
 #endif
 
 #if MOBILITY_TUNING_ENABLED
@@ -543,6 +546,7 @@ namespace chess
         INLINE Bitboard attacker_pieces_mask(Color color, Square square, Bitboard occupied_mask) const
         {
     #if USE_MAGIC_BITS
+        #if 0
             const auto bishop_attacks = magic_bits_attacks.Bishop(occupied_mask, square);
             const auto rook_attacks = magic_bits_attacks.Rook(occupied_mask, square);
 
@@ -550,18 +554,33 @@ namespace chess
                 | (bishops & bishop_attacks)
                 | (rooks & rook_attacks)
                 | (queens & (bishop_attacks | rook_attacks));
+        #else
+            auto attackers = (knights & BB_KNIGHT_ATTACKS[square]);
+
+            if (const auto queens_and_rooks = queens | rooks)
+                attackers |= queens_and_rooks & magic_bits_attacks.Rook(occupied_mask, square);
+
+            if (const auto queens_and_bishops = queens | bishops)
+                attackers |= queens_and_bishops & magic_bits_attacks.Bishop(occupied_mask, square);
+        #endif /* 0 */
     #else
-            const auto rank_pieces = BB_RANK_MASKS[square] & occupied_mask;
-            const auto file_pieces = BB_FILE_MASKS[square] & occupied_mask;
-            const auto diag_pieces = BB_DIAG_MASKS[square] & occupied_mask;
+            auto attackers = (knights & BB_KNIGHT_ATTACKS[square]);
 
-            const auto queens_and_rooks = queens | rooks;
-            const auto queens_and_bishops = queens | bishops;
+            if (const auto queens_and_rooks = queens | rooks)
+            {
+                const auto rank_pieces = BB_RANK_MASKS[square] & occupied_mask;
+                const auto file_pieces = BB_FILE_MASKS[square] & occupied_mask;
 
-            const auto attackers = (knights & BB_KNIGHT_ATTACKS[square])
-                | (queens_and_rooks & BB_RANK_ATTACKS.get(square, rank_pieces))
-                | (queens_and_rooks & BB_FILE_ATTACKS.get(square, file_pieces))
-                | (queens_and_bishops & BB_DIAG_ATTACKS.get(square, diag_pieces));
+                attackers |=
+                    (queens_and_rooks & BB_RANK_ATTACKS.get(square, rank_pieces)) |
+                    (queens_and_rooks & BB_FILE_ATTACKS.get(square, file_pieces));
+            }
+
+            if (const auto queens_and_bishops = queens | bishops)
+            {
+                const auto diag_pieces = BB_DIAG_MASKS[square] & occupied_mask;
+                attackers |= (queens_and_bishops & BB_DIAG_ATTACKS.get(square, diag_pieces));
+            }
     #endif /* !USE_MAGIC_BITS */
 
             return attackers & occupied_co(color);
@@ -847,6 +866,7 @@ namespace chess
         return (endgame - midgame) * (1 - logistic((pc - 19) / 2)) + midgame;
     #endif
     }
+
 
 #if TUNING_ENABLED || defined(TUNING_PARTIAL)
     INLINE constexpr double interpolate(int pc, int mg, int eg)
@@ -1339,7 +1359,7 @@ namespace chess
         if ((castling_rights != BB_EMPTY) && (kings & BB_SQUARES[move.from_square()]))
         {
             const auto diff = square_file(move.from_square()) - square_file(move.to_square());
-            return abs(diff) > 1 /* || (rooks & occupied_co(turn) & BB_SQUARES[move.to_square()]) != 0 */;
+            return abs(diff) > 1;
         }
         return false;
     }

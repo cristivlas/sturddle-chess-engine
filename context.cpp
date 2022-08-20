@@ -317,6 +317,22 @@ namespace search
     }
 
 
+    score_t Context::evaluate()
+    {
+        ASSERT(_fifty < 100);
+        ASSERT(_ply == 0 || !is_repeated());
+
+        ++_tt->_eval_count;
+
+        const auto score = _evaluate();
+
+        ASSERT(score > SCORE_MIN);
+        ASSERT(score < SCORE_MAX);
+
+        return score;
+    }
+
+
     /*
      * Called when there are no more moves available (endgame reached or
      * qsearch has examined all non-quiet moves in the current position).
@@ -820,29 +836,42 @@ namespace search
     }
 
 
+    static INLINE int eval_material_imbalance(const State& state, int pcs)
+    {
+        if ((state.rooks | state.queens) == 0)
+        {
+            const int pawn_cnt[] = {
+                popcount(state.pawns & state.occupied_co(BLACK)),
+                popcount(state.pawns & state.occupied_co(WHITE))
+            };
+
+            for (auto side : { BLACK, WHITE })
+            {
+                if (pawn_cnt[side] < pawn_cnt[!side]
+                    && ((state.bishops | state.knights) & state.occupied_co(side))
+                   )
+                {
+                    return SIGN[side] * MATERIAL_IMBALANCE;
+                }
+            }
+        }
+        return 0;
+    }
+
+
     /*
      * If the difference in material is with a pawn or less, favor
      * the side with two minor pieces over the side with extra rook.
      */
-    static INLINE int eval_redundant_rook(const State& state, int pcs, score_t mat_eval)
+    static INLINE int eval_redundant_rook(const State& state, int pcs)
     {
         int score = 0;
 
-        if (abs(mat_eval) <= WEIGHT[PAWN])
+        for (auto color : { BLACK, WHITE })
         {
-            for (auto color : { BLACK, WHITE })
-            {
-                score += SIGN[color]
-                    * (popcount((state.bishops | state.knights) & state.occupied_co(!color)) >= 2)
-                    * (popcount(state.rooks & state.occupied_co(color)) >= 2);
-            }
-
-            if (DEBUG_MATERIAL && score)
-            {
-                std::ostringstream out;
-                out << "rook: " << Context::epd(state) << ": " << score << ", mat: " << mat_eval;
-                Context::log_message(LogLevel::DEBUG, out.str());
-            }
+            score += SIGN[color]
+                * (popcount((state.bishops | state.knights) & state.occupied_co(!color)) >= 2)
+                * (popcount(state.rooks & state.occupied_co(color)) >= 2);
         }
 
         return score * interpolate(pcs, 0, REDUNDANT_ROOK);
@@ -948,9 +977,7 @@ namespace search
 
             chain = defenders;
 
-            for_each_square(defenders, [&](Square square) {
-                chain |= pawn_chain(state, color, square, cache);
-            });
+            score += popcount(state.attacker_pieces_mask(color, pawn, state.occupied()));
         }
         return chain;
     }
@@ -1088,10 +1115,10 @@ namespace search
                 for (const auto& bb_file : BB_FILES)
                 {
                     auto n = popcount(own_pawns & bb_file);
-                    doubled_pawn_count += sign * (n > 1) * (n - 1);
+                    doubled += sign * (n > 1) * (n - 1);
                 }
                 diff += sign * popcount(own_pawns);
-                isolated_pawn_count += sign * state.count_isolated_pawns(color);
+                isolated += sign * state.count_isolated_pawns(color);
             }
         }
 
@@ -1125,6 +1152,7 @@ namespace search
     static INLINE int eval_threats(const State& state, int piece_count)
     {
         int diff = 0;
+        const auto occupied = state.occupied();
 
         const auto occupied = state.occupied();
 
@@ -1146,7 +1174,11 @@ namespace search
 
         eval += eval_center(state, piece_count);
 
-        eval += eval_redundant_rook(state, piece_count, mat_eval);
+        if (abs(mat_eval) < WEIGHT[PAWN])
+        {
+            eval += eval_material_imbalance(state, piece_count);
+            eval += eval_redundant_rook(state, piece_count);
+        }
 
         eval += eval_open_files(state, piece_count);
 
@@ -1156,8 +1188,10 @@ namespace search
         eval += state.diff_connected_rooks()
              * interpolate(piece_count, MIDGAME_CONNECTED_ROOKS, ENDGAME_CONNECTED_ROOKS);
 
-        eval += BISHOP_PAIR * state.diff_bishop_pairs();
-
+        if (state.bishops)
+        {
+            eval += BISHOP_PAIR * state.diff_bishop_pairs();
+        }
         return eval;
     }
 
@@ -1335,10 +1369,6 @@ namespace search
         ASSERT(iteration());
         ASSERT(_retry_above_alpha == RETRY::None);
 
-    #if 0 /* do not clear, carry over _best_move to next iteration */
-        _best_move = Move();
-    #endif
-
         _cancel = false;
         _can_prune = -1;
 
@@ -1366,27 +1396,9 @@ namespace search
     }
 
 
-    template<std::size_t... I>
-    static constexpr std::array<int, sizeof ... (I)> window_bounds(std::index_sequence<I...>)
+    void Context::set_search_window(score_t score)
     {
-        return { int(HALF_WINDOW * sqrt(I)) ... };
-    }
-
-
-    template<std::size_t... I>
-    static constexpr std::array<int, sizeof ... (I)> window_ext_bounds(std::index_sequence<I...>)
-    {
-        return { int(HALF_WINDOW * pow(I, 2)) ... };
-    }
-
-
-    static const auto wnd_bounds = window_bounds(std::make_index_sequence<PLY_MAX>{});
-    static const auto wnd_ext_bounds = window_ext_bounds(std::make_index_sequence<PLY_MAX>{});
-
-
-    void Context::set_search_window(score_t score, bool reset)
-    {
-        if (!ASPIRATION_WINDOW || reset || iteration() == 1)
+        if (!ASPIRATION_WINDOW || iteration() == 1)
         {
             _alpha = SCORE_MIN;
             _beta = SCORE_MAX;
@@ -1461,6 +1473,8 @@ namespace search
         {
             ASSERT(_history);
             _repetitions = repeated_count(state());
+
+            ASSERT(_repetitions >= 0);
         }
         return _repetitions;
     }
@@ -1477,10 +1491,11 @@ namespace search
 
         const int depth = this->depth();
 
-        /* no reduction / pruning in qsearch */
-        if (depth < 0)
-            return LMRAction::None;
+        /* late move pruning */
+        if (depth > 0 && count >= LMP[depth] && can_prune())
+            return LMRAction::Prune;
 
+        /* no reductions at very low depth and in qsearch */
         if (depth < 3 || count < _parent->_full_depth_count || !can_reduce())
             return LMRAction::None;
 
@@ -1536,10 +1551,11 @@ namespace search
     bool Context::is_leaf()
     {
         ASSERT(_fifty < 100);
-        ASSERT(is_repeated() <= 0);
 
         if (_ply == 0)
             return false;
+        else
+            ASSERT(is_repeated() <= 0);
 
         if (_ply + 1 >= PLY_MAX)
             return true;
@@ -1718,16 +1734,13 @@ namespace search
                     break;
                 }
 
-                if (move._group >= MoveOrder::QUIET_MOVES)
+                if (move._group == MoveOrder::ILLEGAL_MOVES)
                 {
                     _count = i;
                     break;
                 }
 
-                /* retain previously calculated capture score */
-                if (move._state->capture_value == 0)
-                    move._score = 0;
-
+                move._score = 0;
                 move._group = MoveOrder::UNORDERED_MOVES;
             }
         }
@@ -1803,7 +1816,7 @@ namespace search
          * If in check, no need to determine "quieteness", since
          * all legal moves are about getting out of check.
          */
-        _group_quiet_moves = (ctxt.is_qsearch() && !ctxt.is_check());
+        _group_quiet_moves = (ctxt.depth() <= 0 && !ctxt.is_check());
 
         if (ctxt._ply * !ctxt.is_null_move() * !ctxt._excluded)
         {
@@ -1855,8 +1868,6 @@ namespace search
      */
     void MoveMaker::order_moves(Context& ctxt, size_t start_at, score_t futility)
     {
-        static constexpr int MAX_PHASE = 4;
-
         ASSERT(_phase <= MAX_PHASE);
         ASSERT(ctxt._tt);
         ASSERT(ctxt.moves()[start_at]._group == MoveOrder::UNORDERED_MOVES);
@@ -1868,7 +1879,11 @@ namespace search
 
         _have_move = false;
 
-        while (!_have_move && start_at < size_t(_count) && _phase < MAX_PHASE)
+        auto& moves_list = ctxt.moves();
+        const auto count = size_t(_count);
+        ASSERT(count <= moves_list.size());
+
+        while (!_have_move && start_at < count && _phase < MAX_PHASE)
         {
             if (++_phase == 2)
             {
@@ -1878,14 +1893,11 @@ namespace search
             /********************************************************************/
             /* iterate over pseudo-legal moves                                  */
             /********************************************************************/
-            auto& moves_list = ctxt.moves();
-            const auto n = moves_list.size();
-
-            for (size_t i = start_at; i < n; ++i)
+            for (size_t i = start_at; i < count; ++i)
             {
                 auto& move = moves_list[i];
 
-                if (move._group >= MoveOrder::QUIET_MOVES)
+                if (move._group >= MoveOrder::PRUNED_MOVES)
                 {
                     if (_need_sort)
                         continue;
@@ -1916,6 +1928,7 @@ namespace search
                     if (move._state ? move._state->capture_value : ctxt.state().is_capture(move))
                     {
                         make_capture(ctxt, move);
+                        ASSERT(move._group != MoveOrder::UNORDERED_MOVES);
                     }
                     else if (auto k_move = match_killer(killer_moves, move))
                     {
@@ -1925,43 +1938,39 @@ namespace search
 
                 case 3:
                     {   /* top historical scores, including counter-move bonus */
-                        const auto score = ctxt.history_score(move);
-                        if (score > hist_high)
+                        const auto hist_score = ctxt.history_score(move);
+                        if (hist_score > hist_high)
                         {
-                            make_move(ctxt, move, MoveOrder::HISTORY_COUNTERS, score);
+                            make_move(ctxt, move, MoveOrder::HISTORY_COUNTERS, hist_score);
                             break;
                         }
-                    }
 
-                    if ((ctxt.is_counter_move(move)
-                        || move.from_square() == ctxt._capture_square
-                        || is_pawn_push(ctxt, move)
-                        || is_attack_on_king(ctxt, move)
-                        )
-                        && make_move(ctxt, move, MoveOrder::TACTICAL_MOVES))
-                    {
-                        move._score = ctxt.history_score(move);
+                        if ((ctxt.is_counter_move(move)
+                            || move.from_square() == ctxt._capture_square
+                            || is_pawn_push(ctxt, move)
+                            || is_attack_on_king(ctxt, move)
+                            )
+                            && make_move(ctxt, move, MoveOrder::TACTICAL_MOVES, hist_score))
+                        {
+                            ASSERT(move._score == hist_score);
+                            break;
+                        }
+
+                        if (move._score >= HISTORY_LOW
+                            && make_move<true>(ctxt, move, futility)
+                            && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
+                        {
+                            move._group = MoveOrder::TACTICAL_MOVES;
+                            move._score = hist_score;
+                        }
                     }
                     break;
 
                 case 4:
-                    if (!make_move(ctxt, move, futility))
-                    {
-                        break;
-                    }
-                    move._score = ctxt.history_score(move);
-
-                    if (move._score >= HISTORY_LOW
-                        /* computing forks and pins is expensive */
-                        && (move._state->has_fork(!move._state->turn)
-                            || is_direct_check(move)
-                            || move._state->is_pinned(move._state->turn)))
-                    {
-                        move._group = MoveOrder::TACTICAL_MOVES;
-                    }
-                    else
+                    if (make_move<true>(ctxt, move, futility))
                     {
                         move._group = MoveOrder::LATE_MOVES;
+                        move._score = ctxt.history_score(move);
                     }
                     break;
 
@@ -1976,18 +1985,22 @@ namespace search
 
         if (size_t(_count) <= start_at)
         {
-            ASSERT(ctxt.moves()[start_at]._group >= MoveOrder::QUIET_MOVES);
+            ASSERT(moves_list[start_at]._group >= MoveOrder::PRUNED_MOVES);
             _need_sort = false;
         }
         else if (_need_sort)
         {
-            sort_moves(ctxt, start_at);
+            sort_moves(ctxt, start_at, count);
         }
 
     #if !defined(NO_ASSERT)
-        for (size_t i = _count; i < ctxt.moves().size(); ++i)
+        for (size_t i = _count; i < moves_list.size(); ++i)
         {
-            ASSERT(ctxt.moves()[i]._group >= MoveOrder::QUIET_MOVES);
+            ASSERT(moves_list[i]._group >= MoveOrder::PRUNED_MOVES);
+        }
+        for (size_t i = 1; i < moves_list.size(); ++i)
+        {
+            ASSERT(compare_moves_ge(moves_list[i-1], moves_list[i]));
         }
     #endif /* NO_ASSERT */
     }

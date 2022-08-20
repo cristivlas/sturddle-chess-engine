@@ -64,6 +64,7 @@ using score_t = int32_t;
  */
 #define COUNT_VALID_MOVES_AS_NODES          true
 
+
 /* NOTE: this setting has no effect when using SEE */
 #define EXCHANGES_DETECT_CHECKMATE          false
 
@@ -117,9 +118,15 @@ using score_t = int32_t;
   constexpr size_t TRANSPOSITION_TABLE_SLOTS = 16 * 1024 * 1024;
 #endif /* LOW_MEMORY_PROFILE */
 
-#define MOBILITY_TUNING_ENABLED             false
+#if !defined(MOBILITY_TUNING_ENABLED)
+  #define MOBILITY_TUNING_ENABLED           false
+#endif
 
-/* Export parameters to Python scripts? */
+/*
+ * When TUNING_ENABLED is true, values introduced by DECLARE_VALUE in config.h
+ * become visible to Python scripts (via set_param, get_params, get_param_info)
+ * and can be tweaked at runtime.
+ */
 #if !defined(TUNING_ENABLED)
   #define TUNING_ENABLED                    false
 #endif
@@ -171,8 +178,8 @@ namespace search
         TACTICAL_MOVES = 10, /* pushed pawns, checks, etc. */
         LATE_MOVES = 11, /* all other legal moves not covered above */
         UNORDERED_MOVES = 12,
-        QUIET_MOVES = 13,
-        PRUNED_MOVES = 14, /* futility-prune at move ordering level */
+        PRUNED_MOVES = 13,
+        QUIET_MOVES = 14,
         ILLEGAL_MOVES = 15,
     };
 }
