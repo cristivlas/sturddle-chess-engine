@@ -297,7 +297,7 @@ namespace search
 
         int64_t     nanosleep(int nanosec);
 
-        Context*    next(bool null_move = false, score_t = 0);
+        Context*    next(bool null_move, score_t, int move_count);
 
         template<bool Construct = false> Context* next_ply() const;
 
@@ -434,7 +434,6 @@ namespace search
     }
 
 
-
     /* Evaluate material plus piece-squares from the point of view
      * of the side that just moved. This is different from the other
      * evaluate methods which apply the perspective of the side-to-move.
@@ -529,7 +528,7 @@ namespace search
             _can_prune =
                 (_parent != nullptr)
                 && !is_pv_node()
-                && (_max_depth >= 6 || !is_qsearch())
+                && (_max_depth >= 6 || depth() > 0)
                 && !_excluded
                 && (state().pushed_pawns_score <= 1)
                 && !state().just_king_and_pawns()
@@ -735,6 +734,41 @@ namespace search
     }
 
 
+    INLINE bool Context::has_cycle(const State& state) const
+    {
+        const auto hash = state.hash();
+
+        for (auto ctxt = _parent; ctxt; ctxt = ctxt->_parent)
+        {
+            if (hash == ctxt->state().hash() && state == ctxt->state())
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+    INLINE int Context::repeated_count(const State& state) const
+    {
+        ASSERT(_history);
+        return int(_history->count(state)) + has_cycle(state);
+    }
+
+
+    INLINE int Context::is_repeated() const
+    {
+        if (_repetitions < 0)
+        {
+            ASSERT(_history);
+            _repetitions = repeated_count(state());
+
+            ASSERT(_repetitions >= 0);
+        }
+        return _repetitions;
+    }
+
+
     INLINE bool Context::is_pvs_ok() const
     {
         return (_algorithm == NEGASCOUT) && !is_retry() && !is_leftmost();
@@ -761,18 +795,18 @@ namespace search
     /*
      * Get the next move and wrap it into a Context object.
      */
-    INLINE Context* Context::next(bool null_move, score_t futility /* margin */)
+    INLINE Context* Context::next(bool null_move, score_t futility, int move_count)
     {
         ASSERT(_alpha < _beta);
 
         const bool retry = _retry_next;
         _retry_next = false;
 
-        if (!_excluded && !on_next() && next_move_index() > 0)
+        if (!_excluded && !on_next() && move_count > 0)
             return nullptr;
 
         /* null move must be tried before actual moves */
-        ASSERT(!null_move || next_move_index() == 0);
+        ASSERT(!null_move || move_count == 0);
 
         const Move* move;
 
@@ -1040,13 +1074,12 @@ namespace search
 
         while (move->_group == MoveOrder::UNORDERED_MOVES)
         {
-#if 1
             if (can_late_move_prune(ctxt))
             {
                 mark_as_pruned(ctxt, *move);
                 return nullptr;
             }
-#endif
+
             order_moves(ctxt, index, futility);
             move = &moves_list[index];
         }

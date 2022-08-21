@@ -32,8 +32,8 @@ constexpr int PLY_MAX = 100;
 
 constexpr int PLY_HISTORY_MAX = 20;
 
-constexpr score_t SCORE_MIN = -100000;
-constexpr score_t SCORE_MAX =  100000;
+constexpr score_t SCORE_MIN = -30000;
+constexpr score_t SCORE_MAX =  30000;
 
 constexpr score_t CHECKMATE = SCORE_MAX - 1;
 
@@ -144,21 +144,29 @@ namespace search
     using KillerMovesTable = std::array<KillerMoves, PLY_MAX>;
 
 
+    enum class TT_Type : int8_t
+    {
+        NONE = 0,
+        EXACT,
+        LOWER,
+        UPPER,
+    };
+
     struct TT_Entry
     {
         uint64_t    _hash = 0;
-        uint16_t    _age = 0;
+        uint8_t     _age = 0;
+        uint8_t     _version = 0;
         int16_t     _depth = std::numeric_limits<int16_t>::min();
-        int32_t     _capt = SCORE_MIN;
-        score_t     _alpha = SCORE_MIN;
-        score_t     _beta = SCORE_MAX;
-        score_t     _value = SCORE_MIN;
-        score_t     _eval = SCORE_MIN;
-        score_t     _king_safety = SCORE_MIN;
-        score_t     _threats = SCORE_MIN;
-        BaseMove    _hash_move;
+        int16_t     _capt = SCORE_MIN;
+        int16_t     _value = SCORE_MIN;
+        int16_t     _eval = SCORE_MIN;
+        int16_t     _king_safety = SCORE_MIN;
+        int16_t     _threats = SCORE_MIN;
         bool        _singleton = false;
-        uint32_t    _version = 0;
+        TT_Type     _type = TT_Type::NONE;
+        BaseMove    _hash_move;
+
     #if !NO_ASSERT
         void*       _lock = nullptr; /* owner */
         explicit TT_Entry(void* lock = nullptr) : _lock(lock) {}
@@ -166,16 +174,16 @@ namespace search
         explicit TT_Entry(void* = nullptr) {}
     #endif /* NO_ASSERT */
 
-        inline bool is_lower() const { return _value >= _beta; }
-        inline bool is_upper() const { return _value <= _alpha; }
-        inline bool is_valid() const { return _version != 0; }
+        inline bool is_lower() const { return _type == TT_Type::LOWER; }
+        inline bool is_upper() const { return _type == TT_Type::UPPER; }
+        inline bool is_valid() const { return _type != TT_Type::NONE; }
 
         inline bool matches(const State& state) const
         {
             return is_valid() && _hash == state.hash();
         }
 
-        const score_t* lookup_score(Context&) const;
+        const int16_t* lookup_score(Context&) const;
     };
 
 
@@ -258,7 +266,7 @@ namespace search
         template<bool Debug=false>
         void get_pv_from_table(Context&, const Context&, PV&);
 
-        const score_t* lookup(Context&);
+        const int16_t* lookup(Context&);
 
         void store(Context&, score_t alpha, int depth);
         void store(Context&, TT_Entry&, score_t, int depth);

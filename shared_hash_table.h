@@ -153,7 +153,7 @@ namespace search
             SpinLock& operator=(SpinLock&&) = delete;
             SpinLock& operator=(const SpinLock&) = delete;
 
-            uint16_t clock() const { return _ht->_clock; }
+            uint8_t clock() const { return _ht->_clock; }
             entry_t* entry() { return &_ht->_data[_ix]; }
             bool is_locked() const { return _locked; }
 
@@ -264,6 +264,8 @@ namespace search
 
                 if (!p->is_valid())
                 {
+                    ASSERT(p->_version == 0);
+
                     /* slot is unoccupied, bump up usage count */
                 #if SMP
                     _used.fetch_add(1, std::memory_order_relaxed);
@@ -307,11 +309,11 @@ namespace search
             return n * (sizeof(typename data_t::value_type) + sizeof(typename locks_t::value_type));
         }
 
-        INLINE size_t clock() const { return _clock; }
+        INLINE uint8_t clock() const { return _clock; }
         INLINE void increment_clock() { ++_clock; }
 
     private:
-        uint16_t    _clock = 0;
+        uint8_t     _clock = 0;
         count_t     _used = 0;
         data_t      _data;
         locks_t     _locks;

@@ -52,7 +52,7 @@ import sys
 import time
 
 
-ctypedef stdint.int32_t score_t
+ctypedef int score_t
 ctypedef stdint.uint64_t Bitboard
 ctypedef stdint.int64_t int64_t
 ctypedef stdint.uint64_t uint64_t
@@ -447,7 +447,7 @@ cdef extern from 'context.h' namespace 'search':
 
         const PV&       get_pv() nogil const
 
-        Context*        next(bool, score_t)
+        Context*        next(bool, score_t, int)
         int             tid() const
 
 
@@ -1091,7 +1091,7 @@ def perft3(fen, repeat=1):
 
     for i in range(0, repeat):
         node._ctxt._max_depth = max(1, i % 100)
-        while node._ctxt.next(False, 0) != NULL:
+        while node._ctxt.next(False, 0, 0) != NULL:
             count += 1
         node._ctxt.rewind(0, True)
 
@@ -1117,8 +1117,9 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 __major__   = 0
 __minor__   = 98
+__patch__   = 5
 __smp__     = get_param_info()['Threads'][2] > 1
-__version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
+__version__ = '.'.join([str(__major__), str(__minor__), str(__patch__), 'SMP' if __smp__ else ''])
 
 
 def version():

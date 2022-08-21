@@ -1205,7 +1205,7 @@ namespace search
                     else
                     {
                         /* cannot do better than draw, but can do worse */
-                        eval = std::min(eval, 0);
+                        eval = std::min<score_t>(eval, 0);
                     }
                     _tt_entry._eval = eval;
                 }
@@ -1372,18 +1372,18 @@ namespace search
             }
             else if (score <= _tt->_w_alpha)
             {
-                _alpha = std::max(SCORE_MIN, score - HALF_WINDOW * pow2(iteration()));
+                _alpha = std::max<score_t>(SCORE_MIN, score - HALF_WINDOW * pow2(iteration()));
                 _beta = _tt->_w_beta;
             }
             else if (score >= _tt->_w_beta)
             {
                 _alpha = _tt->_w_alpha;
-                _beta = std::min(SCORE_MAX, score + HALF_WINDOW * pow2(iteration()));
+                _beta = std::min<score_t>(SCORE_MAX, score + HALF_WINDOW * pow2(iteration()));
             }
             else
             {
-                _alpha = std::max(SCORE_MIN, score - HALF_WINDOW);
-                _beta = std::min(SCORE_MAX, score + HALF_WINDOW);
+                _alpha = std::max<score_t>(SCORE_MIN, score - HALF_WINDOW);
+                _beta = std::min<score_t>(SCORE_MAX, score + HALF_WINDOW);
             }
         }
 
@@ -1403,26 +1403,6 @@ namespace search
         _statebuf = *_move._state;
         _state = &_statebuf;
         _move._state = _state;
-    }
-
-
-    int Context::repeated_count(const State& state) const
-    {
-        ASSERT(_history);
-        return int(_history->count(state)) + has_cycle(state);
-    }
-
-
-    int Context::is_repeated() const
-    {
-        if (_repetitions < 0)
-        {
-            ASSERT(_history);
-            _repetitions = repeated_count(state());
-
-            ASSERT(_repetitions >= 0);
-        }
-        return _repetitions;
     }
 
 
@@ -1603,21 +1583,6 @@ namespace search
                 _time_limit = millisec / std::max(moves, estimated_moves_left);
             }
         }
-    }
-
-
-    bool Context::has_cycle(const State& state) const
-    {
-        const auto hash = state.hash();
-
-        for (auto ctxt = _parent; ctxt; ctxt = ctxt->_parent)
-        {
-            if (hash == ctxt->state().hash() && state == ctxt->state())
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
 

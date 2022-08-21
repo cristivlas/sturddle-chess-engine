@@ -64,7 +64,7 @@ static void log_pv(const TranspositionTable& tt, const char* info)
 }
 
 
-const score_t* TT_Entry::lookup_score(Context& ctxt) const
+const int16_t* TT_Entry::lookup_score(Context& ctxt) const
 {
     if (_depth >= ctxt.depth())
     {
@@ -72,15 +72,14 @@ const score_t* TT_Entry::lookup_score(Context& ctxt) const
 
         if (is_lower())
         {
-            ctxt._alpha = std::max(ctxt._alpha, _value);
+            ctxt._alpha = std::max<score_t>(ctxt._alpha, _value);
         }
         else if (is_upper())
         {
-            ctxt._beta = std::min(ctxt._beta, _value);
+            ctxt._beta = std::min<score_t>(ctxt._beta, _value);
         }
-        else if (ctxt._alpha <= _alpha && ctxt._beta >= _beta)
+        else
         {
-            ASSERT(_value > _alpha && _value < _beta);
             return &_value;
         }
 
@@ -266,7 +265,7 @@ BaseMove TranspositionTable::lookup_countermove(const Context& ctxt) const
 }
 
 
-const score_t* TranspositionTable::lookup(Context& ctxt)
+const int16_t* TranspositionTable::lookup(Context& ctxt)
 {
     if (ctxt._ply == 0 || ctxt._excluded)
         return nullptr;
@@ -348,12 +347,21 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
        )
         entry._hash_move = move;
 
-    entry._alpha = alpha;
-    entry._beta = ctxt._beta;
     entry._value = ctxt._score;
+
+    if (entry._value >= ctxt._beta)
+        entry._type = TT_Type::LOWER;
+    else if (entry._value <= alpha)
+        entry._type = TT_Type::UPPER;
+    else
+        entry._type = TT_Type::EXACT;
+
     entry._hash = ctxt.state().hash();
     entry._depth = depth;
-    entry._eval = ctxt._tt_entry._eval;
+
+    if (ctxt._tt_entry._eval != SCORE_MIN)
+        entry._eval = ctxt._tt_entry._eval;
+
     entry._capt = ctxt._tt_entry._capt;
     entry._king_safety = ctxt._tt_entry._king_safety;
     entry._singleton = ctxt._tt_entry._singleton;
@@ -617,7 +625,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
      */
     const auto min_cutoffs = MULTICUT_C - (ctxt.depth() > 5 && ctxt._tt_entry.is_lower());
 
-    while (auto next_ctxt = ctxt.next())
+    while (auto next_ctxt = ctxt.next(false, 0, move_count))
     {
         next_ctxt->_multicut_allowed = false;
         next_ctxt->_max_depth -= reduction;
@@ -764,7 +772,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             && ctxt.depth() > 0
             && ctxt.depth() < 7
             && ctxt._tt_entry._eval < MATE_HIGH
-            && ctxt._tt_entry._eval > ctxt._beta + std::max(135 * ctxt.depth(), ctxt.improvement())
+            && ctxt._tt_entry._eval > ctxt._beta + std::max<score_t>(135 * ctxt.depth(), ctxt.improvement())
             && !ctxt.is_check())
         {
             ASSERT(ctxt._tt_entry._eval > SCORE_MIN);
@@ -794,7 +802,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         int move_count = 0, futility = -1;
 
         /* iterate over moves */
-        while (auto next_ctxt = ctxt.next(std::exchange(null_move, false), futility))
+        while (auto next_ctxt = ctxt.next(std::exchange(null_move, false), futility, move_count))
         {
             if (!next_ctxt->is_null_move())
             {
@@ -1121,7 +1129,7 @@ score_t search::mtdf(Context& ctxt, score_t first, TranspositionTable& table)
 
 #endif /* MTDF_CSTAR_BISECT */
 
-        ctxt._score = std::max(SCORE_MIN, b - 1);
+        ctxt._score = std::max<score_t>(SCORE_MIN, b - 1);
         ctxt._alpha = b - 1;
         ctxt._beta = b;
 
