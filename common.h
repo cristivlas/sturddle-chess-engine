@@ -84,9 +84,6 @@ using score_t = int;
 
 #define REVERSE_FUTILITY_PRUNING            true
 
-/* Use in SEE heuristic. -1 disables pin awareness */
-#define SEE_PIN_AWARENESS_DEPTH             -1
-
 /*
  * https://www.chessprogramming.org/Singular_Extensions
  */

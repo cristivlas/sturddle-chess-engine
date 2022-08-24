@@ -248,8 +248,10 @@ namespace search
         static std::string epd(const State&);
 
         /* Static evaluation */
-        score_t     _evaluate();    /* no repetitions, no fifty-moves rule */
-        score_t     evaluate();     /* call _evaluate and do the above */
+        score_t     _evaluate();
+
+        template<bool EvalCaptures = true> score_t evaluate();
+
         score_t     evaluate_end();
         score_t     evaluate_material(bool with_piece_squares = true) const;
         int         eval_king_safety(int piece_count);
@@ -403,6 +405,10 @@ namespace search
     template<bool Debug = false>
     int do_exchanges(const State&, Bitboard, score_t, int tid, int ply = FIRST_EXCHANGE_PLY);
 
+
+    extern score_t eval_captures(Context& ctxt);
+
+
     /*
      * Evaluate same square exchanges
      */
@@ -528,7 +534,9 @@ namespace search
             _can_prune =
                 (_parent != nullptr)
                 && !is_pv_node()
+            #if 0
                 && (_max_depth >= 6 || depth() > 0)
+            #endif
                 && !_excluded
                 && (state().pushed_pawns_score <= 1)
                 && !state().just_king_and_pawns()
@@ -579,6 +587,40 @@ namespace search
             && (_move.from_square() != _parent->_capture_square)
             && !is_recapture()
             && !state().is_check();
+    }
+
+
+    template<bool EvalCaptures> INLINE score_t Context::evaluate()
+    {
+        ASSERT(_fifty < 100);
+        ASSERT(_ply == 0 || !is_repeated());
+
+        ++_tt->_eval_count;
+
+        auto score = _evaluate();
+
+        ASSERT(score > SCORE_MIN);
+        ASSERT(score < SCORE_MAX);
+
+        if constexpr(EvalCaptures)
+        {
+            if (abs(score) < MATE_HIGH)
+            {
+                /* 3. Captures */
+                const auto capt = eval_captures(*this);
+
+                ASSERT(capt <= CHECKMATE);
+
+                if (capt >= MATE_HIGH)
+                    score = capt - 1;
+                else
+                    score += capt;
+
+                ASSERT(score > SCORE_MIN);
+                ASSERT(score < SCORE_MAX);
+            }
+        }
+        return score;
     }
 
 
@@ -1256,10 +1298,15 @@ namespace search
 
         incremental_update(move, ctxt);
 
-        /* Futility-prune after making the move (state is needed for simple eval). */
-        if (futility > 0)
+        /* Futility pruning (1st pass, 2nd pass done in search */
+        /* Prune after making the move (state is needed for simple eval). */
+        if (futility > 0 && ctxt.depth() > 0)
         {
+        #if 0 /* TODO: test */
+            const auto val = futility + eval_material_and_piece_squares(*move._state);
+        #else
             const auto val = futility + move._state->simple_score * SIGN[!move._state->turn];
+        #endif
 
             if ((val < ctxt._alpha || val < ctxt._score) && ctxt.can_prune_move(move))
             {
@@ -1341,11 +1388,7 @@ namespace search
 
     INLINE bool compare_moves_ge(const Move& lhs, const Move& rhs)
     {
-    #if 0
-        return (lhs._group < rhs._group) || (lhs._group == rhs._group && lhs._score >= rhs._score);
-    #else
         return !compare_moves_gt(rhs, lhs);
-    #endif
     }
 
 

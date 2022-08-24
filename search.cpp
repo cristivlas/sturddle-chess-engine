@@ -341,10 +341,7 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
     /* Store or reset hash move */
     auto move = ctxt._best_move;
 
-    if (move
-        || (entry.is_lower() && ctxt._score < entry._value)
-        || (entry.is_upper() && ctxt._score > entry._value)
-       )
+    if (move || entry.is_lower())
         entry._hash_move = move;
 
     entry._value = ctxt._score;
@@ -686,6 +683,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     ASSERT(ctxt._beta > SCORE_MIN);
     ASSERT(ctxt._score <= ctxt._alpha);
     ASSERT(ctxt._alpha < ctxt._beta);
+    ASSERT(ctxt._ply == 0 || !ctxt._move || ctxt._move._group < MoveOrder::UNORDERED_MOVES);
 
     ctxt.set_tt(&table);
 
@@ -772,7 +770,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             && ctxt.depth() > 0
             && ctxt.depth() < 7
             && ctxt._tt_entry._eval < MATE_HIGH
-            && ctxt._tt_entry._eval > ctxt._beta + std::max<score_t>(135 * ctxt.depth(), ctxt.improvement())
+            && ctxt._tt_entry._eval > ctxt._beta
+                + std::max<score_t>(REVERSE_FUTILITY_MARGIN * ctxt.depth(), ctxt.improvement())
             && !ctxt.is_check())
         {
             ASSERT(ctxt._tt_entry._eval > SCORE_MIN);
@@ -998,7 +997,12 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     {
                         if (ctxt._ply < PLY_HISTORY_MAX)
                             table._plyHistory[ctxt._ply][ctxt.turn()][next_ctxt->_move]
+                            #if 0 /* TODO */
+                                += next_ctxt->improvement() / double(HISTORY_IMPROVEMENT_DIV)
+                                + ctxt.depth() * (move_score - ctxt._beta) / double(HISTORY_SCORE_DIV)
+                            #else
                                 += 0.01 * ctxt.depth() * next_ctxt->improvement()
+                            #endif
                                 + (move_score > MATE_HIGH);
 
                         if (ctxt.depth() >= COUNTER_MOVE_MIN_DEPTH)
@@ -1039,7 +1043,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 && move_score < MATE_HIGH
                 && move_score < table._w_alpha
                 && ctxt.tid() == 0 /* main thread */
-                && ctxt.evaluate() < table._w_alpha)
+                && ctxt.evaluate<false>() < table._w_alpha)
             {
                 ASSERT(!next_ctxt->is_null_move());
                 table._reset_window = true;

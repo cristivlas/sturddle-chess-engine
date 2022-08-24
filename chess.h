@@ -824,6 +824,7 @@ namespace chess
 
     namespace
     {
+        /* Recursive template for computing exponential at compile time */
         template<int N> struct _exp {
             static constexpr double value = _exp<N-1>::value * M_E;
         };
@@ -838,6 +839,7 @@ namespace chess
             return { _exp<I>::value ... };
         }
 
+        /* Compile-time sigmoid in range [0,32] */
         INLINE constexpr double _e(int x)
         {
             auto constexpr e = _exp_table(std::make_index_sequence<33>{});

@@ -31,7 +31,7 @@ namespace search
     enum class Acquire : int8_t { Read, Write };
 
 
-    template<typename T, int BUCKET_SIZE = 16> class SharedHashTable
+    template<typename T, int BUCKET_SIZE = 8> class SharedHashTable
     {
         using entry_t = T;
         using data_t = std::vector<entry_t>;
@@ -276,10 +276,10 @@ namespace search
                     return p;
                 }
 
-                if (p->_age != _clock)
+                if (p->_hash == h)
                     return p;
 
-                if (p->_hash == h)
+                if (p->_age != _clock)
                     return p;
 
                 if (depth >= p->_depth && p->_value < value)

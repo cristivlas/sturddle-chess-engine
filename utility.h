@@ -20,6 +20,7 @@
  */
 #pragma once
 
+#include <random>
 #include <stdexcept>
 #include "Python.h"
 
@@ -105,5 +106,14 @@ namespace
         auto i = std::rotate(first, first + 2, last);
         *i++ = V(); *i = V();
     #endif
+    }
+
+
+    static INLINE int random_int(int low, int high)
+    {
+        static std::random_device rd;  // Will be used to obtain a seed for the random number engine
+        static std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
+
+        return std::uniform_int_distribution<int>(low, high)(gen);
     }
 } /* namespace */

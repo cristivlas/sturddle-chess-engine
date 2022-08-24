@@ -27,7 +27,6 @@
 #include <iomanip>
 #include <iterator>
 #include <map>
-#include <random>
 #include <sstream>
 #include "chess.h"
 #define CONFIG_IMPL
@@ -311,22 +310,6 @@ namespace search
         ASSERT(_alpha >= _score); /* invariant */
 
         return _alpha >= _beta;
-    }
-
-
-    score_t Context::evaluate()
-    {
-        ASSERT(_fifty < 100);
-        ASSERT(_ply == 0 || !is_repeated());
-
-        ++_tt->_eval_count;
-
-        const auto score = _evaluate();
-
-        ASSERT(score > SCORE_MIN);
-        ASSERT(score < SCORE_MAX);
-
-        return score;
     }
 
 
@@ -663,7 +646,7 @@ namespace search
     }
 
 
-    static INLINE score_t eval_captures(Context& ctxt)
+    score_t eval_captures(Context& ctxt)
     {
         if constexpr(DEBUG_CAPTURES)
             ctxt.log_message(LogLevel::DEBUG, "eval_captures");
@@ -937,10 +920,7 @@ namespace search
      */
     static INLINE int eval_fuzz()
     {
-        static std::random_device rd;  // Will be used to obtain a seed for the random number engine
-        static std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
-
-        return EVAL_FUZZ ? std::uniform_int_distribution<score_t>(-EVAL_FUZZ, EVAL_FUZZ)(gen) : 0;
+        return EVAL_FUZZ ? random_int(-EVAL_FUZZ, EVAL_FUZZ) : 0;
     }
 
 
@@ -1174,7 +1154,7 @@ namespace search
      * Static evaluation has three components:
      * 1. base = material + pst + mobility
      * 2. tactical (positional)
-     * 3. capture estimates.
+     * 3. capture estimates (in Context::evaluate)
      */
     score_t Context::_evaluate()
     {
@@ -1220,25 +1200,8 @@ namespace search
                 }
             }
         }
-
         ASSERT(eval > SCORE_MIN);
         ASSERT(eval < SCORE_MAX);
-
-        if (abs(eval) < MATE_HIGH)
-        {
-            /* 3. Captures */
-            const auto capt = eval_captures(*this);
-
-            ASSERT(capt <= CHECKMATE);
-
-            if (capt >= MATE_HIGH)
-                eval = capt - 1;
-            else
-                eval += capt;
-
-            ASSERT(eval > SCORE_MIN);
-            ASSERT(eval < SCORE_MAX);
-        }
 
         return eval;
     }

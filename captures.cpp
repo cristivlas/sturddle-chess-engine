@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <iterator>
 #include "common.h"
+#include "config.h"
 #include "chess.h"
 #include "utility.h"
 

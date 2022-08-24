@@ -428,7 +428,7 @@ cdef extern from 'context.h' namespace 'search':
 
         int64_t         check_time_and_update_nps()
 
-        const Move*     first_valid_move()
+        const Move*     first_valid_move() nogil
 
         @staticmethod
         void            init()
@@ -442,7 +442,7 @@ cdef extern from 'context.h' namespace 'search':
 
         void            set_time_info(int millisec, int moves)
 
-        void            set_tt(TranspositionTable*)
+        void            set_tt(TranspositionTable*) nogil
         TranspositionTable* get_tt() const
 
         const PV&       get_pv() nogil const
@@ -577,7 +577,7 @@ cdef class NodeContext:
             return node
 
 
-    def best_move(self):
+    cpdef best_move(self):
         cdef const Move* move
 
         best = py_move(self._ctxt._best_move)
@@ -713,16 +713,13 @@ cdef extern from 'search.h' namespace 'search':
         const   score_t _w_beta
         const   int _eval_depth
 
-        void    clear()
+        void    init() nogil
         size_t  nodes() nogil const
-        void    shift()
+
         const   vector[BaseMove]& get_pv() nogil const
 
         @staticmethod
         void    clear_shared_hashtable() nogil
-
-        @staticmethod
-        void    increment_clock() nogil
 
         @staticmethod
         size_t  size() nogil const
@@ -789,7 +786,7 @@ cdef class SearchAlgorithm:
         self.report_cb = kwargs.get('threads_report', None)
 
 
-    cdef set_context_callbacks(self):
+    cdef void set_context_callbacks(self):
         if self.context:
             self.context._ctxt._engine = <PyObject*> self
 
@@ -909,9 +906,7 @@ cdef class SearchAlgorithm:
         if board:
             self.context.create_from(board)
 
-        self._table.clear()
-        self._table.shift()
-        self._table.increment_clock()
+        self._table.init()
 
         self.set_context_callbacks()
 
@@ -926,7 +921,7 @@ cdef class SearchAlgorithm:
         score = self._search(self._table)
 
         self.best_move = self.context.best_move()
-        self.context._ctxt.check_time_and_update_nps()
+        # self.context._ctxt.check_time_and_update_nps()
 
         return (self.best_move, score)
 
@@ -1117,7 +1112,7 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 __major__   = 0
 __minor__   = 98
-__patch__   = 5
+__patch__   = 6
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__), str(__patch__), 'SMP' if __smp__ else ''])
 

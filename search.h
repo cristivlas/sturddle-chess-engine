@@ -222,6 +222,8 @@ namespace search
         static void clear_shared_hashtable();
         static void increment_clock();
 
+               void init() { clear(); shift(); increment_clock(); }
+
         int _tid = 0;
         int _iteration = 0;
         int _eval_depth = 0;
