@@ -319,21 +319,22 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
     ASSERT(alpha < ctxt._beta);
     ASSERT(ctxt._alpha >= alpha);
 
-    if (entry.is_valid() && !entry.matches(ctxt.state()))
+    if (entry.is_valid())
     {
-#if !NO_ASSERT
-        entry = TT_Entry(entry._lock);
-#else
-        entry = TT_Entry();
-#endif /* NO_ASSERT */
-    }
-   /*
-    * Another thread has completed a deeper search from the time the current
-    * thread has started searching (and probed the cache) in this position?
-    */
-    else if (entry._depth > depth && entry._version > ctxt._tt_entry._version)
-    {
-        return;
+        if  (!entry.matches(ctxt.state()))
+        {
+            entry._eval = SCORE_MIN;
+            entry._type = TT_Type::NONE;
+            entry._hash_move = BaseMove();
+        }
+       /*
+        * Another thread has completed a deeper search from the time the current
+        * thread has started searching (and probed the cache) in this position?
+        */
+        else if (entry._depth > depth && entry._version > ctxt._tt_entry._version)
+        {
+            return;
+        }
     }
 
     ++entry._version;
@@ -361,8 +362,6 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
 
     entry._capt = ctxt._tt_entry._capt;
     entry._king_safety = ctxt._tt_entry._king_safety;
-    entry._singleton = ctxt._tt_entry._singleton;
-    entry._threats = ctxt._tt_entry._threats;
 }
 
 
@@ -589,7 +588,6 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
     if (ctxt._ply == 0
         || !ctxt._multicut_allowed
         || ctxt.depth() <= 5
-        || ctxt.is_singleton()
         || ctxt.is_pv_node()
         || ctxt._excluded
         || ctxt.is_mate_bound()
@@ -764,7 +762,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
          * not in check, and no move w/ scores above MATE_HIGH in the hash table? Prune.
          */
         if (ctxt._ply != 0
-            && !ctxt.is_singleton()
             && !ctxt._excluded /* no reverse pruning during singular extension */
             && !ctxt.is_pv_node()
             && ctxt.depth() > 0
@@ -839,8 +836,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     * does not beat beta, it means the move is singular (the only cutoff
                     * in the current position).
                     */
-                    if (!next_ctxt->is_singleton()
-                        && ctxt.depth() >= 7
+                    if (ctxt.depth() >= 7
                         && ctxt._tt_entry.is_lower()
                         && abs(ctxt._tt_entry._value) < MATE_HIGH
                         && next_ctxt->_move == ctxt._tt_entry._hash_move

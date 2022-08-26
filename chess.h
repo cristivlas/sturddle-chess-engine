@@ -226,12 +226,8 @@ namespace chess
         UNDEFINED = -1,
     };
 
-#if 1
-  #define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 7, 1, 3, 2 }
-#else
-  /* do not include pawns in mobility evals */
-  #define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 2, 7, 1, 3, 2 }
-#endif
+
+#define DEFAULT_MOBILITY_WEIGHTS { 0, 5, 1, 8, 7, 4, 1 }
 
 #if MOBILITY_TUNING_ENABLED
     extern int MOBILITY[7];

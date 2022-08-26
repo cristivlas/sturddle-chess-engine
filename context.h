@@ -255,7 +255,6 @@ namespace search
         score_t     evaluate_end();
         score_t     evaluate_material(bool with_piece_squares = true) const;
         int         eval_king_safety(int piece_count);
-        int         eval_threats(int piece_count);
         void        extend();       /* fractional extensions */
         const Move* first_valid_move();
         score_t     futility_margin();
@@ -289,7 +288,6 @@ namespace search
         bool        is_pvs_ok() const;
         int         is_repeated() const;
         bool        is_retry() const { return _is_retry; }
-        bool        is_singleton() const { return _is_singleton; }
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
 
         LMRAction   late_move_reduce(int move_count);
@@ -553,8 +551,7 @@ namespace search
         ASSERT(!is_null_move());
         ASSERT(_move);
 
-        return !is_singleton()
-            && !is_extended()
+        return !is_extended()
             && !is_pv_node()
             && !is_repeated()
             && _parent->can_prune_move(_move);
@@ -581,7 +578,6 @@ namespace search
 
         return (_ply != 0)
             && !is_retry()
-            && !is_singleton()
             && (state().pushed_pawns_score <= 1)
             && !is_extended()
             && (_move.from_square() != _parent->_capture_square)
@@ -744,7 +740,6 @@ namespace search
             || _null_move_allowed[turn()] == false
             || _excluded
             || is_null_move() /* consecutive null moves are not allowed */
-            || is_singleton()
             || is_qsearch()
             || is_pv_node()
             || is_mate_bound()
@@ -898,7 +893,8 @@ namespace search
         ctxt->_double_ext = _double_ext;
         ctxt->_extension = _extension;
         ctxt->_is_retry = retry;
-        ctxt->_is_singleton = !ctxt->is_null_move() && _move_maker.is_singleton(*this);
+        if (_ply == 0)
+            ctxt->_is_singleton = !ctxt->is_null_move() && _move_maker.is_singleton(*this);
         ctxt->_futility_pruning = _futility_pruning && FUTILITY_PRUNING;
         ctxt->_multicut_allowed = _multicut_allowed && MULTICUT;
 
@@ -1161,9 +1157,6 @@ namespace search
      */
     INLINE bool MoveMaker::is_singleton(Context& ctxt)
     {
-        if (ctxt._tt_entry._singleton)
-            return true;
-
         ASSERT(_current > 0);
 
         if (_current > 1 || ctxt._pruned_count || have_skipped_moves())
@@ -1182,16 +1175,13 @@ namespace search
                 ASSERT(move._group != MoveOrder::PRUNED_MOVES);
             }
         #endif /* !(NO_ASSERT) */
-            return (ctxt._tt_entry._singleton = true);
+            return true;
         }
         /*
          * get_move_at() is expensive;
          * use only if moving out of check.
          */
-        ctxt._tt_entry._singleton =
-            ctxt.is_check() && !get_move_at(ctxt, _current) && !have_skipped_moves();
-
-        return ctxt._tt_entry._singleton;
+        return ctxt.is_check() && !get_move_at(ctxt, _current) && !have_skipped_moves();
     }
 
 

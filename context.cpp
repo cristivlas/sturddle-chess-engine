@@ -1146,7 +1146,7 @@ namespace search
 
         return eval_tactical(ctxt.state(), mat_eval, piece_count)
             + ctxt.eval_king_safety(piece_count)
-            + ctxt.eval_threats(piece_count);
+            + eval_threats(ctxt.state(), piece_count);
     }
 
 
@@ -1218,15 +1218,6 @@ namespace search
     }
 
 
-    int Context::eval_threats(int piece_count)
-    {
-        if (_tt_entry._threats == SCORE_MIN)
-            _tt_entry._threats = search::eval_threats(state(), piece_count);
-
-        return _tt_entry._threats;
-    }
-
-
     /*
      * Fractional extensions: https://www.chessprogramming.org/Extensions
      * "[...] extension can be added that does not yet extend the search,
@@ -1244,7 +1235,6 @@ namespace search
             _extension += state().pushed_pawns_score;
             _extension += _move.from_square() == _parent->_capture_square;
             _extension += is_recapture() * (is_pv_node() * (ONE_PLY - 1) + 1);
-            _extension += is_singleton() * (is_pv_node() + 1) * ONE_PLY / 2;
 
             /*
              * extend if move has historically high cutoff percentages and counts
@@ -1401,6 +1391,9 @@ namespace search
             reduction -= _parent->history_count(_move) / HISTORY_COUNT_HIGH;
         }
 
+        if (is_capture())
+            --reduction;
+
         reduction = std::max(1, reduction);
 
         if (reduction > depth && can_prune())
@@ -1448,9 +1441,12 @@ namespace search
         if (_ply + 1 >= PLY_MAX)
             return true;
 
-        /* the only available move */
-        if (is_singleton() && _ply <= 1)
+        /* the only available move? */
+        if (_is_singleton)
+        {
+            ASSERT(_ply == 1);
             return true;
+        }
 
         if (depth() > 0
             || is_null_move()

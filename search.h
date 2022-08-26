@@ -103,6 +103,7 @@ namespace search
             return _table[move.from_square()][move.to_square()];
         }
 
+
         inline const T& lookup(const Move& move) const
         {
             ASSERT(move);
@@ -152,26 +153,25 @@ namespace search
         UPPER,
     };
 
-    struct TT_Entry
+    class TT_Entry
     {
+        template<typename T, int> friend class SharedHashTable;
+        uint64_t    _lock = 0;
+
+    public:
         uint64_t    _hash = 0;
         uint8_t     _age = 0;
+        int8_t      _depth = std::numeric_limits<int8_t>::min();
         uint8_t     _version = 0;
-        int16_t     _depth = std::numeric_limits<int16_t>::min();
+        TT_Type     _type = TT_Type::NONE;
         int16_t     _capt = SCORE_MIN;
         int16_t     _value = SCORE_MIN;
         int16_t     _eval = SCORE_MIN;
         int16_t     _king_safety = SCORE_MIN;
-        int16_t     _threats = SCORE_MIN;
-        bool        _singleton = false;
-        TT_Type     _type = TT_Type::NONE;
         BaseMove    _hash_move;
 
     #if !NO_ASSERT
-        void*       _lock = nullptr; /* owner */
-        explicit TT_Entry(void* lock = nullptr) : _lock(lock) {}
-    #else
-        explicit TT_Entry(void* = nullptr) {}
+        void*       _owner = nullptr;
     #endif /* NO_ASSERT */
 
         inline bool is_lower() const { return _type == TT_Type::LOWER; }

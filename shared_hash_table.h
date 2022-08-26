@@ -35,18 +35,7 @@ namespace search
     {
         using entry_t = T;
         using data_t = std::vector<entry_t>;
-
-    #if SMP
         using lock_t = std::atomic<uint64_t>;
-        using locks_t = std::vector<lock_t>;
-    #else
-        struct locks_t /* dummy */
-        {
-            struct value_type {};
-            explicit locks_t(size_t) {};
-            void swap(locks_t&) {};
-        };
-    #endif /* !SMP */
 
     public:
         class SpinLock
@@ -58,7 +47,11 @@ namespace search
             bool            _locked = false;
 
     #if SMP
-            INLINE lock_t* lock_p() { return &_ht->_locks[_ix]; }
+            INLINE lock_t* lock_p()
+            {
+                static_assert(sizeof(lock_t) == sizeof(uint64_t));
+                return reinterpret_cast<lock_t*>(&entry()->_lock);
+            }
 
             template<bool strong=false>
             static bool try_lock(lock_t* lock, uint64_t key)
@@ -86,7 +79,7 @@ namespace search
                 _locked = true;
 
             #if !NO_ASSERT
-                entry()->_lock = this;
+                entry()->_owner = this;
             #endif /* NO_ASSERT */
             }
 
@@ -96,7 +89,7 @@ namespace search
                 {
                     _locked = true;
                 #if !NO_ASSERT
-                    entry()->_lock = this;
+                    entry()->_owner = this;
                 #endif /* NO_ASSERT */
                 }
             }
@@ -105,7 +98,7 @@ namespace search
             {
                 ASSERT(_locked);
                 ASSERT(*lock_p() == LOCKED);
-                ASSERT(entry()->_lock == this);
+                ASSERT(entry()->_owner == this);
                 ASSERT(entry()->_hash);
 
                 lock_p()->store(entry()->_hash, std::memory_order_release);
@@ -145,7 +138,7 @@ namespace search
                 other._locked = false;
             #if !NO_ASSERT
                 if (_locked)
-                    entry()->_lock = this;
+                    entry()->_owner = this;
             #endif /* NO_ASSERT */
             }
 
@@ -197,7 +190,6 @@ namespace search
     public:
         explicit SharedHashTable(size_t capacity)
             : _data(capacity)
-            , _locks(capacity)
         {
         }
 
@@ -208,16 +200,13 @@ namespace search
         {
             if (_used > 0)
             {
-                ASSERT(_locks.size() == _data.size());
                 std::fill_n(&_data[0], _data.size(), entry_t());
-                std::fill_n(&_locks[0], _locks.size(), 0);
                 _used = 0;
             }
         }
 
         void resize(size_t capacity)
         {
-            locks_t(capacity).swap(_locks);
             data_t(capacity).swap(_data);
         }
 
@@ -306,7 +295,7 @@ namespace search
 
         static INLINE size_t size_in_bytes(size_t n)
         {
-            return n * (sizeof(typename data_t::value_type) + sizeof(typename locks_t::value_type));
+            return n * sizeof(typename data_t::value_type);
         }
 
         INLINE uint8_t clock() const { return _clock; }
@@ -316,6 +305,5 @@ namespace search
         uint8_t     _clock = 0;
         count_t     _used = 0;
         data_t      _data;
-        locks_t     _locks;
     };
 }
