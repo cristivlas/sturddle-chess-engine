@@ -200,6 +200,7 @@ namespace search
         score_t     _beta = SCORE_MAX;
         score_t     _score = SCORE_MIN; /* dynamic eval score */
         score_t     _retry_beta = SCORE_MAX; /* NEGASCOUT only */
+        mutable int _improvement = SCORE_MIN;
 
         bool        _futility_pruning = true;
         bool        _is_null_move = false; /* for null-move pruning */
@@ -211,6 +212,7 @@ namespace search
         bool        _null_move_allowed[2] = { true, true };
         RETRY       _retry_above_alpha = RETRY::None;
         bool        _retry_next = false;
+
         int         _double_ext = 0;
         int         _extension = 0; /* count pending fractional extensions */
         int         _fifty = 0;
@@ -327,13 +329,15 @@ namespace search
         const MovesList& moves() const { return moves(tid(), _ply); }
         MovesList& moves() { return moves(tid(), _ply); }
 
-        void set_initial_moves(const Context& from_ctxt)
+        void set_moves(const Context& from_ctxt)
         {
-            ASSERT(_tt->_initial_moves.empty());
+            ASSERT(_tt->_moves.empty() || _tt->_moves_hash != from_ctxt.state().hash());
+
             auto first = from_ctxt.moves().begin();
             auto last = first + std::max(0, from_ctxt._move_maker.count());
 
-            _tt->_initial_moves.assign(first, last);
+            _tt->_moves.assign(first, last);
+            _tt->_moves_hash = from_ctxt.state().hash();
         }
 
         /* retrieve PV from TT */
@@ -393,7 +397,7 @@ namespace search
 
     struct ContextBuffer
     {
-        std::array<uint8_t, sizeof(Context)> _mem;
+        std::array<uint8_t, sizeof(Context)> _mem = { 0 };
 
         Context* as_context() { return reinterpret_cast<Context*>(&_mem[0]); }
         const Context* as_context() const { return reinterpret_cast<const Context*>(&_mem[0]); }
@@ -532,9 +536,6 @@ namespace search
             _can_prune =
                 (_parent != nullptr)
                 && !is_pv_node()
-            #if 0
-                && (_max_depth >= 6 || depth() > 0)
-            #endif
                 && !_excluded
                 && (state().pushed_pawns_score <= 1)
                 && !state().just_king_and_pawns()
@@ -692,17 +693,27 @@ namespace search
      */
     INLINE score_t Context::improvement() const
     {
-        if (_ply < 2 || _excluded || is_promotion())
-            return 0;
+        if (_improvement < 0)
+        {
+            if (_ply < 2 || _excluded || is_promotion())
+            {
+                _improvement = 0;
+            }
+            else
+            {
+                const auto prev = _parent->_parent;
 
-        const auto prev = _parent->_parent;
+                if (abs(_tt_entry._eval) < MATE_HIGH && abs(prev->_tt_entry._eval) < MATE_HIGH)
+                    _improvement = std::max(0, prev->_tt_entry._eval - _tt_entry._eval);
 
-        if (abs(_tt_entry._eval) < MATE_HIGH && abs(prev->_tt_entry._eval) < MATE_HIGH)
-            return std::max(0, prev->_tt_entry._eval - _tt_entry._eval);
+                else
+                    _improvement = std::max(0,
+                      eval_material_and_piece_squares(*_state)
+                    - eval_material_and_piece_squares(*prev->_state));
+            }
+        }
 
-        return std::max(0,
-              eval_material_and_piece_squares(*_state)
-            - eval_material_and_piece_squares(*prev->_state));
+        return _improvement;
     }
 
 
@@ -1292,11 +1303,7 @@ namespace search
         /* Prune after making the move (state is needed for simple eval). */
         if (futility > 0 && ctxt.depth() > 0)
         {
-        #if 0 /* TODO: test */
-            const auto val = futility + eval_material_and_piece_squares(*move._state);
-        #else
             const auto val = futility + move._state->simple_score * SIGN[!move._state->turn];
-        #endif
 
             if ((val < ctxt._alpha || val < ctxt._score) && ctxt.can_prune_move(move))
             {

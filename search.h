@@ -230,7 +230,8 @@ namespace search
         PV  _pv; /* principal variation */
         PlyHistory _plyHistory;
 
-        MovesList _initial_moves;
+        MovesList _moves;
+        uint64_t _moves_hash = uint64_t(-1);
 
         /* search window bounds */
         score_t _w_alpha = SCORE_MIN;

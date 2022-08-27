@@ -855,7 +855,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         auto s_ctxt = ctxt.clone(buf.as_context(), ctxt._ply + 2);
 
                         s_ctxt->set_tt(ctxt.get_tt());
-                        s_ctxt->set_initial_moves(ctxt);
+                        s_ctxt->set_moves(ctxt);
                         s_ctxt->_excluded = next_ctxt->_move;
                         s_ctxt->_max_depth = s_ctxt->_ply + (ctxt.depth() - 1) / 2;
                         s_ctxt->_alpha = s_beta - 1;
@@ -1208,7 +1208,7 @@ struct TaskData
 {
     Context* _ctxt = nullptr;
     TranspositionTable _tt;
-    uint8_t _raw_mem[sizeof (Context)] = { 0 };
+    ContextBuffer _raw_mem;
 };
 
 
@@ -1261,12 +1261,12 @@ public:
                 prev_best = _tables[i]._ctxt->_prev;
             }
 
-            _tables[i]._ctxt = _root.clone(reinterpret_cast<Context*>(&_tables[i]._raw_mem[0]));
+            _tables[i]._ctxt = _root.clone(_tables[i]._raw_mem.as_context());
 
             _tables[i]._ctxt->_max_depth += (i % 2) == 0;
 
             _tables[i]._ctxt->set_tt(&_tables[i]._tt);
-            _tables[i]._ctxt->set_initial_moves(_root);
+            _tables[i]._ctxt->set_moves(_root);
 
             _tables[i]._ctxt->_tt_entry._hash_move = hash_move;
 
@@ -1300,9 +1300,21 @@ public:
             threads->wait_for_tasks();
         }
 
+        for (auto& table : _tables)
+        {
+            table._ctxt = nullptr;
+
+            /* in case the thread never made it to move generation... */
+            table._tt._moves.clear();
+        }
+    }
+
+    void do_report()
+    {
         if (Context::_report)
         {
-            std::vector<Context*> ctxts;
+            static std::vector<Context*> ctxts;
+            ctxts.clear();
 
             for (auto& table : _tables)
             {
@@ -1314,14 +1326,6 @@ public:
             }
 
             cython_wrapper::call(Context::_report, Context::_engine, ctxts);
-        }
-
-        for (auto& table : _tables)
-        {
-            table._ctxt = nullptr;
-
-            /* in case the thread never made it to move generation... */
-            table._tt._initial_moves.clear();
         }
     }
 };
@@ -1377,6 +1381,8 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
 
                 continue;
             }
+
+            tasks.do_report();
 
         }   /* SMP scope end */
 

@@ -270,6 +270,8 @@ namespace search
 
                     if (_retry_next)
                     {
+                        set_moves(*next_ctxt);
+
                         /* rewind and search again at full depth */
                         rewind(-1);
                         return false;
@@ -1656,13 +1658,14 @@ namespace search
         auto& moves_list = ctxt.moves();
         moves_list.clear();
 
-        if (ctxt.get_tt()->_initial_moves.empty())
+        if (ctxt.get_tt()->_moves.empty() || ctxt.state().hash() != ctxt.get_tt()->_moves_hash)
         {
             ctxt.state().generate_pseudo_legal_moves(moves_list);
         }
         else
         {
-            moves_list.swap(ctxt.get_tt()->_initial_moves);
+            moves_list.swap(ctxt.get_tt()->_moves);
+            ctxt.get_tt()->_moves.clear();
 
             for (auto& move : moves_list)
             {
