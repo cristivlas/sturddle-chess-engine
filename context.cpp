@@ -162,7 +162,7 @@ namespace search
     std::string (*Context::_epd)(const State&) = nullptr;
     void (*Context::_log_message)(int, const std::string&, bool) = nullptr;
 
-    void (*Context::_on_iter)(PyObject*, Context*, score_t) = nullptr;
+    void (*Context::_on_iter)(PyObject*, Context*, const IterationInfo*) = nullptr;
     void (*Context::_on_next)(PyObject*, int64_t) = nullptr;
 
     std::string(*Context::_pgn)(Context*) = nullptr;
@@ -212,7 +212,6 @@ namespace search
 
         return ctxt;
     }
-
 
 
     /* static */ void Context::ensure_stacks()
@@ -812,7 +811,7 @@ namespace search
 
         return attacks
             + eval_king_quadrant(state, pcs)
-            + castle * CASTLING_RIGHTS_BONUS
+            + castle * interpolate(pcs, CASTLING_RIGHTS_BONUS, 0)
             + outside * interpolate(pcs, KING_OUT_PENALTY, 0)
             + shield * interpolate(pcs, PAWN_SHIELD, 0);
     }
@@ -1350,17 +1349,6 @@ namespace search
     }
 
 
-    void Context::copy_move_state()
-    {
-        ASSERT(_move);
-        ASSERT(_move._state);
-
-        _statebuf = *_move._state;
-        _state = &_statebuf;
-        _move._state = _state;
-    }
-
-
     /*
      * Late move reduction and pruning.
      * https://www.chessprogramming.org/Late_Move_Reductions
@@ -1482,10 +1470,7 @@ namespace search
 
     int64_t Context::check_time_and_update_nps()
     {
-        const auto now = std::chrono::steady_clock::now();
-        const auto millisec = duration_cast<std::chrono::milliseconds>(
-            now - _time_start.load()
-        ).count();
+        const auto millisec = elapsed_milliseconds();
 
         /*
          * Update nodes-per-second for the this thread.
@@ -1665,13 +1650,15 @@ namespace search
         else
         {
             moves_list.swap(ctxt.get_tt()->_moves);
-            ctxt.get_tt()->_moves.clear();
 
-            for (auto& move : moves_list)
+            if (!ctxt.is_retry())
             {
-                move._state = nullptr;
-                move._score = 0;
-                move._group = MoveOrder::UNORDERED_MOVES;
+                for (auto& move : moves_list)
+                {
+                    move._state = nullptr;
+                    move._score = 0;
+                    move._group = MoveOrder::UNORDERED_MOVES;
+                }
             }
         }
 

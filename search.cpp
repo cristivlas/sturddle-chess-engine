@@ -1222,10 +1222,11 @@ class SMPTasks
 
     Context& _root;
 
+public:
     /* static, preserve TTs between iterations */
     static std::vector<TaskData> _tables;
 
-public:
+
     SMPTasks(Context& ctxt, TranspositionTable& table, score_t score)
         : _root(ctxt)
     {
@@ -1299,14 +1300,6 @@ public:
             Context::cancel();
             threads->wait_for_tasks();
         }
-
-        for (auto& table : _tables)
-        {
-            table._ctxt = nullptr;
-
-            /* in case the thread never made it to move generation... */
-            table._tt._moves.clear();
-        }
     }
 
     void do_report()
@@ -1371,7 +1364,7 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
 
             if (table._reset_window)
             {
-            #if 0
+            #if 0 /* debug */
                 std::cout << "WINDOW RESET(" << i << "): " << score << " (";
                 std::cout << table._w_alpha << ", " << table._w_beta << ")\n";
             #endif
@@ -1388,9 +1381,19 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
 
         ASSERT(ctxt.iteration() == ctxt._max_depth);
 
-        /* post iteration results to Cython */
+        /* post iteration info to Cython */
         if (Context::_on_iter)
-            cython_wrapper::call(Context::_on_iter, Context::_engine, &ctxt, score);
+        {
+            IterationInfo info = { score, table.nodes(), 0, 0 };
+            for (auto& t : SMPTasks::_tables)
+                info.nodes += t._tt.nodes();
+
+            const auto ms = Context::elapsed_milliseconds();
+            info.knps = ms ? info.nodes / ms : info.nodes;
+            info.milliseconds = ms;
+
+            cython_wrapper::call(Context::_on_iter, Context::_engine, &ctxt, &info);
+        }
 
         ++i;
     }

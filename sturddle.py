@@ -62,7 +62,6 @@ class UCI:
         self.start_time = time.time()
         self.node_count = 0
         self.i_cb = self.show_thinking if args.show_thinking else None
-        self.r_cb = self.update_node_count if args.show_thinking else None
         self.init_algo()
         self.init_opening_book()
 
@@ -82,7 +81,7 @@ class UCI:
 
     def init_algo(self):
         name = self.args.algorithm
-        self.algorithm = ALGORITHM[name](self.board, self.depth, on_iteration=self.i_cb, threads_report=self.r_cb)
+        self.algorithm = ALGORITHM[name](self.board, self.depth, on_iteration=self.i_cb)
         logging.debug(f'algorithm set to: {self.algorithm}')
 
     # Possible improvements: support a folder of opening books rather
@@ -399,12 +398,10 @@ class UCI:
                 logging.exception(f'exception in command handler, cmd="{cmd}", args: {cmd_args}')
 
 
-    def show_thinking(self, algorithm, node, score):
+    def show_thinking(self, algorithm, node, score, node_count, knps, ms):
         if node.task_id:
             return
         try:
-            seconds_elapsed = time.time() - self.start_time
-            ms = int(seconds_elapsed * 1000)
             score_info = f'score cp {score}'
 
             # principal variation
@@ -425,23 +422,13 @@ class UCI:
                 pv = 'pv ' + pv
 
             depth = f'depth {algorithm.current_depth} seldepth {seldepth}'
-            nps = int(self.node_count / max(0.00001, seconds_elapsed))
-            nodes = f'nodes {self.node_count} nps {nps}'
+            nodes = f'nodes {node_count} nps {knps * 1000}'
 
             hashfull = f'hashfull {engine.get_hash_full()}'
             self.output(f'info {depth} {score_info} time {ms} {hashfull} {nodes} {pv}')
 
         except Exception as e:
             logging.exception(e)
-
-
-    def update_node_count(self, algo, ctxts):
-        main_context = algo.context
-        self.node_count = main_context.stats()['nodes']
-        for secondary_task_context in ctxts:
-            if secondary_task_context:
-                self.node_count += secondary_task_context.stats()['nodes']
-        # logging.debug(f'nodes: {self.node_count}')
 
 
     def validate_pv(self, pv):

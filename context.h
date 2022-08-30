@@ -148,19 +148,18 @@ namespace search
     };
 
 
-    enum class LMRAction : int
-    {
-        None = 0,
-        Ok,
-        Prune,
-    };
+    enum class LMRAction : int { None = 0, Ok, Prune };
 
     /* Reason for retrying */
-    enum class RETRY : uint8_t
+    enum class RETRY : uint8_t { None = 0, Reduced, PVS };
+
+
+    struct IterationInfo
     {
-        None = 0,
-        Reduced,
-        PVS,
+        score_t score;
+        size_t nodes;
+        double knps;
+        int milliseconds;
     };
 
 
@@ -243,6 +242,7 @@ namespace search
         void        copy_move_state();
 
         int         depth() const { return _max_depth - _ply; }
+        static int  elapsed_milliseconds();
 
         static void ensure_stacks();
 
@@ -331,8 +331,6 @@ namespace search
 
         void set_moves(const Context& from_ctxt)
         {
-            ASSERT(_tt->_moves.empty() || _tt->_moves_hash != from_ctxt.state().hash());
-
             auto first = from_ctxt.moves().begin();
             auto last = first + std::max(0, from_ctxt._move_maker.count());
 
@@ -356,7 +354,7 @@ namespace search
 
         static std::string  (*_epd)(const State&);
         static void         (*_log_message)(int, const std::string&, bool);
-        static void         (*_on_iter)(PyObject*, Context*, score_t);
+        static void         (*_on_iter)(PyObject*, Context*, const IterationInfo*);
         static void         (*_on_next)(PyObject*, int64_t);
         static std::string  (*_pgn)(Context*);
         static void         (*_print_state)(const State&);
@@ -393,6 +391,9 @@ namespace search
     };
 
 
+    /*
+     * Helper data structure for allocating context on ContextStacks
+     */
     static_assert(std::is_trivially_destructible<Context>::value);
 
     struct ContextBuffer
@@ -584,6 +585,26 @@ namespace search
             && (_move.from_square() != _parent->_capture_square)
             && !is_recapture()
             && !state().is_check();
+    }
+
+
+    INLINE void Context::copy_move_state()
+    {
+        ASSERT(_move);
+        ASSERT(_move._state);
+
+        _statebuf = *_move._state;
+        _state = &_statebuf;
+        _move._state = _state;
+    }
+
+
+    /* static */ INLINE int Context::elapsed_milliseconds()
+    {
+        const auto now = std::chrono::steady_clock::now();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - _time_start.load(std::memory_order_relaxed)
+        ).count();
     }
 
 
@@ -1299,7 +1320,7 @@ namespace search
 
         incremental_update(move, ctxt);
 
-        /* Futility pruning (1st pass, 2nd pass done in search */
+        /* Futility pruning (1st pass, 2nd pass done in search) */
         /* Prune after making the move (state is needed for simple eval). */
         if (futility > 0 && ctxt.depth() > 0)
         {

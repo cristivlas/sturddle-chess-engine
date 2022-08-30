@@ -393,6 +393,12 @@ cdef extern from 'context.h' namespace 'search':
         void    insert(const State&) except*
         int     _fifty
 
+    cdef cppclass IterationInfo:
+        score_t score
+        size_t nodes
+        double knps
+        int milliseconds
+
 
     ctypedef unique_ptr[History] HistoryPtr
 
@@ -414,7 +420,7 @@ cdef extern from 'context.h' namespace 'search':
 
         string          (*_epd)(const State&)
         void            (*_log_message)(int, const string&, bool)
-        void            (*_on_iter)(PyObject*, Context*, score_t)
+        void            (*_on_iter)(PyObject*, Context*, const IterationInfo*)
         void            (*_on_next)(PyObject*, int64_t)
         string          (*_pgn)(Context*)
         void            (*_print_state)(const State&)
@@ -792,7 +798,7 @@ cdef class SearchAlgorithm:
 
             # iteration callback
             if self.iteration_cb:
-                self.context._ctxt._on_iter = <void (*)(PyObject*, Context*, score_t)> self.on_iter
+                self.context._ctxt._on_iter = <void (*)(PyObject*, Context*, const IterationInfo*)> self.on_iter
             else:
                 self.context._ctxt._on_iter = NULL
 
@@ -886,9 +892,15 @@ cdef class SearchAlgorithm:
     #
     # Callback wrappers
     #
-    cdef void on_iter(self, Context* ctxt, score_t score) except* :
+    cdef void on_iter(self, Context* ctxt, const IterationInfo* i) except* :
         if self.iteration_cb:
-           self.iteration_cb(self, NodeContext.from_cxx_context(ctxt), score)
+           self.iteration_cb(
+                self,
+                NodeContext.from_cxx_context(ctxt),
+                deref(i).score,
+                deref(i).nodes,
+                deref(i).knps,
+                deref(i).milliseconds)
 
 
     cdef void on_next(self, int64_t milliseconds) except* :

@@ -47,7 +47,6 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--rounds', type=int)
     parser.add_argument('-s', '--smp-cores', type=int, default=1)
     parser.add_argument('-t', '--time-control', default='1+0.1')
-    parser.add_argument('--no-args', action='store_true')
 
     params = {}
     groups = set()
@@ -89,8 +88,6 @@ if __name__ == '__main__':
         tune_params[p] = f'({lo}, {hi})'
 
     command = make_path('sturddle.py')
-    if not args.no_args:
-        command = f'{sys.executable} {command} --tweak --no-show-thinking'
 
     config = {
         'engines': [
@@ -98,7 +95,8 @@ if __name__ == '__main__':
             engine(command, OwnBook=False, Algorithm='negascout' if args.asymmetric else 'mtdf'),
         ],
         'parameter_ranges': tune_params,
-        'acq_function': 'vr',
+        'acq_function': 'pvrs',
+        'adjudicate_resign': True,
         'engine1_tc': args.time_control,
         'engine2_tc': args.time_control,
         'rounds': args.rounds if args.rounds else len(args.tune) * 15,

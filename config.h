@@ -81,7 +81,7 @@ Config::Namespace Config::_namespace = {
   #define DECLARE_ALIAS(n, a, v, v_min, v_max) int n(v); Config p_##n(_TOSTR(a), &n, v_min, v_max);
 #endif /* CONFIG_IMPL */
 
-#define DECLARE_CONST(n, v, v_min, v_max) static constexpr int n = v;
+#define DECLARE_CONST(n, v, v_min, v_max) static constexpr int n = v; static_assert(v >= v_min && v <= v_max);
 #define DECLARE_PARAM(n, v, v_min, v_max) DECLARE_ALIAS(n, n, v, v_min, v_max)
 
 #if TUNING_ENABLED
