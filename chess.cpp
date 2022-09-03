@@ -203,9 +203,16 @@ namespace chess
 
 
     template<typename T>
-    void add_move(T& container, Square from_square, Square to_square, PieceType promotion = NONE)
+    INLINE void add_move(T& container, Square from_square, Square to_square, PieceType promo)
     {
-        container.emplace_back(from_square, to_square, promotion);
+        container.emplace_back(from_square, to_square, promo);
+    }
+
+
+    template<typename T>
+    INLINE void add_move(T& container, Square from_square, Square to_square)
+    {
+        container.emplace_back(from_square, to_square);
     }
 
 
@@ -395,10 +402,10 @@ namespace chess
         const auto our_pieces = this->occupied_co(turn);
         const auto occupied = this->occupied();
 
-        /* Piece moves.*/
+        /* Piece moves. */
         if (const auto non_pawns = our_pieces & ~pawns & from_mask)
             for_each_square(non_pawns, [&](Square from_square) {
-                auto moves = attacks_mask(from_square, occupied) & ~our_pieces & to_mask;
+                const auto moves = attacks_mask(from_square, occupied) & ~our_pieces & to_mask;
                 for_each_square(moves, [&](Square to_square) {
                     add_move(moves_list, from_square, to_square);
                 });

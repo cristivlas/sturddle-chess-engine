@@ -127,10 +127,21 @@ namespace search
 
         void make_capture(Context&, Move&);
         template<bool LateMovePrune> bool make_move(Context&, Move&, score_t futility = 0);
-        bool make_move(Context&, Move&, MoveOrder, float = 0);
+        template<bool LateMovePrune> bool make_move(Context&, Move&, MoveOrder, float = 0);
+
         void mark_as_illegal(Move&);
         void mark_as_pruned(Context&, Move&);
-        void order_moves(Context&, size_t start_at, score_t futility);
+
+        void order_moves(Context&, size_t start_at, score_t futility_margin);
+
+        template<int Phase>
+        void order_moves_phase(
+            Context&,
+            MovesList&,
+            size_t  start_at,
+            size_t  count,
+            score_t futility_margin);
+
         void sort_moves(Context&, size_t start_at, size_t count);
 
         MoveMaker(const MoveMaker&) = delete;
@@ -231,11 +242,13 @@ namespace search
 
         static void cancel() { _cancel.store(true, std::memory_order_relaxed); }
 
-        Context*    clone(Context*, int ply = 0) const;
+        Context*    clone(ContextBuffer&, int ply = 0) const;
 
         bool        can_forward_prune() const;
-        bool        can_prune() const;
-        bool        can_prune_move(const Move&) const;
+
+        template<bool PruneCaptures = false> bool can_prune() const;
+        template<bool PruneCaptures = false> bool can_prune_move(const Move&) const;
+
         bool        can_reduce() const;
 
         int64_t     check_time_and_update_nps(); /* return elapsed milliseconds */
@@ -502,31 +515,11 @@ namespace search
 
     INLINE bool is_quiet(const State& state, const Context* ctxt = nullptr)
     {
-    #if 1
         return state.promotion != chess::PieceType::QUEEN /* ignore under-promotions */
-    #else
-        return state.promotion == chess::PieceType::NONE
-    #endif
             && state.capture_value == 0
             && state.pushed_pawns_score <= 1
             && (!ctxt || !ctxt->is_evasion())
             && !state.is_check();
-    }
-
-
-    /*
-     * Standing pat: other side made a capture, after which side-to-move's
-     * material evaluation still beats beta, or can't possibly beat alpha?
-     */
-    INLINE bool is_standing_pat(const Context& ctxt)
-    {
-        if (ctxt.is_capture())
-        {
-            const auto score = ctxt.evaluate_material();
-            return score >= ctxt._beta || score + chess::WEIGHT[chess::QUEEN] < ctxt._alpha;
-        }
-
-        return false;
     }
 
 
@@ -547,6 +540,7 @@ namespace search
     }
 
 
+    template<bool PruneCaptures>
     INLINE bool Context::can_prune() const
     {
         ASSERT(_ply > 0);
@@ -556,16 +550,17 @@ namespace search
         return !is_extended()
             && !is_pv_node()
             && !is_repeated()
-            && _parent->can_prune_move(_move);
+            && _parent->can_prune_move<PruneCaptures>(_move);
     }
 
 
+    template<bool PruneCaptures>
     INLINE bool Context::can_prune_move(const Move& move) const
     {
         ASSERT(move && move._state && move != _move);
 
         return (move != _tt_entry._hash_move)
-            && (move._state->capture_value == 0)
+            && (PruneCaptures || move._state->capture_value == 0)
             && (move.promotion() == chess::PieceType::NONE)
             && (move.from_square() != _capture_square)
             && !is_counter_move(move)
@@ -1074,8 +1069,8 @@ namespace search
 
     INLINE bool MoveMaker::can_late_move_prune(const Context& ctxt) const
     {
-        return _phase > 2
-            && ctxt.depth() > 1 /* do not LMP leaf nodes */
+        ASSERT(_phase > 2);
+        return ctxt.depth() > 1 /* do not LMP leaf nodes */
             && _current >= LMP[ctxt.depth() - 1]
             && ctxt.can_forward_prune();
     }
@@ -1110,7 +1105,7 @@ namespace search
     {
         ensure_moves(ctxt);
 
-        /* post-condition */
+        /* ensure_moves post-condition */
         ASSERT(_current <= _count);
 
         auto move = get_move_at(ctxt, _current, futility);
@@ -1144,7 +1139,7 @@ namespace search
 
         while (move->_group == MoveOrder::UNORDERED_MOVES)
         {
-            if (can_late_move_prune(ctxt))
+            if (_phase > 2 && can_late_move_prune(ctxt))
             {
                 mark_as_pruned(ctxt, *move);
                 return nullptr;
@@ -1219,23 +1214,22 @@ namespace search
 
     INLINE void MoveMaker::make_capture(Context& ctxt, Move& move)
     {
+        /* captures of the last piece moved by the opponent are handled separately */
+        ASSERT(move.to_square() != ctxt._move.to_square());
+
         if (make_move<false>(ctxt, move))
         {
             ASSERT(move._state->capture_value);
-
-            /* Use part of the static eval as the sorting score. */
-            move._score = eval_material_and_piece_squares(*move._state);
 
             /*
              * Now determine which capture group it belongs to.
              */
             auto capture_gain = move._state->capture_value;
-
             auto other = chess::WEIGHT[ctxt.state().piece_type_at(move.from_square())];
 
             /* skip exchange evaluation if the capturer is worth less than the captured */
 
-            if (other >= capture_gain)
+            if (other >= capture_gain && abs(ctxt._score) < MATE_HIGH)
             {
                 other = eval_exchanges<true>(ctxt.tid(), move);
 
@@ -1260,9 +1254,11 @@ namespace search
             }
             else
             {
-                move._group = MoveOrder::LAST_MOVED_CAPTURE
-                    + (move.to_square() != ctxt._move.to_square()) * (1 + (capture_gain == 0));
+                static_assert(MoveOrder::WINNING_CAPTURES + 1 == MoveOrder::EQUAL_CAPTURES);
+                move._group = MoveOrder::WINNING_CAPTURES + (capture_gain == 0);
             }
+
+            move._score = capture_gain;
         }
     }
 
@@ -1289,10 +1285,14 @@ namespace search
             return (_have_move = true);
         }
 
-        /*
-         * Prune (before verifying move legality, thus saving is_check() calls).
-         * Late-move prune before making the move.
-         */
+        /* Capturing the king is an illegal move (Louis XV?) */
+        if (ctxt.state().kings & chess::BB_SQUARES[move.to_square()])
+        {
+            mark_as_illegal(move);
+            return false;
+        }
+
+        /* Late-move prune before making the move. */
         if constexpr(LateMovePrune)
             if (can_late_move_prune(ctxt))
             {
@@ -1300,12 +1300,6 @@ namespace search
                 return false;
             }
 
-        /* capturing the king is an illegal move (Louis XV?) */
-        if (ctxt.state().kings & chess::BB_SQUARES[move.to_square()])
-        {
-            mark_as_illegal(move);
-            return false;
-        }
         ctxt.state().clone_into(*move._state);
         ASSERT(move._state->capture_value == 0);
 
@@ -1322,11 +1316,15 @@ namespace search
 
         /* Futility pruning (1st pass, 2nd pass done in search) */
         /* Prune after making the move (state is needed for simple eval). */
+
         if (futility > 0 && ctxt.depth() > 0)
         {
+            /* The futility margin is calculated after at least one move has been searched. */
+            ASSERT(_current > 0);
+
             const auto val = futility + move._state->simple_score * SIGN[!move._state->turn];
 
-            if ((val < ctxt._alpha || val < ctxt._score) && ctxt.can_prune_move(move))
+            if ((val < ctxt._alpha || val < ctxt._score) && ctxt.can_prune_move<true>(move))
             {
             #if EXTRA_STATS
 
@@ -1345,13 +1343,6 @@ namespace search
             return false;
         }
 
-        if (_group_quiet_moves && move._state->capture_value && is_standing_pat(ctxt))
-        {
-            _have_quiet_moves = true;
-            move._group = MoveOrder::QUIET_MOVES;
-            return false;
-        }
-
         /* consistency check */
         ASSERT((move._state->capture_value != 0) == ctxt.state().is_capture(move));
 
@@ -1362,9 +1353,10 @@ namespace search
     }
 
 
+    template<bool LateMovePrune>
     INLINE bool MoveMaker::make_move(Context& ctxt, Move& move, MoveOrder group, float score)
     {
-        if (!make_move<true>(ctxt, move))
+        if (!make_move<LateMovePrune>(ctxt, move))
         {
             ASSERT(move._group >= MoveOrder::PRUNED_MOVES);
             return false;

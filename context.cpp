@@ -191,9 +191,9 @@ namespace search
      * 1) clone root at the beginning of SMP searches, and
      * 2) create a temporary context for singularity search.
      */
-    Context* Context::clone(Context* buffer, int ply) const
+    Context* Context::clone(ContextBuffer& buffer, int ply) const
     {
-        Context* ctxt = new (buffer) Context;
+        Context* ctxt = new (buffer.as_context()) Context;
 
         ctxt->_algorithm = _algorithm;
         ctxt->_alpha = _alpha;
@@ -869,21 +869,14 @@ namespace search
         int open_score = 0;
         int half_open_score = 0;
 
-        const auto occupied = state.occupied();
-
         for (auto color : { BLACK, WHITE })
         {
             const auto s = SIGN[color];
 
             const auto own_color_mask = state.occupied_co(color);
-            const auto their_color_mask = state.occupied_co(!color);
 
             for (const auto file_mask : BB_FILES)
             {
-                /* no bonus if own king on file */
-                if (file_mask & own_color_mask & state.kings)
-                    continue;
-
                 if (auto mask = file_mask & (state.rooks | state.queens) & own_color_mask)
                 {
                     if ((file_mask & state.pawns) == BB_EMPTY)
@@ -895,24 +888,12 @@ namespace search
                         {
                             half_open_score += s;
                         }
-                    else
-                        if ((file_mask & state.pawns & their_color_mask) == BB_EMPTY)
-                        {
-                            /*
-                             * File has only pawns of own color, and the piece has direct "line of sight"
-                             * to opposite ranks (i.e. in front of its own pawns)? treat it as open file.
-                             */
-                            if (for_each_square_r<bool>(mask, [&](Square square) {
-                                return bool(state.attacks_mask(square, occupied) & file_mask & opposite_backranks[color]);
-                            }))
-                                open_score += s;
-                        }
                 }
             }
         }
 
         return half_open_score * interpolate(piece_count, MIDGAME_HALF_OPEN_FILE, 0)
-            + open_score * interpolate(piece_count, MIDGAME_OPEN_FILE, 0);
+             + open_score * interpolate(piece_count, MIDGAME_OPEN_FILE, 0);
     }
 
 
@@ -955,8 +936,6 @@ namespace search
                     score += 1 + eval_pawn_chain(state, color, square, pawn_chain_evals);
                 });
             }
-
-            score += popcount(state.attacker_pieces_mask(color, pawn, state.occupied()));
         }
 
         return score;
@@ -1136,6 +1115,8 @@ namespace search
         {
             eval += BISHOP_PAIR * state.diff_bishop_pairs();
         }
+        eval += eval_threats(state, piece_count);
+
         return eval;
     }
 
@@ -1146,8 +1127,7 @@ namespace search
         const auto mat_eval = ctxt.evaluate_material();
 
         return eval_tactical(ctxt.state(), mat_eval, piece_count)
-            + ctxt.eval_king_safety(piece_count)
-            + eval_threats(ctxt.state(), piece_count);
+             + ctxt.eval_king_safety(piece_count);
     }
 
 
@@ -1188,19 +1168,29 @@ namespace search
                         /* cannot do better than draw, but can do worse */
                         eval = std::min<score_t>(eval, 0);
                     }
-                    _tt_entry._eval = eval;
                 }
-                /* 2. Tactical (skip in midgame at low depth) */
-                else if (state().is_endgame() || depth() > TACTICAL_LOW_DEPTH)
+                /*
+                 * 2. Tactical.
+                 * 2nd order evaluation is currently slow (and possibly inaccurate).
+                 * To mitigate, in midgame it is done only at lower plies, and only
+                 * if 1st order eval delta is within a 2-3 pawns margin. The idea is
+                 * that deeper search paths may not benefit as much from qualitative
+                 * positional evaluation anyway; and tactical advantages will rarely
+                 * overcome significant material deficits.
+                 */
+                else if (state().is_endgame()
+                    || (_ply < TACTICAL_LOW_DEPTH && abs(eval) < TACTICAL_EVAL_MARGIN))
                 {
                     eval -= CHECK_BONUS * is_check();
                     eval += SIGN[turn] * eval_tactical(*this);
-                    ASSERT(eval < SCORE_MAX);
 
-                    _tt_entry._eval = eval;
+                    ASSERT(eval < SCORE_MAX);
                 }
             }
+
+            _tt_entry._eval = eval;
         }
+
         ASSERT(eval > SCORE_MIN);
         ASSERT(eval < SCORE_MAX);
 
@@ -1573,6 +1563,7 @@ namespace search
 
         if (force_reorder)
         {
+            ASSERT(!ctxt.is_retry());
             ASSERT(where == 0);
 
             _phase = 0;
@@ -1718,6 +1709,111 @@ namespace search
     static const auto hist_thresholds = thresholds(std::make_index_sequence<PLY_MAX>{});
 
 
+    template<int Phase>
+    INLINE void MoveMaker::order_moves_phase(
+            Context&    ctxt,
+            MovesList&  moves_list,
+            size_t      start_at,
+            size_t      count,
+            score_t     futility)
+    {
+        const KillerMoves* const killer_moves =
+            (Phase == 2) ? ctxt._tt->get_killer_moves(ctxt._ply) : nullptr;
+
+        /* Confidence bar for historical scores */
+        const double hist_high = (Phase == 3) ? hist_thresholds[ctxt.iteration()] : 0;
+
+        /********************************************************************/
+        /* Iterate over pseudo-legal moves                                  */
+        /********************************************************************/
+        for (size_t i = start_at; i < count; ++i)
+        {
+            auto& move = moves_list[i];
+
+            if (move._group >= MoveOrder::PRUNED_MOVES)
+            {
+                if (_need_sort)
+                    continue;
+                else
+                    break;
+            }
+
+            ASSERT(move._group == MoveOrder::UNORDERED_MOVES);
+
+            if constexpr (Phase == 1)
+            {
+                if (move == ctxt._prev)
+                {
+                    make_move<false>(ctxt, move, ctxt._ply ? MoveOrder::HASH_MOVES : MoveOrder::PREV_ITER);
+                }
+                else if (move == ctxt._tt_entry._hash_move)
+                {
+                    make_move<false>(ctxt, move, MoveOrder::HASH_MOVES);
+                }
+                else if (move.promotion())
+                {
+                    make_move<false>(ctxt, move, MoveOrder::PROMOTIONS, WEIGHT[move.promotion()]);
+                }
+                else if ((move.to_square() == ctxt._move.to_square() || ctxt.state().is_en_passant(move))
+                    && make_move<false>(ctxt, move, MoveOrder::LAST_MOVED_CAPTURE))
+                {
+                    ASSERT(move._state->capture_value);
+                    /*
+                     * Looking at the capture of the last piece moved by the opponent before
+                     * other captures may speed up the refutation of the current variation.
+                     */
+
+                    /* Sort in decreasing order of the capturing piece's value. */
+                    move._score = -WEIGHT[ctxt.state().piece_type_at(move.from_square())];
+                }
+            }
+            /* Captures and killer moves. */
+            else if constexpr (Phase == 2)
+            {
+                if (move._state ? move._state->capture_value : ctxt.state().is_capture(move))
+                {
+                    make_capture(ctxt, move);
+                    ASSERT(move._group != MoveOrder::UNORDERED_MOVES);
+                }
+                else if (auto k_move = match_killer(killer_moves, move))
+                {
+                    make_move<false>(ctxt, move, MoveOrder::KILLER_MOVES, k_move->_score);
+                }
+            }
+            /* Top historical scores, including counter-move bonus. */
+            else if constexpr (Phase == 3)
+            {
+                const auto hist_score = ctxt.history_score(move);
+
+                if (hist_score > hist_high)
+                {
+                    make_move<true>(ctxt, move, MoveOrder::HISTORY_COUNTERS, hist_score);
+                }
+                else if (ctxt.is_counter_move(move)
+                    || move.from_square() == ctxt._capture_square
+                    || is_pawn_push(ctxt, move)
+                    || is_attack_on_king(ctxt, move))
+                {
+                    if (make_move<true>(ctxt, move, MoveOrder::TACTICAL_MOVES, hist_score))
+                        ASSERT(move._score == hist_score);
+                }
+                else if (move._score >= HISTORY_LOW
+                    && make_move<true>(ctxt, move, futility)
+                    && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
+                {
+                    move._group = MoveOrder::TACTICAL_MOVES;
+                    move._score = hist_score;
+                }
+            }
+            else if (make_move<true>(ctxt, move, futility)) /* Phase == 4 */
+            {
+                move._group = MoveOrder::LATE_MOVES;
+                move._score = ctxt.history_score(move);
+            }
+        }
+    }
+
+
     /*
      * Order moves in multiple phases (passes). The idea is to minimize make_move() calls,
      * which validate the legality of the move. The granularity (number of phases) should
@@ -1729,112 +1825,21 @@ namespace search
         ASSERT(ctxt._tt);
         ASSERT(ctxt.moves()[start_at]._group == MoveOrder::UNORDERED_MOVES);
 
-        const KillerMoves* killer_moves = nullptr;
-
-        /* "confidence bar" for historical scores */
-        const auto hist_high = hist_thresholds[ctxt.iteration()];
-
         _have_move = false;
 
         auto& moves_list = ctxt.moves();
         const auto count = size_t(_count);
         ASSERT(count <= moves_list.size());
 
-        while (!_have_move && start_at < count && _phase < MAX_PHASE)
+        while (!_have_move && start_at < count && _phase++ < MAX_PHASE)
         {
-            if (++_phase == 2)
+            switch (_phase)
             {
-                killer_moves = ctxt._tt->get_killer_moves(ctxt._ply);
-            }
-
-            /********************************************************************/
-            /* iterate over pseudo-legal moves                                  */
-            /********************************************************************/
-            for (size_t i = start_at; i < count; ++i)
-            {
-                auto& move = moves_list[i];
-
-                if (move._group >= MoveOrder::PRUNED_MOVES)
-                {
-                    if (_need_sort)
-                        continue;
-
-                    break;
-                }
-
-                ASSERT(move._group == MoveOrder::UNORDERED_MOVES);
-
-                switch (_phase)
-                {
-                case 1:
-                    if (move == ctxt._prev)
-                    {
-                        make_move(ctxt, move, ctxt._ply ? MoveOrder::HASH_MOVES : MoveOrder::PREV_ITER);
-                    }
-                    else if (move == ctxt._tt_entry._hash_move)
-                    {
-                        make_move(ctxt, move, MoveOrder::HASH_MOVES);
-                    }
-                    else if (move.promotion())
-                    {
-                        make_move(ctxt, move, MoveOrder::PROMOTIONS, WEIGHT[move.promotion()]);
-                    }
-                    break;
-
-                case 2: /* Captures and killer moves. */
-                    if (move._state ? move._state->capture_value : ctxt.state().is_capture(move))
-                    {
-                        make_capture(ctxt, move);
-                        ASSERT(move._group != MoveOrder::UNORDERED_MOVES);
-                    }
-                    else if (auto k_move = match_killer(killer_moves, move))
-                    {
-                        make_move(ctxt, move, MoveOrder::KILLER_MOVES, k_move->_score);
-                    }
-                    break;
-
-                case 3:
-                    {   /* top historical scores, including counter-move bonus */
-                        const auto hist_score = ctxt.history_score(move);
-                        if (hist_score > hist_high)
-                        {
-                            make_move(ctxt, move, MoveOrder::HISTORY_COUNTERS, hist_score);
-                            break;
-                        }
-
-                        if ((ctxt.is_counter_move(move)
-                            || move.from_square() == ctxt._capture_square
-                            || is_pawn_push(ctxt, move)
-                            || is_attack_on_king(ctxt, move)
-                            )
-                            && make_move(ctxt, move, MoveOrder::TACTICAL_MOVES, hist_score))
-                        {
-                            ASSERT(move._score == hist_score);
-                            break;
-                        }
-
-                        if (move._score >= HISTORY_LOW
-                            && make_move<true>(ctxt, move, futility)
-                            && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
-                        {
-                            move._group = MoveOrder::TACTICAL_MOVES;
-                            move._score = hist_score;
-                        }
-                    }
-                    break;
-
-                case 4:
-                    if (make_move<true>(ctxt, move, futility))
-                    {
-                        move._group = MoveOrder::LATE_MOVES;
-                        move._score = ctxt.history_score(move);
-                    }
-                    break;
-
-                default:
-                    ASSERT(false);
-                    break;
-                }
+            case 1: order_moves_phase<1>(ctxt, moves_list, start_at, count, futility); break;
+            case 2: order_moves_phase<2>(ctxt, moves_list, start_at, count, futility); break;
+            case 3: order_moves_phase<3>(ctxt, moves_list, start_at, count, futility); break;
+            case 4: order_moves_phase<4>(ctxt, moves_list, start_at, count, futility); break;
+            default: ASSERT(false); break;
             }
         }
 

@@ -667,8 +667,6 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
 
 static INLINE void update_pruned(Context& ctxt, const Context& next, size_t& count)
 {
-    ASSERT(!next.is_capture());
-
     ++ctxt._pruned_count;
 
     if constexpr(EXTRA_STATS)
@@ -806,14 +804,14 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 table._history_counters += next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS;
             #endif /* EXTRA_STATS */
 
-                /* Futility pruning */
+                /* Futility pruning, 2nd pass. */
                 if (futility > 0)
                 {
                     ASSERT(move_count > 0);
 
                     const auto val = futility - next_ctxt->evaluate_material();
 
-                    if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune())
+                    if ((val < ctxt._alpha || val < ctxt._score) && next_ctxt->can_prune<true>())
                     {
                         update_pruned(ctxt, *next_ctxt, table._futility_prune_count);
                         continue;
@@ -852,7 +850,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                          * _move_maker's _moves / _states stacks for the current context.
                          */
                         ContextBuffer buf;
-                        auto s_ctxt = ctxt.clone(buf.as_context(), ctxt._ply + 2);
+                        auto s_ctxt = ctxt.clone(buf, ctxt._ply + 2);
 
                         s_ctxt->set_tt(ctxt.get_tt());
                         s_ctxt->set_moves(ctxt);
@@ -1247,9 +1245,6 @@ public:
         {
             _tables[i]._tt._iteration = table._iteration;
 
-            _tables[i]._tt._w_alpha = table._w_alpha;
-            _tables[i]._tt._w_beta = table._w_beta;
-
             /* copy principal variation from main thread */
             if (_tables[i]._tt._pv.empty())
                 _tables[i]._tt._pv = table._pv;
@@ -1262,13 +1257,18 @@ public:
                 prev_best = _tables[i]._ctxt->_prev;
             }
 
-            _tables[i]._ctxt = _root.clone(_tables[i]._raw_mem.as_context());
+            _tables[i]._ctxt = _root.clone(_tables[i]._raw_mem);
+        #if 0
+            _tables[i]._ctxt->_alpha = std::max<int>(SCORE_MIN, _root._alpha - 2.5 * (i + 1));
+            _tables[i]._ctxt->_beta = std::min<int>(SCORE_MAX, _root._beta + 2.5 * (i + 1));
+        #endif
+            _tables[i]._tt._w_alpha = _tables[i]._ctxt->_alpha;
+            _tables[i]._tt._w_beta = _tables[i]._ctxt->_beta;
 
             _tables[i]._ctxt->_max_depth += (i % 2) == 0;
 
             _tables[i]._ctxt->set_tt(&_tables[i]._tt);
             _tables[i]._ctxt->set_moves(_root);
-
             _tables[i]._ctxt->_tt_entry._hash_move = hash_move;
 
             if (prev_best)

@@ -379,6 +379,12 @@ namespace chess
             , _promotion(promo)
         {}
 
+        BaseMove(Square from, Square to) noexcept
+            : _from_square(from)
+            , _to_square(to)
+            , _promotion(PieceType::NONE)
+        {}
+
         INLINE constexpr Square to_square() const
         {
             return _to_square;
@@ -436,7 +442,8 @@ namespace chess
         {
         }
 
-        Move(const BaseMove& base) : BaseMove(base)
+        Move(const BaseMove& base) noexcept
+            : BaseMove(base)
         {
         }
 
