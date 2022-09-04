@@ -273,7 +273,7 @@ const int16_t* TranspositionTable::lookup(Context& ctxt)
     /* expect repetitions to be dealt with before calling into this function */
     ASSERT(!ctxt.is_repeated());
 
-    if (const auto p = _table->lookup<Acquire::Read>(ctxt.state()))
+    if (const auto p = _table->lookup_read(ctxt.state()))
     {
         ASSERT(p->matches(ctxt.state()));
         ctxt._tt_entry = *p;
@@ -374,7 +374,7 @@ void TranspositionTable::store(Context& ctxt, score_t alpha, int depth)
     update_stats(ctxt);
 #endif /* EXTRA_STATS */
 
-    if (auto p = _table->lookup<Acquire::Write>(ctxt.state(), depth, ctxt._score))
+    if (auto p = _table->lookup_write(ctxt.state(), depth, ctxt._score))
     {
         store(ctxt, *p, alpha, depth);
     }
@@ -459,7 +459,7 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
         /* Add the move to the principal variation. */
         pv.emplace_back(move);
 
-        auto p = _table->lookup<Acquire::Read>(state);
+        auto p = _table->lookup_read(state);
         if (!p)
             break;
 

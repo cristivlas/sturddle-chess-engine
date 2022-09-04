@@ -28,9 +28,6 @@ static constexpr auto QUADRATIC_PROBING = false;
 
 namespace search
 {
-    enum class Acquire : int8_t { Read, Write };
-
-
     template<typename T, int BUCKET_SIZE = 8> class SharedHashTable
     {
         using entry_t = T;
@@ -279,15 +276,6 @@ namespace search
                 i = next<QUADRATIC_PROBING>(h, j);
             }
             return Proxy(*this, index);
-        }
-
-        template<Acquire acquire>
-        Proxy lookup(const chess::State& state, int depth = 0, int value = 0)
-        {
-            if constexpr (acquire == Acquire::Read)
-                return lookup_read(state);
-            else
-                return lookup_write(state, depth, value);
         }
 
         INLINE size_t capacity() const { return _data.size(); }
