@@ -549,15 +549,6 @@ namespace chess
         INLINE Bitboard attacker_pieces_mask(Color color, Square square, Bitboard occupied_mask) const
         {
     #if USE_MAGIC_BITS
-        #if 0
-            const auto bishop_attacks = magic_bits_attacks.Bishop(occupied_mask, square);
-            const auto rook_attacks = magic_bits_attacks.Rook(occupied_mask, square);
-
-            const auto attackers = (knights & BB_KNIGHT_ATTACKS[square])
-                | (bishops & bishop_attacks)
-                | (rooks & rook_attacks)
-                | (queens & (bishop_attacks | rook_attacks));
-        #else
             auto attackers = (knights & BB_KNIGHT_ATTACKS[square]);
 
             if (const auto queens_and_rooks = queens | rooks)
@@ -565,7 +556,6 @@ namespace chess
 
             if (const auto queens_and_bishops = queens | bishops)
                 attackers |= queens_and_bishops & magic_bits_attacks.Bishop(occupied_mask, square);
-        #endif /* 0 */
     #else
             auto attackers = (knights & BB_KNIGHT_ATTACKS[square]);
 
@@ -961,10 +951,14 @@ namespace chess
         INLINE bool has_connected_rooks(Color color) const
         {
             const auto rook_mask = rooks & occupied_co(color);
-            const auto occupied = black | white;
+            const auto occupied = this->occupied();
 
             return for_each_square_r<bool>(rook_mask, [&](Square rook) {
+        #if USE_MAGIC_BITS
+                return magic_bits_attacks.Rook(occupied, rook) & rook_mask;
+        #else
                 return attacks_mask(rook, occupied) & rook_mask;
+        #endif
             });
         }
 
