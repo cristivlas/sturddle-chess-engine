@@ -67,7 +67,7 @@ namespace search
                         std::memory_order_relaxed);
             }
 
-            INLINE void write_lock(const entry_t* e)
+            INLINE void blocking_lock(const entry_t* e)
             {
                 auto lock = lock_p();
 
@@ -80,7 +80,7 @@ namespace search
             #endif /* NO_ASSERT */
             }
 
-            INLINE void read_lock(const entry_t*, uint64_t key)
+            INLINE void non_blocking_lock(const entry_t*, uint64_t key)
             {
                 if (try_lock<true>(lock_p(), key))
                 {
@@ -102,8 +102,8 @@ namespace search
                 _locked = false;
             }
     #else
-            INLINE void write_lock(const entry_t*) { _locked = true; }
-            INLINE bool read_lock(const entry_t* e, uint64_t key) { return e->_hash == key; }
+            INLINE void blocking_lock(const entry_t*) { _locked = true; }
+            INLINE bool non_blocking_lock(const entry_t* e, uint64_t key) { return e->_hash == key; }
             INLINE void release() { _locked = false; }
     #endif /* !SMP */
 
@@ -112,13 +112,13 @@ namespace search
 
             SpinLock(SharedHashTable& ht, size_t ix) : _ht(&ht), _ix(ix)
             {
-                write_lock(this->entry());
+                blocking_lock(this->entry());
                 ASSERT(_locked);
             }
 
             SpinLock(SharedHashTable& ht, size_t ix, uint64_t hash) : _ht(&ht), _ix(ix)
             {
-                read_lock(this->entry(), hash);
+                non_blocking_lock(this->entry(), hash);
             }
 
             ~SpinLock()
@@ -245,6 +245,10 @@ namespace search
 
             for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
             {
+                Proxy q(*this, i, h); /* try non-blocking locking 1st */
+                if (q)
+                    return q;
+
                 Proxy p(*this, i);
                 ASSERT(p);
 
@@ -270,8 +274,12 @@ namespace search
 
                 if (depth >= p->_depth && p->_value < value)
                 {
+                #if 0
                     index = i;
                     depth = p->_depth;
+                #else
+                    return p;
+                #endif
                 }
                 i = next<QUADRATIC_PROBING>(h, j);
             }

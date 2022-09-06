@@ -204,7 +204,7 @@ namespace search
         using IndexedMoves = PieceMoveTable<BaseMove>;
     #endif /* USE_BUTTERFLY_TABLES */
 
-        using PlyHistoryCounters = std::array<MoveTable<float>, 2>;
+        using PlyHistoryCounters = std::array<MoveTable<std::pair<int, int>>, 2>;
         using PlyHistory = std::array<PlyHistoryCounters, PLY_HISTORY_MAX>;
 
         /* https://www.chessprogramming.org/Countermove_Heuristic */
@@ -340,11 +340,17 @@ namespace search
         Color turn,
         const Move& move) const
     {
+        float score = 0;
+        if (ply < PLY_HISTORY_MAX)
+        {
+            const auto& h = _plyHistory[ply][turn].lookup(move);
+            if (h.second)
+                score = h.first / double(h.second * HISTORY_SCORE_DIV);
+        }
         const auto& counters = historical_counters(state, turn, move);
         ASSERT(counters.first <= counters.second);
 
-        return (ply < PLY_HISTORY_MAX ? _plyHistory[ply][turn].lookup(move) : 0)
-            + (counters.second < 1 ? 0 : (100.0 * counters.first) / counters.second);
+        return score + (counters.second < 1 ? 0 : (100.0 * counters.first) / counters.second);
     }
 
 

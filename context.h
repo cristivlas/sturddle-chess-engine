@@ -699,8 +699,8 @@ namespace search
         ASSERT(move);
         ASSERT(move != _move);
 
-        return COUNTER_MOVE_BONUS * is_counter_move(move)
-            + _tt->history_score(_ply, state(), turn(), move);
+        const auto score = _tt->history_score(_ply, state(), turn(), move);
+        return score + COUNTER_MOVE_BONUS * is_counter_move(move);
     }
 
 
