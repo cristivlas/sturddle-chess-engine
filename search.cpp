@@ -987,17 +987,14 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     ASSERT (!ctxt.state().is_capture(ctxt._cutoff_move));
 
                     /* zero-score moves may mean draw (path-dependent) */
-                    if (move_score && !next_ctxt->is_qsearch())
+                    if (move_score && ctxt.depth() > 0)
                     {
-                        if (ctxt._ply < PLY_HISTORY_MAX)
-                            table._plyHistory[ctxt._ply][ctxt.turn()][next_ctxt->_move]
-                            #if 0 /* TODO */
-                                += next_ctxt->improvement() / double(HISTORY_IMPROVEMENT_DIV)
-                                + ctxt.depth() * (move_score - ctxt._beta) / double(HISTORY_SCORE_DIV)
-                            #else
-                                += 0.01 * ctxt.depth() * next_ctxt->improvement()
-                            #endif
-                                + (move_score > MATE_HIGH);
+                        if (ctxt._ply < PLY_HISTORY_MAX && abs(move_score) < MATE_HIGH)
+                        {
+                            auto& h = table._plyHistory[ctxt._ply][ctxt.turn()][next_ctxt->_move];
+                            h.first += next_ctxt->improvement() / ctxt.depth();
+                            ++h.second;
+                        }
 
                         if (ctxt.depth() >= COUNTER_MOVE_MIN_DEPTH)
                             table.store_countermove(ctxt);
