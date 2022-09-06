@@ -35,6 +35,9 @@
 
 #include "common.h"
 
+#define VARIABLE_STRATEGY false
+
+
 namespace
 {
     /*
@@ -59,6 +62,9 @@ namespace
         {
             std::vector<std::string> _hash_funcs;
             std::vector<std::string> _init_funcs;
+            std::vector<uint64_t> _mul;
+            std::vector<size_t> _shift;
+            std::vector<size_t> _mask;
         };
 
     public:
@@ -67,12 +73,15 @@ namespace
             _templates.insert(hasher_template);
         }
 
-        void add_instance(const char* name, const std::string& hf, const TableData& data)
+        void add_instance(const char* name, uint64_t m, size_t s, const std::string& hf, const TableData& data)
         {
             auto& g = _groups[name];
 
             g._init_funcs.emplace_back(generate_data_init(data));
             g._hash_funcs.emplace_back(hf);
+            g._mul.emplace_back(m);
+            g._shift.emplace_back(s);
+            g._mask.emplace_back(pow(2, ceil(log2(data.size()))) - 1);
 
             _hash_funcs.emplace(hf, _hash_funcs.size());
             _hash_funcs_index.emplace(_hash_funcs[hf], hf);
@@ -90,14 +99,14 @@ namespace
             os << "\nnamespace chess {\n";
             os << "\nnamespace impl {\n";
 
+        #if VARIABLE_STRATEGY
             for (const auto& c : _templates)
             {
                 os << c << "\n";
             }
             os << "\n";
-
             generate_unified_hash_function(os);
-
+        #endif
             os << "\n";
             os << "/************************************************************/\n";
             os << "/* Tables */\n";
@@ -105,16 +114,34 @@ namespace
 
             os << "class AttackTable\n";
             os << "{\n";
+        #if VARIABLE_STRATEGY
             os << "    const int _strategy = -1;\n";
+        #else
+            os << "    const uint64_t _mul;\n";
+            os << "    const size_t _shift;\n";
+            os << "    const size_t _mask;\n";
+        #endif
             os << "\n";
             os << "public:\n";
-            os << "    template<typename F> AttackTable(int s, F init) : _strategy(s)\n";
+        #if VARIABLE_STRATEGY
+            os << "    template<typename F> AttackTable(int s, F init)\n";
+            os << "        : _strategy(s)\n";
+        #else
+            os << "    template<typename F> AttackTable(uint64_t mul, size_t shift, size_t mask, F init)\n";
+            os << "        : _mul(mul)\n";
+            os << "        , _shift(shift)\n";
+            os << "        , _mask(mask)\n";
+        #endif
             os << "    {\n";
             os << "        init(_data);\n";
             os << "    }\n\n";
             os << "    INLINE uint64_t operator[] (uint64_t mask) const\n";
             os << "    {\n";
+        #if VARIABLE_STRATEGY
             os << "        return _data[chess::impl::hash(_strategy, mask)];\n";
+        #else
+            os << "        return _data[((mask * _mul) >> _shift) & _mask];\n";
+        #endif
             os << "    }\n\n";
             os << "    uint64_t* _data = nullptr;\n";
             os << "};\n\n";
@@ -186,8 +213,13 @@ namespace
         {
             for (size_t i = 0; i != g._hash_funcs.size(); ++i)
             {
+            #if VARIABLE_STRATEGY
                 const auto index = _hash_funcs.at(g._hash_funcs[i]);
                 os << "    AttackTable(" << index << ", " << g._init_funcs[i] << "),\n";
+            #else
+                os << "    AttackTable(" << g._mul[i] << "ULL, " << g._shift[i];
+                os << ", " << g._mask[i] << ", " << g._init_funcs[i] << "),\n";
+            #endif
             }
         }
 
@@ -366,6 +398,7 @@ namespace
             return os.str();
         }
 
+        static uint64_t multiplier() { return 1; }
         static std::string name() { return "id" ; }
 
         static void add(CodeGenerator& code) { code.add_hash_template(mixin()); }
@@ -385,6 +418,7 @@ namespace
             return os.str();
         }
 
+        static uint64_t multiplier() { return M; }
         static std::string name() { return "mul_" + std::to_string(M); }
 
         static void add(CodeGenerator& code) { code.add_hash_template(mixin()); }
@@ -412,6 +446,9 @@ namespace
         {
             return BaseMixin::name() + std::string("_rshift_") + std::to_string(N);
         }
+
+        static uint64_t multiplier() { return BaseMixin::multiplier(); }
+        static size_t shift() { return N; }
 
         static void add(CodeGenerator& code)
         {
@@ -456,8 +493,11 @@ namespace
         {
             const auto i = Mixin::hash(key);
             _max_index = std::max<size_t>(_max_index, i);
-
+        #if 0
             return _max_table_size >= 4096 ? i & (_max_table_size - 1) : i;
+        #else
+            return i & (_max_table_size - 1);
+        #endif
         }
 
         void write_hash_template(CodeGenerator& code) const override
@@ -485,7 +525,7 @@ namespace
             os << Mixin::name() << "_mixin<" << (_max_table_size - 1);
             os << ", " << std::boolalpha << mask_required << ">";
 
-            code.add_instance(name, os.str(), data);
+            code.add_instance(name, Mixin::multiplier(), Mixin::shift(), os.str(), data);
         }
     };
 
@@ -557,12 +597,11 @@ namespace
              * Try a bunch of strategies and see which one fits the data best.
              * The idea is to maximize performance with minimum memory.
              */
-        #if 1
-            for (size_t table_size : { 64 })
-                add_group_reversed<Identity>(table_size);
-        #endif
 
-            for (size_t table_size : { 512, 2048, 4096 })
+            for (size_t table_size : { 32, 64 })
+                add_group_reversed<Identity>(table_size);
+
+            for (size_t table_size : { 128, 256, 512, 2048, 4096 })
                 add_multipliers(table_size);
         }
 

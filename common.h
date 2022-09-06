@@ -137,7 +137,6 @@ using score_t = int;
  */
 #define USE_MAGIC_BITS                      true
 
-
 /*
  * Number of processed nodes after which the search code checks
  * how much time it has left, and calls optional user-defined
