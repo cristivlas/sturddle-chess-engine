@@ -13,29 +13,32 @@ namespace impl {
 /************************************************************/
 class AttackTable
 {
+    const uint64_t _pcsmask;
     const uint64_t _mul;
     const size_t _shift;
-    const size_t _mask;
+    const size_t _tblmask;
 
 public:
-    template<typename F> AttackTable(uint64_t mul, size_t shift, size_t mask, F init)
-        : _mul(mul)
+    template<typename F>
+    AttackTable(uint64_t mask, uint64_t mul, size_t shift, size_t tblmask, F init)
+        : _pcsmask(mask)
+        , _mul(mul)
         , _shift(shift)
-        , _mask(mask)
+        , _tblmask(tblmask)
     {
         init(_data);
     }
 
-    INLINE uint64_t operator[] (uint64_t mask) const
+    INLINE uint64_t operator[] (uint64_t occupancy) const
     {
-        return _data[((mask * _mul) >> _shift) & _mask];
+        return _data[(((occupancy & _pcsmask) * _mul) >> _shift) & _tblmask];
     }
 
     uint64_t* _data = nullptr;
 };
 
 const AttackTable _RANK_ATTACKS[64] = {
-    AttackTable(1ULL, 1, 63, [](uint64_t *& data) {
+    AttackTable(126ULL, 1ULL, 1, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x00000000000000feULL;
         data[1] = 0x0000000000000002ULL;
@@ -102,7 +105,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000000000000006ULL;
         data[63] = 0x0000000000000002ULL;
     }),
-    AttackTable(1ULL, 2, 31, [](uint64_t *& data) {
+    AttackTable(124ULL, 1ULL, 2, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x00000000000000fdULL;
         data[1] = 0x0000000000000005ULL;
@@ -137,7 +140,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x000000000000000dULL;
         data[31] = 0x0000000000000005ULL;
     }),
-    AttackTable(1ULL, 1, 63, [](uint64_t *& data) {
+    AttackTable(122ULL, 1ULL, 1, 63, [](uint64_t *& data) {
         data = new uint64_t [62]();
         data[0] = 0x00000000000000fbULL;
         data[1] = 0x00000000000000faULL;
@@ -172,7 +175,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[60] = 0x000000000000000bULL;
         data[61] = 0x000000000000000aULL;
     }),
-    AttackTable(1ULL, 1, 63, [](uint64_t *& data) {
+    AttackTable(118ULL, 1ULL, 1, 63, [](uint64_t *& data) {
         data = new uint64_t [60]();
         data[0] = 0x00000000000000f7ULL;
         data[1] = 0x00000000000000f6ULL;
@@ -207,7 +210,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[58] = 0x0000000000000014ULL;
         data[59] = 0x0000000000000014ULL;
     }),
-    AttackTable(1ULL, 1, 63, [](uint64_t *& data) {
+    AttackTable(110ULL, 1ULL, 1, 63, [](uint64_t *& data) {
         data = new uint64_t [56]();
         data[0] = 0x00000000000000efULL;
         data[1] = 0x00000000000000eeULL;
@@ -242,7 +245,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[54] = 0x0000000000000028ULL;
         data[55] = 0x0000000000000028ULL;
     }),
-    AttackTable(1ULL, 1, 63, [](uint64_t *& data) {
+    AttackTable(94ULL, 1ULL, 1, 63, [](uint64_t *& data) {
         data = new uint64_t [48]();
         data[0] = 0x00000000000000dfULL;
         data[1] = 0x00000000000000deULL;
@@ -277,7 +280,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[46] = 0x0000000000000050ULL;
         data[47] = 0x0000000000000050ULL;
     }),
-    AttackTable(1ULL, 1, 31, [](uint64_t *& data) {
+    AttackTable(62ULL, 1ULL, 1, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x00000000000000bfULL;
         data[1] = 0x00000000000000beULL;
@@ -312,7 +315,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x00000000000000a0ULL;
         data[31] = 0x00000000000000a0ULL;
     }),
-    AttackTable(1ULL, 1, 63, [](uint64_t *& data) {
+    AttackTable(126ULL, 1ULL, 1, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x000000000000007fULL;
         data[1] = 0x000000000000007eULL;
@@ -379,7 +382,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000000000000040ULL;
         data[63] = 0x0000000000000040ULL;
     }),
-    AttackTable(1ULL, 9, 63, [](uint64_t *& data) {
+    AttackTable(32256ULL, 1ULL, 9, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x000000000000fe00ULL;
         data[1] = 0x0000000000000200ULL;
@@ -446,7 +449,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000000000000600ULL;
         data[63] = 0x0000000000000200ULL;
     }),
-    AttackTable(1ULL, 10, 31, [](uint64_t *& data) {
+    AttackTable(31744ULL, 1ULL, 10, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x000000000000fd00ULL;
         data[1] = 0x0000000000000500ULL;
@@ -481,7 +484,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x0000000000000d00ULL;
         data[31] = 0x0000000000000500ULL;
     }),
-    AttackTable(1ULL, 9, 63, [](uint64_t *& data) {
+    AttackTable(31232ULL, 1ULL, 9, 63, [](uint64_t *& data) {
         data = new uint64_t [62]();
         data[0] = 0x000000000000fb00ULL;
         data[1] = 0x000000000000fa00ULL;
@@ -516,7 +519,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[60] = 0x0000000000000b00ULL;
         data[61] = 0x0000000000000a00ULL;
     }),
-    AttackTable(1ULL, 9, 63, [](uint64_t *& data) {
+    AttackTable(30208ULL, 1ULL, 9, 63, [](uint64_t *& data) {
         data = new uint64_t [60]();
         data[0] = 0x000000000000f700ULL;
         data[1] = 0x000000000000f600ULL;
@@ -551,7 +554,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[58] = 0x0000000000001400ULL;
         data[59] = 0x0000000000001400ULL;
     }),
-    AttackTable(1ULL, 9, 63, [](uint64_t *& data) {
+    AttackTable(28160ULL, 1ULL, 9, 63, [](uint64_t *& data) {
         data = new uint64_t [56]();
         data[0] = 0x000000000000ef00ULL;
         data[1] = 0x000000000000ee00ULL;
@@ -586,7 +589,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[54] = 0x0000000000002800ULL;
         data[55] = 0x0000000000002800ULL;
     }),
-    AttackTable(1ULL, 9, 63, [](uint64_t *& data) {
+    AttackTable(24064ULL, 1ULL, 9, 63, [](uint64_t *& data) {
         data = new uint64_t [48]();
         data[0] = 0x000000000000df00ULL;
         data[1] = 0x000000000000de00ULL;
@@ -621,7 +624,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[46] = 0x0000000000005000ULL;
         data[47] = 0x0000000000005000ULL;
     }),
-    AttackTable(1ULL, 9, 31, [](uint64_t *& data) {
+    AttackTable(15872ULL, 1ULL, 9, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x000000000000bf00ULL;
         data[1] = 0x000000000000be00ULL;
@@ -656,7 +659,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x000000000000a000ULL;
         data[31] = 0x000000000000a000ULL;
     }),
-    AttackTable(1ULL, 9, 63, [](uint64_t *& data) {
+    AttackTable(32256ULL, 1ULL, 9, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x0000000000007f00ULL;
         data[1] = 0x0000000000007e00ULL;
@@ -723,7 +726,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000000000004000ULL;
         data[63] = 0x0000000000004000ULL;
     }),
-    AttackTable(1ULL, 17, 63, [](uint64_t *& data) {
+    AttackTable(8257536ULL, 1ULL, 17, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x0000000000fe0000ULL;
         data[1] = 0x0000000000020000ULL;
@@ -790,7 +793,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000000000060000ULL;
         data[63] = 0x0000000000020000ULL;
     }),
-    AttackTable(1ULL, 18, 31, [](uint64_t *& data) {
+    AttackTable(8126464ULL, 1ULL, 18, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x0000000000fd0000ULL;
         data[1] = 0x0000000000050000ULL;
@@ -825,7 +828,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x00000000000d0000ULL;
         data[31] = 0x0000000000050000ULL;
     }),
-    AttackTable(1ULL, 17, 63, [](uint64_t *& data) {
+    AttackTable(7995392ULL, 1ULL, 17, 63, [](uint64_t *& data) {
         data = new uint64_t [62]();
         data[0] = 0x0000000000fb0000ULL;
         data[1] = 0x0000000000fa0000ULL;
@@ -860,7 +863,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[60] = 0x00000000000b0000ULL;
         data[61] = 0x00000000000a0000ULL;
     }),
-    AttackTable(1ULL, 17, 63, [](uint64_t *& data) {
+    AttackTable(7733248ULL, 1ULL, 17, 63, [](uint64_t *& data) {
         data = new uint64_t [60]();
         data[0] = 0x0000000000f70000ULL;
         data[1] = 0x0000000000f60000ULL;
@@ -895,7 +898,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[58] = 0x0000000000140000ULL;
         data[59] = 0x0000000000140000ULL;
     }),
-    AttackTable(1ULL, 17, 63, [](uint64_t *& data) {
+    AttackTable(7208960ULL, 1ULL, 17, 63, [](uint64_t *& data) {
         data = new uint64_t [56]();
         data[0] = 0x0000000000ef0000ULL;
         data[1] = 0x0000000000ee0000ULL;
@@ -930,7 +933,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[54] = 0x0000000000280000ULL;
         data[55] = 0x0000000000280000ULL;
     }),
-    AttackTable(1ULL, 17, 63, [](uint64_t *& data) {
+    AttackTable(6160384ULL, 1ULL, 17, 63, [](uint64_t *& data) {
         data = new uint64_t [48]();
         data[0] = 0x0000000000df0000ULL;
         data[1] = 0x0000000000de0000ULL;
@@ -965,7 +968,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[46] = 0x0000000000500000ULL;
         data[47] = 0x0000000000500000ULL;
     }),
-    AttackTable(1ULL, 17, 31, [](uint64_t *& data) {
+    AttackTable(4063232ULL, 1ULL, 17, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x0000000000bf0000ULL;
         data[1] = 0x0000000000be0000ULL;
@@ -1000,7 +1003,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x0000000000a00000ULL;
         data[31] = 0x0000000000a00000ULL;
     }),
-    AttackTable(1ULL, 17, 63, [](uint64_t *& data) {
+    AttackTable(8257536ULL, 1ULL, 17, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x00000000007f0000ULL;
         data[1] = 0x00000000007e0000ULL;
@@ -1067,7 +1070,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000000000400000ULL;
         data[63] = 0x0000000000400000ULL;
     }),
-    AttackTable(1ULL, 25, 63, [](uint64_t *& data) {
+    AttackTable(2113929216ULL, 1ULL, 25, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x00000000fe000000ULL;
         data[1] = 0x0000000002000000ULL;
@@ -1134,7 +1137,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000000006000000ULL;
         data[63] = 0x0000000002000000ULL;
     }),
-    AttackTable(1ULL, 26, 31, [](uint64_t *& data) {
+    AttackTable(2080374784ULL, 1ULL, 26, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x00000000fd000000ULL;
         data[1] = 0x0000000005000000ULL;
@@ -1169,7 +1172,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x000000000d000000ULL;
         data[31] = 0x0000000005000000ULL;
     }),
-    AttackTable(1ULL, 25, 63, [](uint64_t *& data) {
+    AttackTable(2046820352ULL, 1ULL, 25, 63, [](uint64_t *& data) {
         data = new uint64_t [62]();
         data[0] = 0x00000000fb000000ULL;
         data[1] = 0x00000000fa000000ULL;
@@ -1204,7 +1207,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[60] = 0x000000000b000000ULL;
         data[61] = 0x000000000a000000ULL;
     }),
-    AttackTable(1ULL, 25, 63, [](uint64_t *& data) {
+    AttackTable(1979711488ULL, 1ULL, 25, 63, [](uint64_t *& data) {
         data = new uint64_t [60]();
         data[0] = 0x00000000f7000000ULL;
         data[1] = 0x00000000f6000000ULL;
@@ -1239,7 +1242,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[58] = 0x0000000014000000ULL;
         data[59] = 0x0000000014000000ULL;
     }),
-    AttackTable(1ULL, 25, 63, [](uint64_t *& data) {
+    AttackTable(1845493760ULL, 1ULL, 25, 63, [](uint64_t *& data) {
         data = new uint64_t [56]();
         data[0] = 0x00000000ef000000ULL;
         data[1] = 0x00000000ee000000ULL;
@@ -1274,7 +1277,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[54] = 0x0000000028000000ULL;
         data[55] = 0x0000000028000000ULL;
     }),
-    AttackTable(1ULL, 25, 63, [](uint64_t *& data) {
+    AttackTable(1577058304ULL, 1ULL, 25, 63, [](uint64_t *& data) {
         data = new uint64_t [48]();
         data[0] = 0x00000000df000000ULL;
         data[1] = 0x00000000de000000ULL;
@@ -1309,7 +1312,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[46] = 0x0000000050000000ULL;
         data[47] = 0x0000000050000000ULL;
     }),
-    AttackTable(1ULL, 25, 31, [](uint64_t *& data) {
+    AttackTable(1040187392ULL, 1ULL, 25, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x00000000bf000000ULL;
         data[1] = 0x00000000be000000ULL;
@@ -1344,7 +1347,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x00000000a0000000ULL;
         data[31] = 0x00000000a0000000ULL;
     }),
-    AttackTable(1ULL, 25, 63, [](uint64_t *& data) {
+    AttackTable(2113929216ULL, 1ULL, 25, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x000000007f000000ULL;
         data[1] = 0x000000007e000000ULL;
@@ -1411,7 +1414,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000000040000000ULL;
         data[63] = 0x0000000040000000ULL;
     }),
-    AttackTable(1ULL, 33, 63, [](uint64_t *& data) {
+    AttackTable(541165879296ULL, 1ULL, 33, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x000000fe00000000ULL;
         data[1] = 0x0000000200000000ULL;
@@ -1478,7 +1481,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000000600000000ULL;
         data[63] = 0x0000000200000000ULL;
     }),
-    AttackTable(1ULL, 34, 31, [](uint64_t *& data) {
+    AttackTable(532575944704ULL, 1ULL, 34, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x000000fd00000000ULL;
         data[1] = 0x0000000500000000ULL;
@@ -1513,7 +1516,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x0000000d00000000ULL;
         data[31] = 0x0000000500000000ULL;
     }),
-    AttackTable(1ULL, 33, 63, [](uint64_t *& data) {
+    AttackTable(523986010112ULL, 1ULL, 33, 63, [](uint64_t *& data) {
         data = new uint64_t [62]();
         data[0] = 0x000000fb00000000ULL;
         data[1] = 0x000000fa00000000ULL;
@@ -1548,7 +1551,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[60] = 0x0000000b00000000ULL;
         data[61] = 0x0000000a00000000ULL;
     }),
-    AttackTable(1ULL, 33, 63, [](uint64_t *& data) {
+    AttackTable(506806140928ULL, 1ULL, 33, 63, [](uint64_t *& data) {
         data = new uint64_t [60]();
         data[0] = 0x000000f700000000ULL;
         data[1] = 0x000000f600000000ULL;
@@ -1583,7 +1586,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[58] = 0x0000001400000000ULL;
         data[59] = 0x0000001400000000ULL;
     }),
-    AttackTable(1ULL, 33, 63, [](uint64_t *& data) {
+    AttackTable(472446402560ULL, 1ULL, 33, 63, [](uint64_t *& data) {
         data = new uint64_t [56]();
         data[0] = 0x000000ef00000000ULL;
         data[1] = 0x000000ee00000000ULL;
@@ -1618,7 +1621,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[54] = 0x0000002800000000ULL;
         data[55] = 0x0000002800000000ULL;
     }),
-    AttackTable(1ULL, 33, 63, [](uint64_t *& data) {
+    AttackTable(403726925824ULL, 1ULL, 33, 63, [](uint64_t *& data) {
         data = new uint64_t [48]();
         data[0] = 0x000000df00000000ULL;
         data[1] = 0x000000de00000000ULL;
@@ -1653,7 +1656,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[46] = 0x0000005000000000ULL;
         data[47] = 0x0000005000000000ULL;
     }),
-    AttackTable(1ULL, 33, 31, [](uint64_t *& data) {
+    AttackTable(266287972352ULL, 1ULL, 33, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x000000bf00000000ULL;
         data[1] = 0x000000be00000000ULL;
@@ -1688,7 +1691,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x000000a000000000ULL;
         data[31] = 0x000000a000000000ULL;
     }),
-    AttackTable(1ULL, 33, 63, [](uint64_t *& data) {
+    AttackTable(541165879296ULL, 1ULL, 33, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x0000007f00000000ULL;
         data[1] = 0x0000007e00000000ULL;
@@ -1755,7 +1758,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000004000000000ULL;
         data[63] = 0x0000004000000000ULL;
     }),
-    AttackTable(1ULL, 41, 63, [](uint64_t *& data) {
+    AttackTable(138538465099776ULL, 1ULL, 41, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x0000fe0000000000ULL;
         data[1] = 0x0000020000000000ULL;
@@ -1822,7 +1825,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000060000000000ULL;
         data[63] = 0x0000020000000000ULL;
     }),
-    AttackTable(1ULL, 42, 31, [](uint64_t *& data) {
+    AttackTable(136339441844224ULL, 1ULL, 42, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x0000fd0000000000ULL;
         data[1] = 0x0000050000000000ULL;
@@ -1857,7 +1860,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x00000d0000000000ULL;
         data[31] = 0x0000050000000000ULL;
     }),
-    AttackTable(1ULL, 41, 63, [](uint64_t *& data) {
+    AttackTable(134140418588672ULL, 1ULL, 41, 63, [](uint64_t *& data) {
         data = new uint64_t [62]();
         data[0] = 0x0000fb0000000000ULL;
         data[1] = 0x0000fa0000000000ULL;
@@ -1892,7 +1895,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[60] = 0x00000b0000000000ULL;
         data[61] = 0x00000a0000000000ULL;
     }),
-    AttackTable(1ULL, 41, 63, [](uint64_t *& data) {
+    AttackTable(129742372077568ULL, 1ULL, 41, 63, [](uint64_t *& data) {
         data = new uint64_t [60]();
         data[0] = 0x0000f70000000000ULL;
         data[1] = 0x0000f60000000000ULL;
@@ -1927,7 +1930,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[58] = 0x0000140000000000ULL;
         data[59] = 0x0000140000000000ULL;
     }),
-    AttackTable(1ULL, 41, 63, [](uint64_t *& data) {
+    AttackTable(120946279055360ULL, 1ULL, 41, 63, [](uint64_t *& data) {
         data = new uint64_t [56]();
         data[0] = 0x0000ef0000000000ULL;
         data[1] = 0x0000ee0000000000ULL;
@@ -1962,7 +1965,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[54] = 0x0000280000000000ULL;
         data[55] = 0x0000280000000000ULL;
     }),
-    AttackTable(1ULL, 41, 63, [](uint64_t *& data) {
+    AttackTable(103354093010944ULL, 1ULL, 41, 63, [](uint64_t *& data) {
         data = new uint64_t [48]();
         data[0] = 0x0000df0000000000ULL;
         data[1] = 0x0000de0000000000ULL;
@@ -1997,7 +2000,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[46] = 0x0000500000000000ULL;
         data[47] = 0x0000500000000000ULL;
     }),
-    AttackTable(1ULL, 41, 31, [](uint64_t *& data) {
+    AttackTable(68169720922112ULL, 1ULL, 41, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x0000bf0000000000ULL;
         data[1] = 0x0000be0000000000ULL;
@@ -2032,7 +2035,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x0000a00000000000ULL;
         data[31] = 0x0000a00000000000ULL;
     }),
-    AttackTable(1ULL, 41, 63, [](uint64_t *& data) {
+    AttackTable(138538465099776ULL, 1ULL, 41, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x00007f0000000000ULL;
         data[1] = 0x00007e0000000000ULL;
@@ -2099,7 +2102,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0000400000000000ULL;
         data[63] = 0x0000400000000000ULL;
     }),
-    AttackTable(1ULL, 49, 63, [](uint64_t *& data) {
+    AttackTable(35465847065542656ULL, 1ULL, 49, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x00fe000000000000ULL;
         data[1] = 0x0002000000000000ULL;
@@ -2166,7 +2169,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0006000000000000ULL;
         data[63] = 0x0002000000000000ULL;
     }),
-    AttackTable(1ULL, 50, 31, [](uint64_t *& data) {
+    AttackTable(34902897112121344ULL, 1ULL, 50, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x00fd000000000000ULL;
         data[1] = 0x0005000000000000ULL;
@@ -2201,7 +2204,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x000d000000000000ULL;
         data[31] = 0x0005000000000000ULL;
     }),
-    AttackTable(1ULL, 49, 63, [](uint64_t *& data) {
+    AttackTable(34339947158700032ULL, 1ULL, 49, 63, [](uint64_t *& data) {
         data = new uint64_t [62]();
         data[0] = 0x00fb000000000000ULL;
         data[1] = 0x00fa000000000000ULL;
@@ -2236,7 +2239,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[60] = 0x000b000000000000ULL;
         data[61] = 0x000a000000000000ULL;
     }),
-    AttackTable(1ULL, 49, 63, [](uint64_t *& data) {
+    AttackTable(33214047251857408ULL, 1ULL, 49, 63, [](uint64_t *& data) {
         data = new uint64_t [60]();
         data[0] = 0x00f7000000000000ULL;
         data[1] = 0x00f6000000000000ULL;
@@ -2271,7 +2274,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[58] = 0x0014000000000000ULL;
         data[59] = 0x0014000000000000ULL;
     }),
-    AttackTable(1ULL, 49, 63, [](uint64_t *& data) {
+    AttackTable(30962247438172160ULL, 1ULL, 49, 63, [](uint64_t *& data) {
         data = new uint64_t [56]();
         data[0] = 0x00ef000000000000ULL;
         data[1] = 0x00ee000000000000ULL;
@@ -2306,7 +2309,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[54] = 0x0028000000000000ULL;
         data[55] = 0x0028000000000000ULL;
     }),
-    AttackTable(1ULL, 49, 63, [](uint64_t *& data) {
+    AttackTable(26458647810801664ULL, 1ULL, 49, 63, [](uint64_t *& data) {
         data = new uint64_t [48]();
         data[0] = 0x00df000000000000ULL;
         data[1] = 0x00de000000000000ULL;
@@ -2341,7 +2344,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[46] = 0x0050000000000000ULL;
         data[47] = 0x0050000000000000ULL;
     }),
-    AttackTable(1ULL, 49, 31, [](uint64_t *& data) {
+    AttackTable(17451448556060672ULL, 1ULL, 49, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0x00bf000000000000ULL;
         data[1] = 0x00be000000000000ULL;
@@ -2376,7 +2379,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x00a0000000000000ULL;
         data[31] = 0x00a0000000000000ULL;
     }),
-    AttackTable(1ULL, 49, 63, [](uint64_t *& data) {
+    AttackTable(35465847065542656ULL, 1ULL, 49, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x007f000000000000ULL;
         data[1] = 0x007e000000000000ULL;
@@ -2443,7 +2446,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0040000000000000ULL;
         data[63] = 0x0040000000000000ULL;
     }),
-    AttackTable(1ULL, 57, 63, [](uint64_t *& data) {
+    AttackTable(9079256848778919936ULL, 1ULL, 57, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0xfe00000000000000ULL;
         data[1] = 0x0200000000000000ULL;
@@ -2510,7 +2513,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[62] = 0x0600000000000000ULL;
         data[63] = 0x0200000000000000ULL;
     }),
-    AttackTable(1ULL, 58, 31, [](uint64_t *& data) {
+    AttackTable(8935141660703064064ULL, 1ULL, 58, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0xfd00000000000000ULL;
         data[1] = 0x0500000000000000ULL;
@@ -2545,7 +2548,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0x0d00000000000000ULL;
         data[31] = 0x0500000000000000ULL;
     }),
-    AttackTable(1ULL, 57, 63, [](uint64_t *& data) {
+    AttackTable(8791026472627208192ULL, 1ULL, 57, 63, [](uint64_t *& data) {
         data = new uint64_t [62]();
         data[0] = 0xfb00000000000000ULL;
         data[1] = 0xfa00000000000000ULL;
@@ -2580,7 +2583,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[60] = 0x0b00000000000000ULL;
         data[61] = 0x0a00000000000000ULL;
     }),
-    AttackTable(1ULL, 57, 63, [](uint64_t *& data) {
+    AttackTable(8502796096475496448ULL, 1ULL, 57, 63, [](uint64_t *& data) {
         data = new uint64_t [60]();
         data[0] = 0xf700000000000000ULL;
         data[1] = 0xf600000000000000ULL;
@@ -2615,7 +2618,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[58] = 0x1400000000000000ULL;
         data[59] = 0x1400000000000000ULL;
     }),
-    AttackTable(1ULL, 57, 63, [](uint64_t *& data) {
+    AttackTable(7926335344172072960ULL, 1ULL, 57, 63, [](uint64_t *& data) {
         data = new uint64_t [56]();
         data[0] = 0xef00000000000000ULL;
         data[1] = 0xee00000000000000ULL;
@@ -2650,7 +2653,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[54] = 0x2800000000000000ULL;
         data[55] = 0x2800000000000000ULL;
     }),
-    AttackTable(1ULL, 57, 63, [](uint64_t *& data) {
+    AttackTable(6773413839565225984ULL, 1ULL, 57, 63, [](uint64_t *& data) {
         data = new uint64_t [48]();
         data[0] = 0xdf00000000000000ULL;
         data[1] = 0xde00000000000000ULL;
@@ -2685,7 +2688,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[46] = 0x5000000000000000ULL;
         data[47] = 0x5000000000000000ULL;
     }),
-    AttackTable(1ULL, 57, 31, [](uint64_t *& data) {
+    AttackTable(4467570830351532032ULL, 1ULL, 57, 31, [](uint64_t *& data) {
         data = new uint64_t [32]();
         data[0] = 0xbf00000000000000ULL;
         data[1] = 0xbe00000000000000ULL;
@@ -2720,7 +2723,7 @@ const AttackTable _RANK_ATTACKS[64] = {
         data[30] = 0xa000000000000000ULL;
         data[31] = 0xa000000000000000ULL;
     }),
-    AttackTable(1ULL, 57, 63, [](uint64_t *& data) {
+    AttackTable(9079256848778919936ULL, 1ULL, 57, 63, [](uint64_t *& data) {
         data = new uint64_t [64]();
         data[0] = 0x7f00000000000000ULL;
         data[1] = 0x7e00000000000000ULL;
@@ -2790,7 +2793,7 @@ const AttackTable _RANK_ATTACKS[64] = {
 };
 
 const AttackTable _FILE_ATTACKS[64] = {
-    AttackTable(7268107520634073559ULL, 53, 127, [](uint64_t *& data) {
+    AttackTable(282578800148736ULL, 7268107520634073559ULL, 53, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0101010101010100ULL;
         data[2] = 0x0000000000010100ULL;
@@ -2857,7 +2860,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[124] = 0x0000000000000100ULL;
         data[126] = 0x0000000000010100ULL;
     }),
-    AttackTable(7268107520634073559ULL, 54, 127, [](uint64_t *& data) {
+    AttackTable(565157600297472ULL, 7268107520634073559ULL, 54, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0202020202020200ULL;
         data[2] = 0x0000000000020200ULL;
@@ -2924,7 +2927,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[124] = 0x0000000000000200ULL;
         data[126] = 0x0000000000020200ULL;
     }),
-    AttackTable(7268107520634073559ULL, 55, 127, [](uint64_t *& data) {
+    AttackTable(1130315200594944ULL, 7268107520634073559ULL, 55, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0404040404040400ULL;
         data[2] = 0x0000000000040400ULL;
@@ -2991,7 +2994,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[124] = 0x0000000000000400ULL;
         data[126] = 0x0000000000040400ULL;
     }),
-    AttackTable(7268107520634073559ULL, 56, 127, [](uint64_t *& data) {
+    AttackTable(2260630401189888ULL, 7268107520634073559ULL, 56, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0808080808080800ULL;
         data[2] = 0x0000000000080800ULL;
@@ -3058,7 +3061,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[124] = 0x0000000000000800ULL;
         data[126] = 0x0000000000080800ULL;
     }),
-    AttackTable(7268107520634073559ULL, 57, 127, [](uint64_t *& data) {
+    AttackTable(4521260802379776ULL, 7268107520634073559ULL, 57, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x1010101010101000ULL;
         data[2] = 0x0000000000101000ULL;
@@ -3125,7 +3128,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[124] = 0x0000000000001000ULL;
         data[126] = 0x0000000000101000ULL;
     }),
-    AttackTable(6108988338655542853ULL, 49, 255, [](uint64_t *& data) {
+    AttackTable(9042521604759552ULL, 6108988338655542853ULL, 49, 255, [](uint64_t *& data) {
         data = new uint64_t [253]();
         data[0] = 0x2020202020202000ULL;
         data[4] = 0x0000000000002000ULL;
@@ -3192,7 +3195,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[248] = 0x0000002020202000ULL;
         data[252] = 0x0000000000002000ULL;
     }),
-    AttackTable(6108988338655542853ULL, 50, 255, [](uint64_t *& data) {
+    AttackTable(18085043209519104ULL, 6108988338655542853ULL, 50, 255, [](uint64_t *& data) {
         data = new uint64_t [253]();
         data[0] = 0x4040404040404000ULL;
         data[4] = 0x0000000000004000ULL;
@@ -3259,7 +3262,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[248] = 0x0000004040404000ULL;
         data[252] = 0x0000000000004000ULL;
     }),
-    AttackTable(6108988338655542853ULL, 51, 255, [](uint64_t *& data) {
+    AttackTable(36170086419038208ULL, 6108988338655542853ULL, 51, 255, [](uint64_t *& data) {
         data = new uint64_t [253]();
         data[0] = 0x8080808080808000ULL;
         data[4] = 0x0000000000008000ULL;
@@ -3326,7 +3329,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[248] = 0x0000008080808000ULL;
         data[252] = 0x0000000000008000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
+    AttackTable(282578800148480ULL, 9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0101010101010001ULL;
         data[1] = 0x0000000000010001ULL;
@@ -3361,7 +3364,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0000000000010001ULL;
         data[123] = 0x0000000000010001ULL;
     }),
-    AttackTable(9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
+    AttackTable(565157600296960ULL, 9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0202020202020002ULL;
         data[1] = 0x0000000000020002ULL;
@@ -3396,7 +3399,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0000000000020002ULL;
         data[123] = 0x0000000000020002ULL;
     }),
-    AttackTable(9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
+    AttackTable(1130315200593920ULL, 9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0404040404040004ULL;
         data[1] = 0x0000000000040004ULL;
@@ -3431,7 +3434,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0000000000040004ULL;
         data[123] = 0x0000000000040004ULL;
     }),
-    AttackTable(9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
+    AttackTable(2260630401187840ULL, 9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0808080808080008ULL;
         data[1] = 0x0000000000080008ULL;
@@ -3466,7 +3469,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0000000000080008ULL;
         data[123] = 0x0000000000080008ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(4521260802375680ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x1010101010100010ULL;
         data[1] = 0x0000000000100010ULL;
@@ -3501,7 +3504,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0000000000100010ULL;
         data[123] = 0x0000000000100010ULL;
     }),
-    AttackTable(9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
+    AttackTable(9042521604751360ULL, 9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x2020202020200020ULL;
         data[1] = 0x0000000000200020ULL;
@@ -3536,7 +3539,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0000000000200020ULL;
         data[123] = 0x0000000000200020ULL;
     }),
-    AttackTable(9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
+    AttackTable(18085043209502720ULL, 9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x4040404040400040ULL;
         data[1] = 0x0000000000400040ULL;
@@ -3571,7 +3574,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0000000000400040ULL;
         data[123] = 0x0000000000400040ULL;
     }),
-    AttackTable(9357036318526133325ULL, 50, 127, [](uint64_t *& data) {
+    AttackTable(36170086419005440ULL, 9357036318526133325ULL, 50, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x8080808080800080ULL;
         data[1] = 0x0000000000800080ULL;
@@ -3606,7 +3609,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0000000000800080ULL;
         data[123] = 0x0000000000800080ULL;
     }),
-    AttackTable(9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
+    AttackTable(282578800083200ULL, 9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0101010101000101ULL;
         data[2] = 0x0000010101000100ULL;
@@ -3641,7 +3644,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[121] = 0x0000000101000101ULL;
         data[123] = 0x0000000001000100ULL;
     }),
-    AttackTable(9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
+    AttackTable(565157600166400ULL, 9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0202020202000202ULL;
         data[2] = 0x0000020202000200ULL;
@@ -3676,7 +3679,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[121] = 0x0000000202000202ULL;
         data[123] = 0x0000000002000200ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(1130315200332800ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0404040404000404ULL;
         data[2] = 0x0000040404000400ULL;
@@ -3711,7 +3714,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[121] = 0x0000000404000404ULL;
         data[123] = 0x0000000004000400ULL;
     }),
-    AttackTable(9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
+    AttackTable(2260630400665600ULL, 9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0808080808000808ULL;
         data[2] = 0x0000080808000800ULL;
@@ -3746,7 +3749,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[121] = 0x0000000808000808ULL;
         data[123] = 0x0000000008000800ULL;
     }),
-    AttackTable(9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
+    AttackTable(4521260801331200ULL, 9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x1010101010001010ULL;
         data[2] = 0x0000101010001000ULL;
@@ -3781,7 +3784,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[121] = 0x0000001010001010ULL;
         data[123] = 0x0000000010001000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 50, 127, [](uint64_t *& data) {
+    AttackTable(9042521602662400ULL, 9357036318526133325ULL, 50, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x2020202020002020ULL;
         data[2] = 0x0000202020002000ULL;
@@ -3816,7 +3819,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[121] = 0x0000002020002020ULL;
         data[123] = 0x0000000020002000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 51, 127, [](uint64_t *& data) {
+    AttackTable(18085043205324800ULL, 9357036318526133325ULL, 51, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x4040404040004040ULL;
         data[2] = 0x0000404040004000ULL;
@@ -3851,7 +3854,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[121] = 0x0000004040004040ULL;
         data[123] = 0x0000000040004000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 52, 127, [](uint64_t *& data) {
+    AttackTable(36170086410649600ULL, 9357036318526133325ULL, 52, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x8080808080008080ULL;
         data[2] = 0x0000808080008000ULL;
@@ -3886,7 +3889,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[121] = 0x0000008080008080ULL;
         data[123] = 0x0000000080008000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 42, 127, [](uint64_t *& data) {
+    AttackTable(282578783371520ULL, 9357036318526133325ULL, 42, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x0101010100010101ULL;
         data[2] = 0x0000010100010000ULL;
@@ -3921,7 +3924,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0001010100010100ULL;
         data[127] = 0x0000010100010000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
+    AttackTable(565157566743040ULL, 9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x0202020200020202ULL;
         data[2] = 0x0000020200020000ULL;
@@ -3956,7 +3959,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0002020200020200ULL;
         data[127] = 0x0000020200020000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
+    AttackTable(1130315133486080ULL, 9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x0404040400040404ULL;
         data[2] = 0x0000040400040000ULL;
@@ -3991,7 +3994,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0004040400040400ULL;
         data[127] = 0x0000040400040000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
+    AttackTable(2260630266972160ULL, 9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x0808080800080808ULL;
         data[2] = 0x0000080800080000ULL;
@@ -4026,7 +4029,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0008080800080800ULL;
         data[127] = 0x0000080800080000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
+    AttackTable(4521260533944320ULL, 9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x1010101000101010ULL;
         data[2] = 0x0000101000100000ULL;
@@ -4061,7 +4064,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0010101000101000ULL;
         data[127] = 0x0000101000100000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(9042521067888640ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x2020202000202020ULL;
         data[2] = 0x0000202000200000ULL;
@@ -4096,7 +4099,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0020202000202000ULL;
         data[127] = 0x0000202000200000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
+    AttackTable(18085042135777280ULL, 9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x4040404000404040ULL;
         data[2] = 0x0000404000400000ULL;
@@ -4131,7 +4134,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0040404000404000ULL;
         data[127] = 0x0000404000400000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
+    AttackTable(36170084271554560ULL, 9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x8080808000808080ULL;
         data[2] = 0x0000808000800000ULL;
@@ -4166,7 +4169,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0080808000808000ULL;
         data[127] = 0x0000808000800000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 42, 127, [](uint64_t *& data) {
+    AttackTable(282574505181440ULL, 9357036318526133325ULL, 42, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x0101010001010101ULL;
         data[2] = 0x0000010001010000ULL;
@@ -4201,7 +4204,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0001010001010100ULL;
         data[127] = 0x0000010001010000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
+    AttackTable(565149010362880ULL, 9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x0202020002020202ULL;
         data[2] = 0x0000020002020000ULL;
@@ -4236,7 +4239,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0002020002020200ULL;
         data[127] = 0x0000020002020000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
+    AttackTable(1130298020725760ULL, 9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x0404040004040404ULL;
         data[2] = 0x0000040004040000ULL;
@@ -4271,7 +4274,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0004040004040400ULL;
         data[127] = 0x0000040004040000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
+    AttackTable(2260596041451520ULL, 9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x0808080008080808ULL;
         data[2] = 0x0000080008080000ULL;
@@ -4306,7 +4309,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0008080008080800ULL;
         data[127] = 0x0000080008080000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
+    AttackTable(4521192082903040ULL, 9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x1010100010101010ULL;
         data[2] = 0x0000100010100000ULL;
@@ -4341,7 +4344,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0010100010101000ULL;
         data[127] = 0x0000100010100000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(9042384165806080ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x2020200020202020ULL;
         data[2] = 0x0000200020200000ULL;
@@ -4376,7 +4379,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0020200020202000ULL;
         data[127] = 0x0000200020200000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
+    AttackTable(18084768331612160ULL, 9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x4040400040404040ULL;
         data[2] = 0x0000400040400000ULL;
@@ -4411,7 +4414,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0040400040404000ULL;
         data[127] = 0x0000400040400000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
+    AttackTable(36169536663224320ULL, 9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x8080800080808080ULL;
         data[2] = 0x0000800080800000ULL;
@@ -4446,7 +4449,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[125] = 0x0080800080808000ULL;
         data[127] = 0x0000800080800000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
+    AttackTable(281479288520960ULL, 9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0101000101010101ULL;
         data[4] = 0x0001000101000000ULL;
@@ -4481,7 +4484,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[123] = 0x0101000101000000ULL;
         data[126] = 0x0001000101010100ULL;
     }),
-    AttackTable(9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
+    AttackTable(562958577041920ULL, 9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0202000202020202ULL;
         data[4] = 0x0002000202000000ULL;
@@ -4516,7 +4519,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[123] = 0x0202000202000000ULL;
         data[126] = 0x0002000202020200ULL;
     }),
-    AttackTable(9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
+    AttackTable(1125917154083840ULL, 9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0404000404040404ULL;
         data[4] = 0x0004000404000000ULL;
@@ -4551,7 +4554,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[123] = 0x0404000404000000ULL;
         data[126] = 0x0004000404040400ULL;
     }),
-    AttackTable(9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
+    AttackTable(2251834308167680ULL, 9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0808000808080808ULL;
         data[4] = 0x0008000808000000ULL;
@@ -4586,7 +4589,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[123] = 0x0808000808000000ULL;
         data[126] = 0x0008000808080800ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(4503668616335360ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x1010001010101010ULL;
         data[4] = 0x0010001010000000ULL;
@@ -4621,7 +4624,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[123] = 0x1010001010000000ULL;
         data[126] = 0x0010001010101000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
+    AttackTable(9007337232670720ULL, 9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x2020002020202020ULL;
         data[4] = 0x0020002020000000ULL;
@@ -4656,7 +4659,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[123] = 0x2020002020000000ULL;
         data[126] = 0x0020002020202000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
+    AttackTable(18014674465341440ULL, 9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x4040004040404040ULL;
         data[4] = 0x0040004040000000ULL;
@@ -4691,7 +4694,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[123] = 0x4040004040000000ULL;
         data[126] = 0x0040004040404000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 50, 127, [](uint64_t *& data) {
+    AttackTable(36029348930682880ULL, 9357036318526133325ULL, 50, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x8080008080808080ULL;
         data[4] = 0x0080008080000000ULL;
@@ -4726,7 +4729,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[123] = 0x8080008080000000ULL;
         data[126] = 0x0080008080808000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 35, 127, [](uint64_t *& data) {
+    AttackTable(1103823438080ULL, 9357036318526133325ULL, 35, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0100010101010101ULL;
         data[1] = 0x0100010000000000ULL;
@@ -4761,7 +4764,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0100010000000000ULL;
         data[123] = 0x0100010000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 36, 127, [](uint64_t *& data) {
+    AttackTable(2207646876160ULL, 9357036318526133325ULL, 36, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0200020202020202ULL;
         data[1] = 0x0200020000000000ULL;
@@ -4796,7 +4799,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0200020000000000ULL;
         data[123] = 0x0200020000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 37, 127, [](uint64_t *& data) {
+    AttackTable(4415293752320ULL, 9357036318526133325ULL, 37, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0400040404040404ULL;
         data[1] = 0x0400040000000000ULL;
@@ -4831,7 +4834,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0400040000000000ULL;
         data[123] = 0x0400040000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 38, 127, [](uint64_t *& data) {
+    AttackTable(8830587504640ULL, 9357036318526133325ULL, 38, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x0800080808080808ULL;
         data[1] = 0x0800080000000000ULL;
@@ -4866,7 +4869,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x0800080000000000ULL;
         data[123] = 0x0800080000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 39, 127, [](uint64_t *& data) {
+    AttackTable(17661175009280ULL, 9357036318526133325ULL, 39, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x1000101010101010ULL;
         data[1] = 0x1000100000000000ULL;
@@ -4901,7 +4904,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x1000100000000000ULL;
         data[123] = 0x1000100000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 40, 127, [](uint64_t *& data) {
+    AttackTable(35322350018560ULL, 9357036318526133325ULL, 40, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x2000202020202020ULL;
         data[1] = 0x2000200000000000ULL;
@@ -4936,7 +4939,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x2000200000000000ULL;
         data[123] = 0x2000200000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 41, 127, [](uint64_t *& data) {
+    AttackTable(70644700037120ULL, 9357036318526133325ULL, 41, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x4000404040404040ULL;
         data[1] = 0x4000400000000000ULL;
@@ -4971,7 +4974,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x4000400000000000ULL;
         data[123] = 0x4000400000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 42, 127, [](uint64_t *& data) {
+    AttackTable(141289400074240ULL, 9357036318526133325ULL, 42, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x8000808080808080ULL;
         data[1] = 0x8000800000000000ULL;
@@ -5006,7 +5009,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[119] = 0x8000800000000000ULL;
         data[123] = 0x8000800000000000ULL;
     }),
-    AttackTable(7268107520634073559ULL, 53, 127, [](uint64_t *& data) {
+    AttackTable(282578800148736ULL, 7268107520634073559ULL, 53, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0001010101010101ULL;
         data[2] = 0x0001000000000000ULL;
@@ -5073,7 +5076,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[124] = 0x0001010000000000ULL;
         data[126] = 0x0001000000000000ULL;
     }),
-    AttackTable(7268107520634073559ULL, 54, 127, [](uint64_t *& data) {
+    AttackTable(565157600297472ULL, 7268107520634073559ULL, 54, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0002020202020202ULL;
         data[2] = 0x0002000000000000ULL;
@@ -5140,7 +5143,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[124] = 0x0002020000000000ULL;
         data[126] = 0x0002000000000000ULL;
     }),
-    AttackTable(7268107520634073559ULL, 55, 127, [](uint64_t *& data) {
+    AttackTable(1130315200594944ULL, 7268107520634073559ULL, 55, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0004040404040404ULL;
         data[2] = 0x0004000000000000ULL;
@@ -5207,7 +5210,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[124] = 0x0004040000000000ULL;
         data[126] = 0x0004000000000000ULL;
     }),
-    AttackTable(7268107520634073559ULL, 56, 127, [](uint64_t *& data) {
+    AttackTable(2260630401189888ULL, 7268107520634073559ULL, 56, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0008080808080808ULL;
         data[2] = 0x0008000000000000ULL;
@@ -5274,7 +5277,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[124] = 0x0008080000000000ULL;
         data[126] = 0x0008000000000000ULL;
     }),
-    AttackTable(7268107520634073559ULL, 57, 127, [](uint64_t *& data) {
+    AttackTable(4521260802379776ULL, 7268107520634073559ULL, 57, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0010101010101010ULL;
         data[2] = 0x0010000000000000ULL;
@@ -5341,7 +5344,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[124] = 0x0010100000000000ULL;
         data[126] = 0x0010000000000000ULL;
     }),
-    AttackTable(6108988338655542853ULL, 49, 255, [](uint64_t *& data) {
+    AttackTable(9042521604759552ULL, 6108988338655542853ULL, 49, 255, [](uint64_t *& data) {
         data = new uint64_t [253]();
         data[0] = 0x0020202020202020ULL;
         data[4] = 0x0020000000000000ULL;
@@ -5408,7 +5411,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[248] = 0x0020200000000000ULL;
         data[252] = 0x0020000000000000ULL;
     }),
-    AttackTable(6108988338655542853ULL, 50, 255, [](uint64_t *& data) {
+    AttackTable(18085043209519104ULL, 6108988338655542853ULL, 50, 255, [](uint64_t *& data) {
         data = new uint64_t [253]();
         data[0] = 0x0040404040404040ULL;
         data[4] = 0x0040000000000000ULL;
@@ -5475,7 +5478,7 @@ const AttackTable _FILE_ATTACKS[64] = {
         data[248] = 0x0040400000000000ULL;
         data[252] = 0x0040000000000000ULL;
     }),
-    AttackTable(6108988338655542853ULL, 51, 255, [](uint64_t *& data) {
+    AttackTable(36170086419038208ULL, 6108988338655542853ULL, 51, 255, [](uint64_t *& data) {
         data = new uint64_t [253]();
         data[0] = 0x0080808080808080ULL;
         data[4] = 0x0080000000000000ULL;
@@ -5545,7 +5548,7 @@ const AttackTable _FILE_ATTACKS[64] = {
 };
 
 const AttackTable _DIAG_ATTACKS[64] = {
-    AttackTable(9357036318526133325ULL, 48, 255, [](uint64_t *& data) {
+    AttackTable(18049651735527936ULL, 9357036318526133325ULL, 48, 255, [](uint64_t *& data) {
         data = new uint64_t [255]();
         data[0] = 0x8040201008040200ULL;
         data[6] = 0x0000000000000200ULL;
@@ -5612,7 +5615,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[253] = 0x0000000000000200ULL;
         data[254] = 0x0000000008040200ULL;
     }),
-    AttackTable(9357036318526133325ULL, 40, 127, [](uint64_t *& data) {
+    AttackTable(70506452091904ULL, 9357036318526133325ULL, 40, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0080402010080500ULL;
         data[8] = 0x0000000000080500ULL;
@@ -5647,7 +5650,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[125] = 0x0000000000000500ULL;
         data[126] = 0x0000000000080500ULL;
     }),
-    AttackTable(9357036318526133325ULL, 40, 127, [](uint64_t *& data) {
+    AttackTable(275415828992ULL, 9357036318526133325ULL, 40, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x0000804020110a00ULL;
         data[12] = 0x0000000000000a00ULL;
@@ -5682,7 +5685,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[124] = 0x0000004020100a00ULL;
         data[125] = 0x0000000000110a00ULL;
     }),
-    AttackTable(9357036318526133325ULL, 37, 127, [](uint64_t *& data) {
+    AttackTable(1075975168ULL, 9357036318526133325ULL, 37, 127, [](uint64_t *& data) {
         data = new uint64_t [120]();
         data[0] = 0x0000008041221400ULL;
         data[2] = 0x0000000040201400ULL;
@@ -5717,7 +5720,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[117] = 0x0000000000001400ULL;
         data[119] = 0x0000000000021400ULL;
     }),
-    AttackTable(9357036318526133325ULL, 19, 127, [](uint64_t *& data) {
+    AttackTable(38021120ULL, 9357036318526133325ULL, 19, 127, [](uint64_t *& data) {
         data = new uint64_t [125]();
         data[0] = 0x0000000182442800ULL;
         data[12] = 0x0000000000002800ULL;
@@ -5752,7 +5755,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[122] = 0x0000000080402800ULL;
         data[124] = 0x0000000000402800ULL;
     }),
-    AttackTable(9357036318526133325ULL, 35, 127, [](uint64_t *& data) {
+    AttackTable(8657588224ULL, 9357036318526133325ULL, 35, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x0000010204885000ULL;
         data[5] = 0x0000000000005000ULL;
@@ -5787,7 +5790,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[121] = 0x0000000000085000ULL;
         data[125] = 0x0000000004885000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 35, 127, [](uint64_t *& data) {
+    AttackTable(2216338399232ULL, 9357036318526133325ULL, 35, 127, [](uint64_t *& data) {
         data = new uint64_t [123]();
         data[0] = 0x000102040810a000ULL;
         data[2] = 0x000000000010a000ULL;
@@ -5822,7 +5825,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[114] = 0x000000000000a000ULL;
         data[122] = 0x000000000810a000ULL;
     }),
-    AttackTable(16387092464288213399ULL, 52, 255, [](uint64_t *& data) {
+    AttackTable(567382630219776ULL, 16387092464288213399ULL, 52, 255, [](uint64_t *& data) {
         data = new uint64_t [251]();
         data[0] = 0x0102040810204000ULL;
         data[6] = 0x0000000000004000ULL;
@@ -5889,7 +5892,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[246] = 0x0000000010204000ULL;
         data[250] = 0x0000000810204000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(9024825867763712ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x4020100804020002ULL;
         data[8] = 0x0000000004020002ULL;
@@ -5924,7 +5927,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[125] = 0x0000000000020002ULL;
         data[126] = 0x0000000004020002ULL;
     }),
-    AttackTable(9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
+    AttackTable(18049651735527424ULL, 9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x8040201008050005ULL;
         data[8] = 0x0000000008050005ULL;
@@ -5959,7 +5962,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[125] = 0x0000000000050005ULL;
         data[126] = 0x0000000008050005ULL;
     }),
-    AttackTable(9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
+    AttackTable(70506452221952ULL, 9357036318526133325ULL, 48, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x00804020110a000aULL;
         data[12] = 0x00000000000a000aULL;
@@ -5994,7 +5997,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[124] = 0x00004020100a000aULL;
         data[125] = 0x00000000110a000aULL;
     }),
-    AttackTable(9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
+    AttackTable(275449643008ULL, 9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
         data = new uint64_t [120]();
         data[0] = 0x0000804122140014ULL;
         data[2] = 0x0000004020140014ULL;
@@ -6029,7 +6032,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[117] = 0x0000000000140014ULL;
         data[119] = 0x0000000002140014ULL;
     }),
-    AttackTable(9357036318526133325ULL, 27, 127, [](uint64_t *& data) {
+    AttackTable(9733406720ULL, 9357036318526133325ULL, 27, 127, [](uint64_t *& data) {
         data = new uint64_t [125]();
         data[0] = 0x0000018244280028ULL;
         data[12] = 0x0000000000280028ULL;
@@ -6064,7 +6067,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[122] = 0x0000008040280028ULL;
         data[124] = 0x0000000040280028ULL;
     }),
-    AttackTable(9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
+    AttackTable(2216342585344ULL, 9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x0001020488500050ULL;
         data[5] = 0x0000000000500050ULL;
@@ -6099,7 +6102,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[121] = 0x0000000008500050ULL;
         data[125] = 0x0000000488500050ULL;
     }),
-    AttackTable(9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
+    AttackTable(567382630203392ULL, 9357036318526133325ULL, 43, 127, [](uint64_t *& data) {
         data = new uint64_t [123]();
         data[0] = 0x0102040810a000a0ULL;
         data[2] = 0x0000000010a000a0ULL;
@@ -6134,7 +6137,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[114] = 0x0000000000a000a0ULL;
         data[122] = 0x0000000810a000a0ULL;
     }),
-    AttackTable(9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
+    AttackTable(1134765260406784ULL, 9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
         data = new uint64_t [123]();
         data[0] = 0x0204081020400040ULL;
         data[2] = 0x0000000020400040ULL;
@@ -6169,7 +6172,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[114] = 0x0000000000400040ULL;
         data[122] = 0x0000001020400040ULL;
     }),
-    AttackTable(9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
+    AttackTable(4512412933816832ULL, 9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x2010080402000204ULL;
         data[1] = 0x0000080402000200ULL;
@@ -6204,7 +6207,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[126] = 0x0000000002000204ULL;
         data[127] = 0x0000000002000200ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(9024825867633664ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x4020100805000508ULL;
         data[1] = 0x0000100805000500ULL;
@@ -6239,7 +6242,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[126] = 0x0000000005000508ULL;
         data[127] = 0x0000000005000500ULL;
     }),
-    AttackTable(6108988338655542853ULL, 54, 511, [](uint64_t *& data) {
+    AttackTable(18049651768822272ULL, 6108988338655542853ULL, 54, 511, [](uint64_t *& data) {
         data = new uint64_t [511]();
         data[0] = 0x804020110a000a11ULL;
         data[2] = 0x000020100a000a00ULL;
@@ -6370,7 +6373,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[506] = 0x000000000a000a11ULL;
         data[510] = 0x000000010a000a10ULL;
     }),
-    AttackTable(9357036318526133325ULL, 38, 511, [](uint64_t *& data) {
+    AttackTable(70515108615168ULL, 9357036318526133325ULL, 38, 511, [](uint64_t *& data) {
         data = new uint64_t [507]();
         data[0] = 0x0080412214001422ULL;
         data[3] = 0x0000002014001422ULL;
@@ -6501,7 +6504,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[503] = 0x0000002214001402ULL;
         data[506] = 0x0080402014001400ULL;
     }),
-    AttackTable(6108988338655542853ULL, 33, 511, [](uint64_t *& data) {
+    AttackTable(2491752130560ULL, 6108988338655542853ULL, 33, 511, [](uint64_t *& data) {
         data = new uint64_t [510]();
         data[0] = 0x0001824428002844ULL;
         data[2] = 0x0000004028002804ULL;
@@ -6632,7 +6635,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[505] = 0x0000804028002844ULL;
         data[509] = 0x0000004028002840ULL;
     }),
-    AttackTable(9202493588570546565ULL, 48, 511, [](uint64_t *& data) {
+    AttackTable(567383701868544ULL, 9202493588570546565ULL, 48, 511, [](uint64_t *& data) {
         data = new uint64_t [509]();
         data[0] = 0x0102048850005088ULL;
         data[2] = 0x0000008850005000ULL;
@@ -6763,7 +6766,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[506] = 0x0000000050005080ULL;
         data[508] = 0x0102048850005000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
+    AttackTable(1134765256220672ULL, 9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x02040810a000a010ULL;
         data[2] = 0x00000000a000a010ULL;
@@ -6798,7 +6801,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[125] = 0x00000010a000a000ULL;
         data[127] = 0x00000000a000a000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
+    AttackTable(2269530512441344ULL, 9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x0408102040004020ULL;
         data[2] = 0x0000000040004020ULL;
@@ -6833,7 +6836,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[125] = 0x0000002040004000ULL;
         data[127] = 0x0000000040004000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
+    AttackTable(2256206450263040ULL, 9357036318526133325ULL, 45, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x1008040200020408ULL;
         data[5] = 0x0000000200020400ULL;
@@ -6868,7 +6871,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[115] = 0x0000040200020000ULL;
         data[123] = 0x0000000200020400ULL;
     }),
-    AttackTable(9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
+    AttackTable(4512412900526080ULL, 9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
         data = new uint64_t [124]();
         data[0] = 0x2010080500050810ULL;
         data[5] = 0x0000000500050800ULL;
@@ -6903,7 +6906,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[115] = 0x0000080500050000ULL;
         data[123] = 0x0000000500050800ULL;
     }),
-    AttackTable(7268107520634073559ULL, 52, 511, [](uint64_t *& data) {
+    AttackTable(9024834391117824ULL, 7268107520634073559ULL, 52, 511, [](uint64_t *& data) {
         data = new uint64_t [511]();
         data[0] = 0x4020110a000a1120ULL;
         data[8] = 0x0000010a000a1000ULL;
@@ -7034,7 +7037,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[508] = 0x0020110a000a0000ULL;
         data[510] = 0x0000110a000a0000ULL;
     }),
-    AttackTable(9202493588570546565ULL, 50, 4095, [](uint64_t *& data) {
+    AttackTable(18051867805491712ULL, 9202493588570546565ULL, 50, 4095, [](uint64_t *& data) {
         data = new uint64_t [4086]();
         data[0] = 0x8041221400142241ULL;
         data[2] = 0x0000001400142240ULL;
@@ -7549,7 +7552,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[4083] = 0x0000021400140000ULL;
         data[4085] = 0x0001221400142240ULL;
     }),
-    AttackTable(6108988338655542853ULL, 39, 2047, [](uint64_t *& data) {
+    AttackTable(637888545440768ULL, 6108988338655542853ULL, 39, 2047, [](uint64_t *& data) {
         data = new uint64_t [2047]();
         data[0] = 0x0182442800284482ULL;
         data[4] = 0x0080442800280400ULL;
@@ -8064,7 +8067,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[2037] = 0x0000402800284080ULL;
         data[2046] = 0x0000002800280000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 42, 511, [](uint64_t *& data) {
+    AttackTable(1135039602493440ULL, 9357036318526133325ULL, 42, 511, [](uint64_t *& data) {
         data = new uint64_t [510]();
         data[0] = 0x0204885000508804ULL;
         data[4] = 0x0000805000500000ULL;
@@ -8195,7 +8198,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[504] = 0x0204085000500000ULL;
         data[509] = 0x0000805000500800ULL;
     }),
-    AttackTable(9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
+    AttackTable(2269529440784384ULL, 9357036318526133325ULL, 46, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x040810a000a01008ULL;
         data[5] = 0x000000a000a00000ULL;
@@ -8230,7 +8233,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[125] = 0x000000a000a01008ULL;
         data[126] = 0x000810a000a00000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(4539058881568768ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0810204000402010ULL;
         data[5] = 0x0000004000400000ULL;
@@ -8265,7 +8268,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[125] = 0x0000004000402010ULL;
         data[126] = 0x0010204000400000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
+    AttackTable(1128098963916800ULL, 9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x0804020002040810ULL;
         data[3] = 0x0004020002040000ULL;
@@ -8300,7 +8303,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[123] = 0x0804020002040800ULL;
         data[127] = 0x0004020002040000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 50, 127, [](uint64_t *& data) {
+    AttackTable(2256197927833600ULL, 9357036318526133325ULL, 50, 127, [](uint64_t *& data) {
         data = new uint64_t [128]();
         data[0] = 0x1008050005081020ULL;
         data[3] = 0x0008050005080000ULL;
@@ -8335,7 +8338,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[123] = 0x1008050005081000ULL;
         data[127] = 0x0008050005080000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 50, 511, [](uint64_t *& data) {
+    AttackTable(4514594912477184ULL, 9357036318526133325ULL, 50, 511, [](uint64_t *& data) {
         data = new uint64_t [511]();
         data[0] = 0x20110a000a112040ULL;
         data[2] = 0x00110a000a000000ULL;
@@ -8466,7 +8469,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[503] = 0x00000a000a100000ULL;
         data[510] = 0x00110a000a110000ULL;
     }),
-    AttackTable(9202493588570546565ULL, 52, 4095, [](uint64_t *& data) {
+    AttackTable(9592139778506752ULL, 9202493588570546565ULL, 52, 4095, [](uint64_t *& data) {
         data = new uint64_t [4095]();
         data[0] = 0x4122140014224180ULL;
         data[4] = 0x4022140014000000ULL;
@@ -8981,7 +8984,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[4077] = 0x0000140014020100ULL;
         data[4094] = 0x0002140014000000ULL;
     }),
-    AttackTable(7268107520634073559ULL, 50, 4095, [](uint64_t *& data) {
+    AttackTable(19184279556981248ULL, 7268107520634073559ULL, 50, 4095, [](uint64_t *& data) {
         data = new uint64_t [4086]();
         data[0] = 0x8244280028448201ULL;
         data[6] = 0x0004280028040000ULL;
@@ -9496,7 +9499,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[4081] = 0x0004280028440000ULL;
         data[4085] = 0x0040280028000000ULL;
     }),
-    AttackTable(7268107520634073559ULL, 44, 255, [](uint64_t *& data) {
+    AttackTable(2339762086609920ULL, 7268107520634073559ULL, 44, 255, [](uint64_t *& data) {
         data = new uint64_t [253]();
         data[0] = 0x0488500050880402ULL;
         data[1] = 0x0008500050800000ULL;
@@ -9627,7 +9630,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[251] = 0x0000500050000000ULL;
         data[252] = 0x0080500050800000ULL;
     }),
-    AttackTable(6108988338655542853ULL, 46, 127, [](uint64_t *& data) {
+    AttackTable(4538784537380864ULL, 6108988338655542853ULL, 46, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x0810a000a0100804ULL;
         data[6] = 0x0810a000a0000000ULL;
@@ -9662,7 +9665,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[123] = 0x0000a000a0000000ULL;
         data[125] = 0x0010a000a0100000ULL;
     }),
-    AttackTable(6108988338655542853ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(9077569074761728ULL, 6108988338655542853ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x1020400040201008ULL;
         data[6] = 0x1020400040000000ULL;
@@ -9697,7 +9700,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[123] = 0x0000400040000000ULL;
         data[125] = 0x0020400040200000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 55, 127, [](uint64_t *& data) {
+    AttackTable(562958610993152ULL, 9357036318526133325ULL, 55, 127, [](uint64_t *& data) {
         data = new uint64_t [120]();
         data[0] = 0x0402000204081020ULL;
         data[1] = 0x0402000204000000ULL;
@@ -9732,7 +9735,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[114] = 0x0402000200000000ULL;
         data[119] = 0x0002000204000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 56, 127, [](uint64_t *& data) {
+    AttackTable(1125917221986304ULL, 9357036318526133325ULL, 56, 127, [](uint64_t *& data) {
         data = new uint64_t [120]();
         data[0] = 0x0805000508102040ULL;
         data[1] = 0x0805000508000000ULL;
@@ -9767,7 +9770,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[114] = 0x0805000500000000ULL;
         data[119] = 0x0005000508000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 50, 511, [](uint64_t *& data) {
+    AttackTable(2814792987328512ULL, 9357036318526133325ULL, 50, 511, [](uint64_t *& data) {
         data = new uint64_t [510]();
         data[0] = 0x110a000a11204080ULL;
         data[1] = 0x110a000a01000000ULL;
@@ -9898,7 +9901,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[508] = 0x000a000a01000000ULL;
         data[509] = 0x010a000a00000000ULL;
     }),
-    AttackTable(16387092464288213399ULL, 44, 511, [](uint64_t *& data) {
+    AttackTable(5629586008178688ULL, 16387092464288213399ULL, 44, 511, [](uint64_t *& data) {
         data = new uint64_t [506]();
         data[0] = 0x2214001422418000ULL;
         data[4] = 0x0214001420400000ULL;
@@ -10029,7 +10032,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[502] = 0x2014001400000000ULL;
         data[505] = 0x2014001402010000ULL;
     }),
-    AttackTable(7268107520634073559ULL, 49, 255, [](uint64_t *& data) {
+    AttackTable(11259172008099840ULL, 7268107520634073559ULL, 49, 255, [](uint64_t *& data) {
         data = new uint64_t [254]();
         data[0] = 0x4428002844820100ULL;
         data[1] = 0x4428002800000000ULL;
@@ -10160,7 +10163,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[252] = 0x0428002840000000ULL;
         data[253] = 0x4028002844800000ULL;
     }),
-    AttackTable(7268107520634073559ULL, 51, 511, [](uint64_t *& data) {
+    AttackTable(22518341868716544ULL, 7268107520634073559ULL, 51, 511, [](uint64_t *& data) {
         data = new uint64_t [508]();
         data[0] = 0x8850005088040201ULL;
         data[1] = 0x0850005008040200ULL;
@@ -10291,7 +10294,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[505] = 0x8050005080000000ULL;
         data[507] = 0x0050005000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 53, 127, [](uint64_t *& data) {
+    AttackTable(9007336962655232ULL, 9357036318526133325ULL, 53, 127, [](uint64_t *& data) {
         data = new uint64_t [123]();
         data[0] = 0x10a000a010080402ULL;
         data[6] = 0x00a000a010000000ULL;
@@ -10326,7 +10329,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[119] = 0x10a000a010000000ULL;
         data[122] = 0x00a000a000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 54, 127, [](uint64_t *& data) {
+    AttackTable(18014673925310464ULL, 9357036318526133325ULL, 54, 127, [](uint64_t *& data) {
         data = new uint64_t [123]();
         data[0] = 0x2040004020100804ULL;
         data[6] = 0x0040004020000000ULL;
@@ -10361,7 +10364,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[119] = 0x2040004020000000ULL;
         data[122] = 0x0040004000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 35, 127, [](uint64_t *& data) {
+    AttackTable(2216338399232ULL, 9357036318526133325ULL, 35, 127, [](uint64_t *& data) {
         data = new uint64_t [123]();
         data[0] = 0x0200020408102040ULL;
         data[2] = 0x0200020400000000ULL;
@@ -10396,7 +10399,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[114] = 0x0200020400000000ULL;
         data[122] = 0x0200020400000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 36, 127, [](uint64_t *& data) {
+    AttackTable(4432676798464ULL, 9357036318526133325ULL, 36, 127, [](uint64_t *& data) {
         data = new uint64_t [123]();
         data[0] = 0x0500050810204080ULL;
         data[2] = 0x0500050800000000ULL;
@@ -10431,7 +10434,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[114] = 0x0500050800000000ULL;
         data[122] = 0x0500050800000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 39, 127, [](uint64_t *& data) {
+    AttackTable(11064376819712ULL, 9357036318526133325ULL, 39, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x0a000a1120408000ULL;
         data[2] = 0x0a000a0000000000ULL;
@@ -10466,7 +10469,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[121] = 0x0a000a0000000000ULL;
         data[126] = 0x0a000a1100000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 39, 127, [](uint64_t *& data) {
+    AttackTable(22137335185408ULL, 9357036318526133325ULL, 39, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x1400142241800000ULL;
         data[4] = 0x1400140200000000ULL;
@@ -10501,7 +10504,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[123] = 0x1400142000000000ULL;
         data[125] = 0x1400142201000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 41, 127, [](uint64_t *& data) {
+    AttackTable(44272556441600ULL, 9357036318526133325ULL, 41, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x2800284482010000ULL;
         data[2] = 0x2800280400000000ULL;
@@ -10536,7 +10539,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[120] = 0x2800280400000000ULL;
         data[125] = 0x2800280402000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 55, 127, [](uint64_t *& data) {
+    AttackTable(87995357200384ULL, 9357036318526133325ULL, 55, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x5000508804020100ULL;
         data[9] = 0x5000500000000000ULL;
@@ -10571,7 +10574,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[123] = 0x5000508804020000ULL;
         data[125] = 0x5000508000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 39, 127, [](uint64_t *& data) {
+    AttackTable(35253226045952ULL, 9357036318526133325ULL, 39, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0xa000a01008040201ULL;
         data[8] = 0xa000a00000000000ULL;
@@ -10606,7 +10609,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[125] = 0xa000a00000000000ULL;
         data[126] = 0xa000a00000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 40, 127, [](uint64_t *& data) {
+    AttackTable(70506452091904ULL, 9357036318526133325ULL, 40, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x4000402010080402ULL;
         data[8] = 0x4000400000000000ULL;
@@ -10641,7 +10644,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[125] = 0x4000400000000000ULL;
         data[126] = 0x4000400000000000ULL;
     }),
-    AttackTable(16387092464288213399ULL, 52, 255, [](uint64_t *& data) {
+    AttackTable(567382630219776ULL, 16387092464288213399ULL, 52, 255, [](uint64_t *& data) {
         data = new uint64_t [251]();
         data[0] = 0x0002040810204080ULL;
         data[6] = 0x0002000000000000ULL;
@@ -10708,7 +10711,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[246] = 0x0002000000000000ULL;
         data[250] = 0x0002040000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
+    AttackTable(1134765260406784ULL, 9357036318526133325ULL, 44, 127, [](uint64_t *& data) {
         data = new uint64_t [123]();
         data[0] = 0x0005081020408000ULL;
         data[2] = 0x0005080000000000ULL;
@@ -10743,7 +10746,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[114] = 0x0005080000000000ULL;
         data[122] = 0x0005080000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(2832480465846272ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x000a112040800000ULL;
         data[2] = 0x000a000000000000ULL;
@@ -10778,7 +10781,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[121] = 0x000a000000000000ULL;
         data[126] = 0x000a110000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(5667157807464448ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x0014224180000000ULL;
         data[4] = 0x0014020000000000ULL;
@@ -10813,7 +10816,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[123] = 0x0014200000000000ULL;
         data[125] = 0x0014220100000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
+    AttackTable(11333774449049600ULL, 9357036318526133325ULL, 49, 127, [](uint64_t *& data) {
         data = new uint64_t [126]();
         data[0] = 0x0028448201000000ULL;
         data[2] = 0x0028040000000000ULL;
@@ -10848,7 +10851,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[120] = 0x0028040000000000ULL;
         data[125] = 0x0028040200000000ULL;
     }),
-    AttackTable(6108988338655542853ULL, 50, 127, [](uint64_t *& data) {
+    AttackTable(22526811443298304ULL, 6108988338655542853ULL, 50, 127, [](uint64_t *& data) {
         data = new uint64_t [125]();
         data[0] = 0x0050880402010000ULL;
         data[9] = 0x0050880000000000ULL;
@@ -10883,7 +10886,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[123] = 0x0050880402000000ULL;
         data[124] = 0x0050880000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
+    AttackTable(9024825867763712ULL, 9357036318526133325ULL, 47, 127, [](uint64_t *& data) {
         data = new uint64_t [127]();
         data[0] = 0x00a0100804020100ULL;
         data[8] = 0x00a0000000000000ULL;
@@ -10918,7 +10921,7 @@ const AttackTable _DIAG_ATTACKS[64] = {
         data[125] = 0x00a0000000000000ULL;
         data[126] = 0x00a0000000000000ULL;
     }),
-    AttackTable(9357036318526133325ULL, 48, 255, [](uint64_t *& data) {
+    AttackTable(18049651735527936ULL, 9357036318526133325ULL, 48, 255, [](uint64_t *& data) {
         data = new uint64_t [255]();
         data[0] = 0x0040201008040201ULL;
         data[6] = 0x0040200000000000ULL;
@@ -11014,6 +11017,14 @@ template<> struct Attacks<AttacksType::Diag>
     INLINE static uint64_t get(int square, uint64_t mask) noexcept
     {
         return impl::_DIAG_ATTACKS[square][mask];
+    }
+};
+
+template<> struct Attacks<AttacksType::Rook>
+{
+    INLINE static uint64_t get(int square, uint64_t mask) noexcept
+    {
+        return impl::_FILE_ATTACKS[square][mask] | impl::_RANK_ATTACKS[square][mask];
     }
 };
 } /* namespace chess */

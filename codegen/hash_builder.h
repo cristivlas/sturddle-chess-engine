@@ -64,7 +64,7 @@ namespace
             std::vector<std::string> _init_funcs;
             std::vector<uint64_t> _mul;
             std::vector<size_t> _shift;
-            std::vector<size_t> _mask;
+            std::vector<size_t> _tblmask;
         };
 
     public:
@@ -81,7 +81,7 @@ namespace
             g._hash_funcs.emplace_back(hf);
             g._mul.emplace_back(m);
             g._shift.emplace_back(s);
-            g._mask.emplace_back(pow(2, ceil(log2(data.size()))) - 1);
+            g._tblmask.emplace_back(pow(2, ceil(log2(data.size()))) - 1);
 
             _hash_funcs.emplace(hf, _hash_funcs.size());
             _hash_funcs_index.emplace(_hash_funcs[hf], hf);
@@ -116,32 +116,37 @@ namespace
             os << "{\n";
         #if VARIABLE_STRATEGY
             os << "    const int _strategy = -1;\n";
+            os << "    const uint64_t _pcsmask;\n";
         #else
+            os << "    const uint64_t _pcsmask;\n";
             os << "    const uint64_t _mul;\n";
             os << "    const size_t _shift;\n";
-            os << "    const size_t _mask;\n";
-        #endif
+            os << "    const size_t _tblmask;\n";
+        #endif /* VARIABLE_STRATEGY */
             os << "\n";
             os << "public:\n";
         #if VARIABLE_STRATEGY
-            os << "    template<typename F> AttackTable(int s, F init)\n";
+            os << "    template<typename F> AttackTable(int s, uint64_t mask, F init)\n";
             os << "        : _strategy(s)\n";
+            os << "        , _pcsmask(mask)\n";
         #else
-            os << "    template<typename F> AttackTable(uint64_t mul, size_t shift, size_t mask, F init)\n";
-            os << "        : _mul(mul)\n";
+            os << "    template<typename F>\n";
+            os << "    AttackTable(uint64_t mask, uint64_t mul, size_t shift, size_t tblmask, F init)\n";
+            os << "        : _pcsmask(mask)\n";
+            os << "        , _mul(mul)\n";
             os << "        , _shift(shift)\n";
-            os << "        , _mask(mask)\n";
-        #endif
+            os << "        , _tblmask(tblmask)\n";
+        #endif /* VARIABLE_STRATEGY */
             os << "    {\n";
             os << "        init(_data);\n";
             os << "    }\n\n";
-            os << "    INLINE uint64_t operator[] (uint64_t mask) const\n";
+            os << "    INLINE uint64_t operator[] (uint64_t occupancy) const\n";
             os << "    {\n";
         #if VARIABLE_STRATEGY
-            os << "        return _data[chess::impl::hash(_strategy, mask)];\n";
+            os << "        return _data[chess::impl::hash(_strategy, occupancy & _pcsmask)];\n";
         #else
-            os << "        return _data[((mask * _mul) >> _shift) & _mask];\n";
-        #endif
+            os << "        return _data[(((occupancy & _pcsmask) * _mul) >> _shift) & _tblmask];\n";
+        #endif /* VARIABLE_STRATEGY */
             os << "    }\n\n";
             os << "    uint64_t* _data = nullptr;\n";
             os << "};\n\n";
@@ -155,7 +160,7 @@ namespace
                 os << "const AttackTable " << elem.first;
                 os << "[" << group._hash_funcs.size() << "] = {\n";
 
-                write(group, os);
+                write(elem.first, group, os);
 
                 os << "};\n\n";
             }
@@ -165,14 +170,20 @@ namespace
             os << "/* Template specializations */\n";
             os << "/************************************************************/\n";
 
-            std::unordered_map<std::string, std::string> type = {
+            static const std::unordered_map<std::string, std::string> type = {
                 { "_FILE_ATTACKS", "AttacksType::File" },
                 { "_RANK_ATTACKS", "AttacksType::Rank" },
-                { "_DIAG_ATTACKS", "AttacksType::Diag" }
+                { "_DIAG_ATTACKS", "AttacksType::Diag" },
             };
 
             for (const auto& elem : _groups)
             {
+                os << "\ntemplate<> struct Attacks<" << type.at(elem.first) << ">\n";
+                os << "{\n";
+                os << "    INLINE static uint64_t get(int square, uint64_t mask) noexcept\n";
+                os << "    {\n";
+
+            #if VARIABLE_STRATEGY
                 /* hack: see if all hash funcs used by attack tables group have index 0 */
                 int hash_func_index = 0;
 
@@ -184,11 +195,6 @@ namespace
                         break;
                 }
 
-                os << "\ntemplate<> struct Attacks<" << type[elem.first] << ">\n";
-                os << "{\n";
-                os << "    INLINE static uint64_t get(int square, uint64_t mask) noexcept\n";
-                os << "    {\n";
-
                 if (hash_func_index == 0)
                 {
                     /* can bypass switch(_strategy) */
@@ -196,6 +202,7 @@ namespace
                     os << _hash_funcs_index.at(0) << "(mask)];\n";
                 }
                 else
+            #endif /* VARIABLE_STRATEGY */
                 {
                     os << "        return impl::" << elem.first << "[square][mask];\n";
                 }
@@ -203,22 +210,41 @@ namespace
                 os << "};\n";
             }
 
+            /*
+             * Synthesize BB_ROOK_ATTACKS
+             */
+            os << "\ntemplate<> struct Attacks<AttacksType::Rook>\n";
+            os << "{\n";
+            os << "    INLINE static uint64_t get(int square, uint64_t mask) noexcept\n";
+            os << "    {\n";
+            os << "        return impl::_FILE_ATTACKS[square][mask] | impl::_RANK_ATTACKS[square][mask];\n";
+            os << "    }\n";
+            os << "};\n";
+
             os << "} /* namespace chess */\n";
 
             std::clog << "\nTotal tables = " << _data_size / 1024 << " KiB\n";
         }
 
     private:
-        void write(const Group& g, std::ostream& os) const
+        void write(const std::string& name, const Group& g, std::ostream& os) const
         {
+            static const std::unordered_map<std::string, const chess::AttackMasks*> mask = {
+                { "_FILE_ATTACKS", &chess::BB_FILE_MASKS },
+                { "_RANK_ATTACKS", &chess::BB_RANK_MASKS },
+                { "_DIAG_ATTACKS", &chess::BB_DIAG_MASKS },
+            };
+
             for (size_t i = 0; i != g._hash_funcs.size(); ++i)
             {
             #if VARIABLE_STRATEGY
                 const auto index = _hash_funcs.at(g._hash_funcs[i]);
-                os << "    AttackTable(" << index << ", " << g._init_funcs[i] << "),\n";
+                os << "    AttackTable(" << index << ", ";
+                os << (*mask.at(name))[i] << "ULL, " << g._init_funcs[i] << "),\n";
             #else
-                os << "    AttackTable(" << g._mul[i] << "ULL, " << g._shift[i];
-                os << ", " << g._mask[i] << ", " << g._init_funcs[i] << "),\n";
+                os << "    AttackTable(" << (*mask.at(name))[i] << "ULL, ";
+                os << g._mul[i] << "ULL, " << g._shift[i] << ", ";
+                os << g._tblmask[i] << ", " << g._init_funcs[i] << "),\n";
             #endif
             }
         }

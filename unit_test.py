@@ -347,7 +347,7 @@ test_static_exchanges()
 test_zobrist()
 test_forks()
 
-#This test requires compiling with MOBILITY_TUNING_ENABLED and TUNING_ENABLED
+#This test requires compiling with MOBILITY_TUNING_ENABLED
 #test_mobility()
 
 test_connected_pawns()

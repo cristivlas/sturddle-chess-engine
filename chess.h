@@ -558,20 +558,11 @@ namespace chess
                 attackers |= queens_and_bishops & magic_bits_attacks.Bishop(occupied_mask, square);
     #else
             if (const auto queens_and_rooks = queens | rooks)
-            {
-                const auto rank_pieces = BB_RANK_MASKS[square] & occupied_mask;
-                const auto file_pieces = BB_FILE_MASKS[square] & occupied_mask;
-
-                attackers |=
-                    (queens_and_rooks & BB_RANK_ATTACKS.get(square, rank_pieces)) |
-                    (queens_and_rooks & BB_FILE_ATTACKS.get(square, file_pieces));
-            }
+                attackers |= queens_and_rooks & BB_ROOK_ATTACKS.get(square, occupied_mask);
 
             if (const auto queens_and_bishops = queens | bishops)
-            {
-                const auto diag_pieces = BB_DIAG_MASKS[square] & occupied_mask;
-                attackers |= (queens_and_bishops & BB_DIAG_ATTACKS.get(square, diag_pieces));
-            }
+                attackers |= queens_and_bishops & BB_DIAG_ATTACKS.get(square, occupied_mask);
+
     #endif /* !USE_MAGIC_BITS */
 
             return attackers & occupied_co(color);
@@ -690,15 +681,11 @@ namespace chess
                 mask |= magic_bits_attacks.Rook(occupied, square);
     #else
             if ((bb_square & bishops) || (bb_square & queens))
-            {
-                mask = BB_DIAG_ATTACKS.get(square, BB_DIAG_MASKS[square] & occupied);
-            }
+                mask = BB_DIAG_ATTACKS.get(square, occupied);
 
             if ((bb_square & rooks) || (bb_square & queens))
-            {
-                mask |= BB_RANK_ATTACKS.get(square, BB_RANK_MASKS[square] & occupied) |
-                        BB_FILE_ATTACKS.get(square, BB_FILE_MASKS[square] & occupied);
-            }
+                mask |= BB_ROOK_ATTACKS.get(square, occupied);
+
     #endif /* !USE_MAGIC_BITS */
             return mask;
         }
@@ -778,7 +765,7 @@ namespace chess
     struct BoardPosition : public Position
     {
         Bitboard castling_rights = 0;
-        uint8_t _padding[6] = { 0 };
+
         Square en_passant_square = UNDEFINED;
         Color turn = WHITE;
 
@@ -955,8 +942,8 @@ namespace chess
         #if USE_MAGIC_BITS
                 return magic_bits_attacks.Rook(occupied, rook) & rook_mask;
         #else
-                return (BB_RANK_ATTACKS.get(rook, BB_RANK_MASKS[rook] & occupied) & rook_mask) ||
-                       (BB_FILE_ATTACKS.get(rook, BB_FILE_MASKS[rook] & occupied) & rook_mask);
+                return (BB_RANK_ATTACKS.get(rook, occupied) & rook_mask)
+                    || (BB_FILE_ATTACKS.get(rook, occupied) & rook_mask);
         #endif
             });
         }

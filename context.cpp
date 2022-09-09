@@ -203,8 +203,10 @@ namespace search
         ctxt->_parent = _parent;
         ctxt->_ply = ply;
         ctxt->_prev = _prev;
-        ctxt->_statebuf = state();
-        ctxt->_state = &ctxt->_statebuf;
+
+        ctxt->_state = &buffer._state;
+        *ctxt->_state = this->state();
+
         ctxt->_move = _move;
         ctxt->_excluded = _excluded;
         ctxt->_tt_entry = _tt_entry;
@@ -301,9 +303,7 @@ namespace search
             if (!next_ctxt->is_null_move())
             {
                 ASSERT(next_ctxt->_move._state == next_ctxt->_state);
-            #if LAZY_STATE_COPY
-                next_ctxt->copy_move_state();
-            #endif
+
                 _best_move = next_ctxt->_move;
             }
         }

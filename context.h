@@ -252,7 +252,6 @@ namespace search
         bool        can_reduce() const;
 
         int64_t     check_time_and_update_nps(); /* return elapsed milliseconds */
-        void        copy_move_state();
 
         int         depth() const { return _max_depth - _ply; }
         static int  elapsed_milliseconds();
@@ -384,7 +383,7 @@ namespace search
 
         BaseMove            _counter_move;
         mutable int         _can_prune = -1;
-        State               _statebuf;
+
         bool                _leftmost = false;
         mutable int         _repetitions = -1;
         MoveMaker           _move_maker;
@@ -409,9 +408,10 @@ namespace search
      */
     static_assert(std::is_trivially_destructible<Context>::value);
 
-    struct ContextBuffer
+    struct alignas(64) ContextBuffer
     {
         std::array<uint8_t, sizeof(Context)> _mem = { 0 };
+        State _state; /* for null-move and clone() */
 
         Context* as_context() { return reinterpret_cast<Context*>(&_mem[0]); }
         const Context* as_context() const { return reinterpret_cast<const Context*>(&_mem[0]); }
@@ -580,17 +580,6 @@ namespace search
             && (_move.from_square() != _parent->_capture_square)
             && !is_recapture()
             && !state().is_check();
-    }
-
-
-    INLINE void Context::copy_move_state()
-    {
-        ASSERT(_move);
-        ASSERT(_move._state);
-
-        _statebuf = *_move._state;
-        _state = &_statebuf;
-        _move._state = _state;
     }
 
 
@@ -892,12 +881,7 @@ namespace search
             ASSERT(ctxt->_is_null_move == false);
 
             ctxt->_move = *move;
-
-        #if LAZY_STATE_COPY
             ctxt->_state = move->_state;
-        #else
-            ctxt->copy_move_state();
-        #endif /* LAZY_STATE_COPY */
 
             ctxt->_leftmost = is_leftmost() && next_move_index() == 1;
         }
@@ -906,8 +890,9 @@ namespace search
             ASSERT(null_move);
             ASSERT(!ctxt->_move);
 
-            state().clone_into(ctxt->_statebuf);
-            ctxt->_state = &ctxt->_statebuf;
+            ASSERT(ctxt->_state);
+            state().clone_into(*ctxt->_state);
+
             ctxt->_state->_check = { 0, 0 };
             flip(ctxt->_state->turn);
             ctxt->_is_null_move = true;
@@ -1040,12 +1025,18 @@ namespace search
     {
         ASSERT(_ply < PLY_MAX);
 
-        auto* buffer = _context_stacks[tid()][_ply].as_context();
+        auto& buffer = _context_stacks[tid()][_ply];
 
         if constexpr(Construct)
-            return new (buffer) Context;
+        {
+            auto ctxt = new (buffer.as_context()) Context;
+            ctxt->_state = &buffer._state;
+            return ctxt;
+        }
         else
-            return buffer;
+        {
+            return buffer.as_context();
+        }
     }
 
 
@@ -1278,6 +1269,7 @@ namespace search
         {
             /* assign state buffer */
             ASSERT(_state_index < Context::states(ctxt.tid(), ctxt._ply).size());
+
             move._state = &Context::states(ctxt.tid(), ctxt._ply)[_state_index++];
         }
         else

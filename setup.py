@@ -48,7 +48,6 @@ else:
     args.append('-Wno-unused-parameter')
     args.append('-Wno-unused-variable')
     args.append('-DCYTHON_WITHOUT_ASSERTIONS')
-    args.append('-DLAZY_STATE_COPY')
     #args.append('-fprofile-sample-use=code.prof')
 
     cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)

@@ -28,6 +28,7 @@ namespace chess
         Diag,
         File,
         Rank,
+        Rook,
     };
 
     template<AttacksType> struct Attacks {};
@@ -47,5 +48,6 @@ namespace chess
     static Attacks<AttacksType::Diag> BB_DIAG_ATTACKS;
     static Attacks<AttacksType::File> BB_FILE_ATTACKS;
     static Attacks<AttacksType::Rank> BB_RANK_ATTACKS;
+    static Attacks<AttacksType::Rook> BB_ROOK_ATTACKS;
 
 } /* namespace chess */
