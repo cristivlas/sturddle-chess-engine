@@ -238,7 +238,7 @@ namespace search
             return Proxy();
         }
 
-        Proxy lookup_write(const chess::State& state, int depth, int value)
+        Proxy lookup_write(const chess::State& state, int depth)
         {
             const auto h = state.hash();
             size_t index = h % _data.size();
@@ -272,9 +272,9 @@ namespace search
                 if (p->_age != _clock)
                     return p;
 
-                if (depth >= p->_depth && p->_value < value)
+                if (depth >= p->_depth)
                 {
-                #if 0
+                #if 1
                     index = i;
                     depth = p->_depth;
                 #else

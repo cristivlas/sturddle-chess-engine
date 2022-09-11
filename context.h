@@ -147,14 +147,14 @@ namespace search
         MoveMaker(const MoveMaker&) = delete;
         MoveMaker& operator=(const MoveMaker&) = delete;
 
-        int         _count = -1;
-        int         _current = -1;
-        int         _phase = 0; /* move ordering phase */
         bool        _group_quiet_moves = false;
         bool        _have_move = false;
         bool        _have_quiet_moves = false;
         bool        _have_pruned_moves = false;
         bool        _need_sort = false;
+        int8_t      _phase = 0; /* move ordering phase */
+        int         _count = -1;
+        int         _current = -1;
         size_t      _state_index = 0;
     };
 
@@ -217,7 +217,7 @@ namespace search
         bool        _is_pv = false;
         bool        _is_retry = false;
         bool        _is_singleton = false;
-        bool        _is_terminal = false; /* debug only */
+
         bool        _multicut_allowed = true;
         bool        _null_move_allowed[2] = { true, true };
         RETRY       _retry_above_alpha = RETRY::None;
@@ -382,10 +382,10 @@ namespace search
         int repeated_count(const State&) const;
 
         BaseMove            _counter_move;
-        mutable int         _can_prune = -1;
+        mutable int8_t      _can_prune = -1;
 
+        mutable int8_t      _repetitions = -1;
         bool                _leftmost = false;
-        mutable int         _repetitions = -1;
         MoveMaker           _move_maker;
 
         TranspositionTable* _tt = nullptr;

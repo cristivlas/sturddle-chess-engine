@@ -176,6 +176,8 @@ namespace search
     /* static */ void Context::init()
     {
         _init();
+
+        /* std::cout << sizeof(Context) << "/" << sizeof(ContextBuffer) << "\n"; */
     }
 
 
@@ -1181,7 +1183,6 @@ namespace search
                 else if (state().is_endgame()
                     || (_ply < TACTICAL_LOW_DEPTH && abs(eval) < TACTICAL_EVAL_MARGIN))
                 {
-                    eval -= CHECK_BONUS * is_check();
                     eval += SIGN[turn] * eval_tactical(*this);
 
                     ASSERT(eval < SCORE_MAX);

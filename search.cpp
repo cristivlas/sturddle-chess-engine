@@ -374,7 +374,7 @@ void TranspositionTable::store(Context& ctxt, score_t alpha, int depth)
     update_stats(ctxt);
 #endif /* EXTRA_STATS */
 
-    if (auto p = _table->lookup_write(ctxt.state(), depth, ctxt._score))
+    if (auto p = _table->lookup_write(ctxt.state(), depth))
     {
         store(ctxt, *p, alpha, depth);
     }
@@ -729,7 +729,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
     if (ctxt.is_leaf())
     {
-        ctxt._is_terminal = true;
         ctxt._score = ctxt.evaluate();
 
         ASSERT(ctxt._score > SCORE_MIN);

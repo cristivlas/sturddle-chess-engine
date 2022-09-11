@@ -203,21 +203,21 @@ namespace chess
 
 
     template<typename T>
-    INLINE void add_move(T& container, Square from_square, Square to_square, PieceType promo)
+    static INLINE void add_move(T& container, Square from_square, Square to_square, PieceType promo)
     {
         container.emplace_back(from_square, to_square, promo);
     }
 
 
     template<typename T>
-    INLINE void add_move(T& container, Square from_square, Square to_square)
+    static INLINE void add_move(T& container, Square from_square, Square to_square)
     {
         container.emplace_back(from_square, to_square);
     }
 
 
     template<typename T>
-    INLINE void add_pawn_moves(T& moves_list, Square from_square, Square to_square)
+    static INLINE void add_pawn_moves(T& moves_list, Square from_square, Square to_square)
     {
         if ((square_rank(to_square) == 0) || (square_rank(to_square) == 7))
         {
@@ -390,10 +390,7 @@ namespace chess
 
 
     const MovesList&
-    State::generate_pseudo_legal_moves(
-        MovesList&  moves_list,
-        Bitboard    to_mask,
-        Bitboard    from_mask) const
+    State::generate_pseudo_legal_moves(MovesList& moves_list, Bitboard to_mask, Bitboard from_mask) const
     {
         moves_list.clear();
 

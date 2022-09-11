@@ -227,7 +227,10 @@ namespace chess
     };
 
 
-#define DEFAULT_MOBILITY_WEIGHTS { 0, 5, 1, 8, 7, 4, 1 }
+//#define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 2, 1, 3, 2 }
+//#define DEFAULT_MOBILITY_WEIGHTS { 0, 5, 1, 8, 7, 4, 1 }
+#define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 0, 7, 6, 5, 0 }
+
 
 #if MOBILITY_TUNING_ENABLED
     extern int MOBILITY[7];
@@ -262,10 +265,7 @@ namespace chess
 #elif (__GNUC__)
         return (63 - __builtin_clzll(v));
 #else
-        int r = 0;
-        while (v >>= 1)
-            ++r;
-        return r;
+    #error "unsupported"
 #endif /* !__GNUC__ */
     }
 
@@ -320,7 +320,7 @@ namespace chess
     {
         while (bb)
         {
-            auto i = msb(bb);
+            const auto i = msb(bb);
             bb &= ~(1ULL << i);
 
             f(static_cast<Square>(i));
@@ -548,7 +548,7 @@ namespace chess
          */
         INLINE Bitboard attacker_pieces_mask(Color color, Square square, Bitboard occupied_mask) const
         {
-            auto attackers = (knights & BB_KNIGHT_ATTACKS[square]);
+            auto attackers = knights & BB_KNIGHT_ATTACKS[square];
 
     #if USE_MAGIC_BITS
             if (const auto queens_and_rooks = queens | rooks)
@@ -785,12 +785,12 @@ namespace chess
         }
     };
 
-    static_assert(sizeof(BoardPosition) % 8 == 0, "8-byte alignment expected");
 
     INLINE bool operator==(const BoardPosition& lhs, const BoardPosition& rhs)
     {
         return lhs.equals(rhs);
     }
+
 
     INLINE bool operator!=(const BoardPosition& lhs, const BoardPosition& rhs)
     {
@@ -1013,7 +1013,7 @@ namespace chess
             return WEIGHT[piece_type];
         }
 
-        mutable std::array<int, 2> _check = {-1, -1};
+        mutable std::array<int8_t, 2> _check = {-1, -1};
         mutable uint64_t _hash = 0;
 
     private:

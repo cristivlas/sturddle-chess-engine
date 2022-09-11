@@ -91,7 +91,10 @@ namespace
 
         void write(std::ostream& os)
         {
-            os << "/* Auto-generated attack tables */\n";
+            os << "/*\n";
+            os << " * Auto-generated attack tables (see codegen/).\n";
+            os << " * https://www.chessprogramming.org/Magic_Bitboards\n";
+            os << " */\n";
             os << "#pragma once\n\n";
             os << "#include <cstdint>\n";
             os << "#include <cstdlib>\n";
@@ -123,22 +126,22 @@ namespace
             os << "    const size_t _shift;\n";
             os << "    const size_t _tblmask;\n";
         #endif /* VARIABLE_STRATEGY */
+            os << "    const uint64_t* const _data;\n";
             os << "\n";
             os << "public:\n";
         #if VARIABLE_STRATEGY
-            os << "    template<typename F> AttackTable(int s, uint64_t mask, F init)\n";
+            os << "    AttackTable(int s, uint64_t mask, const uint64_t* data)\n";
             os << "        : _strategy(s)\n";
             os << "        , _pcsmask(mask)\n";
         #else
-            os << "    template<typename F>\n";
-            os << "    AttackTable(uint64_t mask, uint64_t mul, size_t shift, size_t tblmask, F init)\n";
+            os << "    AttackTable(uint64_t mask, uint64_t mul, size_t shift, size_t tblmask, const uint64_t* data)\n";
             os << "        : _pcsmask(mask)\n";
             os << "        , _mul(mul)\n";
             os << "        , _shift(shift)\n";
             os << "        , _tblmask(tblmask)\n";
         #endif /* VARIABLE_STRATEGY */
+            os << "        , _data(data)\n";
             os << "    {\n";
-            os << "        init(_data);\n";
             os << "    }\n\n";
             os << "    INLINE uint64_t operator[] (uint64_t occupancy) const\n";
             os << "    {\n";
@@ -147,8 +150,7 @@ namespace
         #else
             os << "        return _data[(((occupancy & _pcsmask) * _mul) >> _shift) & _tblmask];\n";
         #endif /* VARIABLE_STRATEGY */
-            os << "    }\n\n";
-            os << "    uint64_t* _data = nullptr;\n";
+            os << "    }\n";
             os << "};\n\n";
 
             for (const auto& elem : _groups)
@@ -240,11 +242,11 @@ namespace
             #if VARIABLE_STRATEGY
                 const auto index = _hash_funcs.at(g._hash_funcs[i]);
                 os << "    AttackTable(" << index << ", ";
-                os << (*mask.at(name))[i] << "ULL, " << g._init_funcs[i] << "),\n";
+                os << (*mask.at(name))[i] << "ULL, " << g._init_funcs[i] << "),\n\n";
             #else
                 os << "    AttackTable(" << (*mask.at(name))[i] << "ULL, ";
                 os << g._mul[i] << "ULL, " << g._shift[i] << ", ";
-                os << g._tblmask[i] << ", " << g._init_funcs[i] << "),\n";
+                os << g._tblmask[i] << ", " << g._init_funcs[i] << "),\n\n";
             #endif
             }
         }
@@ -253,20 +255,18 @@ namespace
         {
             std::ostringstream os;
 
-            os << "[](uint64_t *& data) {\n";
-            os << "        data = new uint64_t [" << data.size() << "]();\n";
-
+            os << "[]()->const uint64_t* {\n";
+            os << "        alignas(8) static constexpr uint64_t d[] = {";
             for (size_t i = 0; i != data.size(); ++i)
             {
-                if (data[i] == 0)
-                    continue;
+                if ((i + 1) % 4 == 1)
+                    os << "\n            ";
 
-                os << "        data[" << i << "] = " << "0x" << std::hex;
-
-                os << std::setw(16) << std::setfill<char>('0') << data[i];
-                os << std::dec << "ULL;\n";
+                os << " 0x" << std::hex << std::setw(16) << std::setfill<char>('0') << data[i] << ",";
             }
-            os << "    }";
+            os << "\n        };";
+            os << "\n        return d;\n    }()";
+
             return os.str();
         }
 
@@ -519,11 +519,8 @@ namespace
         {
             const auto i = Mixin::hash(key);
             _max_index = std::max<size_t>(_max_index, i);
-        #if 0
-            return _max_table_size >= 4096 ? i & (_max_table_size - 1) : i;
-        #else
+
             return i & (_max_table_size - 1);
-        #endif
         }
 
         void write_hash_template(CodeGenerator& code) const override
@@ -608,12 +605,42 @@ namespace
         void add_multipliers(size_t table_size)
         {
             add_multipliers(table_size, std::integer_sequence<uint64_t,
-                0x81dadef4bc2dd44d,
+                0x24202808080810,
+                0xa01200443a090402,
+                0x1002080800060a00,
+                0x1004020809409102,
+                0xa208018c08020142,
+                0x4404004010200,
+                0x204016024100401,
+                0x204222022c10410,
+                0x220112088080800,
+                0x40018020120220,
+                0x2002000420842000,
+                0x8824200910800,
+#if 0
+                0x2010000e00b20060,
+                0x2223440021040c00,
+                0x1011090400801,
+                0x400084048001000,
+                0x80021081010102,
+                0x3404102090c20200,
+                0x4001020080006403,
+                0x41108881004a0100,
+                0x4900011016100900,
+                0x4a48000408480040,
+                0x14840004802000,
                 0x54c77c86f6913e45,
-                0x7fb5d329728ea185,
-                0xe36aa5c613612997,
-                0x64dd81482cbd31d7,
-                0>{});
+                0x884029888090060,
+                0x1010082a4020221,
+                0x6841020d30461020,
+                0x20021200451400,
+#endif
+                0x20242038024080,
+                0x8040000802080628,
+                0x210c0420814205,
+                0x820420460402a080,
+                0x84002804001800a1
+            >{});
         }
 
     public:
@@ -627,7 +654,7 @@ namespace
             for (size_t table_size : { 32, 64 })
                 add_group_reversed<Identity>(table_size);
 
-            for (size_t table_size : { 128, 256, 512, 2048, 4096 })
+            for (size_t table_size : { 32, 64, 128, 256, 512 })
                 add_multipliers(table_size);
         }
 
