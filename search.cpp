@@ -795,9 +795,13 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         int move_count = 0, futility = -1;
 
         /* iterate over moves */
-        while (auto next_ctxt = ctxt.next(std::exchange(null_move, false), futility, move_count))
+        while (auto next_ctxt = ctxt.next(null_move, futility, move_count))
         {
-            if (!next_ctxt->is_null_move())
+            if (next_ctxt->is_null_move())
+            {
+                null_move = false;
+            }
+            else
             {
             #if EXTRA_STATS
                 table._history_counters += next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS;
