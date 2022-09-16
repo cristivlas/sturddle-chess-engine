@@ -171,7 +171,7 @@ void NNUE::init()
     /*
      * TODO: modify nnue_init to return bool
      */
-    nnue_init("nn-04cf2b4ed1da.nnue");
+    nnue_init("nn-cb26f10b1fd9.nnue");
 }
 
 
@@ -1190,6 +1190,20 @@ namespace search
     }
 
 
+    score_t Context::evaluate_nnue(const State& state) const
+    {
+        auto& pieces = _nnue_scratch[tid()].pieces;
+        auto& squares = _nnue_scratch[tid()].squares;
+        _nnue_convert(state, pieces, squares);
+
+        /* nnue-probe colors are inverted */
+        auto eval = nnue_evaluate(!state.turn, pieces, squares);
+        ASSERT(eval == NNUE::eval(state));
+
+        return eval;
+    }
+
+
     /*
      * Static evaluation has three components:
      * 1. base = material + pst + mobility
@@ -1202,9 +1216,7 @@ namespace search
 
         if (eval == SCORE_MIN)
         {
-        #if 0
             _tt->_eval_depth = _ply;
-
             /* 1. Material + piece-squares + mobility */
             eval = state().eval();
 
@@ -1214,6 +1226,13 @@ namespace search
             if (abs(eval) < MATE_HIGH)
             {
                 eval += eval_fuzz();
+
+            #if USE_NNUE
+                if (abs(eval) <= HALF_WINDOW)
+                {
+                    return _tt_entry._eval = eval + evaluate_nnue(state());
+                }
+            #endif /* USE_NNUE */
 
                 const auto turn = state().turn;
 
@@ -1246,15 +1265,7 @@ namespace search
                     ASSERT(eval < SCORE_MAX);
                 }
             }
-        #else
-            auto& pieces = _nnue_scratch[tid()].pieces;
-            auto& squares = _nnue_scratch[tid()].squares;
-            _nnue_convert(state(), pieces, squares);
 
-            /* nnue-probe colors are inverted */
-            eval = nnue_evaluate(turn() == WHITE ? white : black, pieces, squares);
-            ASSERT(eval == NNUE::eval(state()));
-        #endif
             _tt_entry._eval = eval;
         }
 
@@ -1875,7 +1886,14 @@ namespace search
             else if (make_move<true>(ctxt, move, futility)) /* Phase == 4 */
             {
                 move._group = MoveOrder::LATE_MOVES;
+            #if 0
                 move._score = ctxt.history_score(move);
+            #else
+                move._score =
+                    ctxt.history_score(move) / (1 + HISTORY_LOW)
+                    + eval_material_and_piece_squares(*move._state)
+                    - eval_exchanges<true>(ctxt.tid(), move);
+            #endif
             }
         }
     }

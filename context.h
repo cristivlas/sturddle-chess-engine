@@ -279,6 +279,7 @@ namespace search
 
         /* Static evaluation */
         score_t     _evaluate();
+        score_t     evaluate_nnue(const State&) const;
 
         template<bool EvalCaptures = true> score_t evaluate();
 
