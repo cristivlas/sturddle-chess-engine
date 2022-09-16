@@ -232,8 +232,6 @@ namespace search
     {
         _init();
         NNUE::init();
-
-        /* std::cout << sizeof(Context) << "/" << sizeof(ContextBuffer) << "\n"; */
     }
 
 
@@ -1227,13 +1225,6 @@ namespace search
             {
                 eval += eval_fuzz();
 
-            #if USE_NNUE
-                if (abs(eval) <= HALF_WINDOW)
-                {
-                    return _tt_entry._eval = eval + evaluate_nnue(state());
-                }
-            #endif /* USE_NNUE */
-
                 const auto turn = state().turn;
 
                 if (state().is_endgame() && state().has_insufficient_material(turn))
@@ -1247,6 +1238,10 @@ namespace search
                         /* cannot do better than draw, but can do worse */
                         eval = std::min<score_t>(eval, 0);
                     }
+                }
+                else if (abs(eval) <= HALF_WINDOW)
+                {
+                    eval = evaluate_nnue(state());
                 }
                 /*
                  * 2. Tactical.
