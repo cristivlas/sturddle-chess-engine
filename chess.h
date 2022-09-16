@@ -628,6 +628,11 @@ namespace chess
             return _pieces[piece_type - 1];
         }
 
+        INLINE Bitboard pieces(PieceType piece_type) const
+        {
+            return _pieces[piece_type - 1];
+        }
+
         INLINE Bitboard pieces_mask(PieceType piece_type, Color color) const
         {
             return const_cast<Position*>(this)->pieces(piece_type) & occupied_co(color);

@@ -142,7 +142,11 @@ cdef extern from 'chess.h' namespace 'chess':
         PieceType piece_type_at(Square) const
 
 
-    cdef cppclass State(Position):
+    cdef cppclass BoardPosition(Position):
+        pass
+
+
+    cdef cppclass State(BoardPosition):
         State()
         Bitboard    castling_rights
         Square      en_passant_square
@@ -357,10 +361,17 @@ cdef class BoardState:
         return zobrist_hash(self._state)
 
 
+    cpdef int nnue(self):
+        return NNUE.eval(self._state)
+
+
 # ---------------------------------------------------------------------
 # context.h
 # ---------------------------------------------------------------------
 cdef extern from 'context.h':
+    #
+    # Get/set engine params via Python
+    #
     cdef cppclass Param:
         int val
         int min_val
@@ -371,6 +382,29 @@ cdef extern from 'context.h':
 
     map[string, int] _get_params() except+
     map[string, Param] _get_param_info() except+
+
+
+    cdef cppclass NNUE:
+        @staticmethod
+        int piece(PieceType, Color)
+
+        @staticmethod
+        int eval(const BoardPosition&)
+
+        @staticmethod
+        int eval_fen(const string& fen)
+
+#
+# Export nnue functions for testing.
+#
+def nnue_eval_board(board: chess.Board):
+    return BoardState(board).nnue()
+
+def nnue_eval_fen(fen):
+    return NNUE.eval_fen(fen.encode())
+
+cpdef int nnue_piece(PieceType pt, Color c):
+    return NNUE.piece(pt, c)
 
 
 cdef extern from 'search.h':
@@ -455,7 +489,6 @@ cdef extern from 'context.h' namespace 'search':
 
         Context*        next(bool, score_t, int)
         int             tid() const
-
 
 
 cpdef board_from_state(state: BoardState):

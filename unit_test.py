@@ -277,7 +277,6 @@ def test_mobility():
         assert mobility == expected, (id, mobility, f'expected={expected}')
 
 
-
 def test_connected_pawns():
     tests = [
         ('connected.01', '8/P5kp/3p2p1/3P4/2P2Pb1/6P1/4p2P/3rR1K1 w - -', chess.WHITE, 5),
@@ -336,6 +335,37 @@ def test_repetition():
     assert node.is_repeated()
 
 
+"""
+ wking=1, wqueen=2, wrook=3, wbishop= 4, wknight= 5, wpawn= 6,
+ bking=7, bqueen=8, brook=9, bbishop=10, bknight=11, bpawn=12,
+"""
+def test_nnue_piece_codes():
+    assert engine.nnue_piece(chess.KING, chess.WHITE) == 1
+    assert engine.nnue_piece(chess.QUEEN, chess.WHITE) == 2
+    assert engine.nnue_piece(chess.ROOK, chess.WHITE) == 3
+    assert engine.nnue_piece(chess.BISHOP, chess.WHITE) == 4
+    assert engine.nnue_piece(chess.KNIGHT, chess.WHITE) == 5
+    assert engine.nnue_piece(chess.PAWN, chess.WHITE) == 6
+    assert engine.nnue_piece(chess.KING, chess.BLACK) == 7
+    assert engine.nnue_piece(chess.QUEEN, chess.BLACK) == 8
+    assert engine.nnue_piece(chess.ROOK, chess.BLACK) == 9
+    assert engine.nnue_piece(chess.BISHOP, chess.BLACK) == 10
+    assert engine.nnue_piece(chess.KNIGHT, chess.BLACK) == 11
+    assert engine.nnue_piece(chess.PAWN, chess.BLACK) == 12
+
+
+def test_nnue_eval():
+    tests = [
+        chess.STARTING_FEN,
+        '3r4/1pk2p1N/p1n1p3/4Pq2/2Pp1b1Q/8/PP4PP/R1K1R3 w - - 0 2',
+        'r2r2k1/1pp2ppp/p2q1b2/3pN3/2PP4/PP1Q3P/5PP1/R3R1K1 b - - 0 22',
+        'r4rk1/1ppnbppp/p2q4/3pNb2/3P4/PP5P/2PNBPP1/R2QK2R w KQ - 5 14',
+    ]
+    for fen in tests:
+        eval = engine.nnue_eval_fen(fen)
+        assert eval == engine.nnue_eval_board(chess.Board(fen=fen))
+
+
 test_castling()
 test_castling_moves_generation()
 test_connected_rooks()
@@ -355,3 +385,6 @@ test_isolated_pawns()
 test_longest_pawn_sequence()
 
 test_repetition()
+
+test_nnue_piece_codes()
+test_nnue_eval()

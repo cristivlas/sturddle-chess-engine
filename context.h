@@ -44,6 +44,22 @@ extern void _set_param(const std::string&, int value, bool echo=false);
 extern std::map<std::string, int> _get_params();
 
 
+struct NNUE
+{
+    static void init();
+    static int eval(const chess::BoardPosition&);
+    static int eval_fen(const std::string& fen);
+
+    static INLINE constexpr int piece(chess::PieceType ptype, chess::Color color)
+    {
+        return 7 - ptype + 6 * (color == chess::BLACK);
+    }
+
+    int pieces[33];
+    int squares[33];
+};
+
+
 namespace search
 {
     using time = std::chrono::time_point<std::chrono::steady_clock>;
@@ -400,6 +416,7 @@ namespace search
         static std::vector<ContextStack>    _context_stacks;
         static std::vector<MoveStack>       _move_stacks;
         static std::vector<StateStack>      _state_stacks;
+        static std::vector<NNUE>            _nnue_scratch;
     };
 
 

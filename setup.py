@@ -9,13 +9,19 @@ sourcefiles = [
     'chess.cpp',
     'context.cpp',
     'search.cpp',
+    'nnue-probe/src/misc.cpp',
+    'nnue-probe/src/nnue.cpp',
 ]
 
 platform = sysconfig.get_platform()
 """
 Compiler args.
 """
-inc_dirs = ['-I./libpopcnt', '-I./magic-bits/include']
+inc_dirs = [
+    '-I./libpopcnt',
+    '-I./magic-bits/include',
+    '-I./nnue-probe/src',
+]
 
 link = []
 

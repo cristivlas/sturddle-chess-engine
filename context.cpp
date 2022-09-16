@@ -32,6 +32,7 @@
 #define CONFIG_IMPL
   #include "context.h"
 #undef CONFIG_IMPL
+#include "nnue.h"
 
 using namespace chess;
 using search::TranspositionTable;
@@ -139,6 +140,59 @@ std::map<std::string, int> _get_params()
 }
 
 
+
+/*****************************************************************************
+ *  NNUE
+ *****************************************************************************/
+static void
+_nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
+{
+    pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
+    pieces[1] = NNUE::piece(KING, BLACK); squares[1] = pos.king(BLACK);
+
+    int i = 2;
+    for (auto color : { BLACK, WHITE })
+        for (auto piece_type : { PAWN, KNIGHT, BISHOP, ROOK, QUEEN })
+            for_each_square(pos.pieces(piece_type) & pos.occupied_co(color), [&](Square s) {
+                pieces[i] = NNUE::piece(piece_type, color);
+                squares[i] = s;
+                ++i;
+            });
+
+    ASSERT(i < 33);
+
+    pieces[i] = 0;
+    squares[i] = 0;
+}
+
+
+void NNUE::init()
+{
+    /*
+     * TODO: modify nnue_init to return bool
+     */
+    nnue_init("nn-04cf2b4ed1da.nnue");
+}
+
+
+int NNUE::eval_fen(const std::string& fen)
+{
+    return nnue_evaluate_fen(fen.c_str());
+}
+
+
+int NNUE::eval(const chess::BoardPosition& pos)
+{
+    int pieces[33] = { 0 };
+    int squares[33] = { 0 };
+
+    _nnue_convert(pos, pieces, squares);
+
+    /* nnue-probe colors are inverted */
+    return nnue_evaluate(pos.turn == WHITE ? white : black, pieces, squares);
+}
+
+
 namespace search
 {
     /*---------------------------------------------------------------------
@@ -155,6 +209,7 @@ namespace search
     std::vector<Context::ContextStack> Context::_context_stacks(SMP_CORES);
     std::vector<Context::MoveStack> Context::_move_stacks(SMP_CORES);
     std::vector<Context::StateStack> Context::_state_stacks(SMP_CORES);
+    std::vector<NNUE> Context::_nnue_scratch(SMP_CORES);
 
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
@@ -176,6 +231,7 @@ namespace search
     /* static */ void Context::init()
     {
         _init();
+        NNUE::init();
 
         /* std::cout << sizeof(Context) << "/" << sizeof(ContextBuffer) << "\n"; */
     }
@@ -226,6 +282,7 @@ namespace search
             _context_stacks.resize(n_threads);
             _move_stacks.resize(n_threads);
             _state_stacks.resize(n_threads);
+            _nnue_scratch.resize(n_threads);
         }
     }
 
@@ -1145,6 +1202,7 @@ namespace search
 
         if (eval == SCORE_MIN)
         {
+        #if 0
             _tt->_eval_depth = _ply;
 
             /* 1. Material + piece-squares + mobility */
@@ -1188,7 +1246,15 @@ namespace search
                     ASSERT(eval < SCORE_MAX);
                 }
             }
+        #else
+            auto& pieces = _nnue_scratch[tid()].pieces;
+            auto& squares = _nnue_scratch[tid()].squares;
+            _nnue_convert(state(), pieces, squares);
 
+            /* nnue-probe colors are inverted */
+            eval = nnue_evaluate(turn() == WHITE ? white : black, pieces, squares);
+            ASSERT(eval == NNUE::eval(state()));
+        #endif
             _tt_entry._eval = eval;
         }
 
