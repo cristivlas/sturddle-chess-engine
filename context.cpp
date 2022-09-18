@@ -1215,6 +1215,12 @@ namespace search
         if (eval == SCORE_MIN)
         {
             _tt->_eval_depth = _ply;
+
+            if (_parent && abs(_parent->state().simple_score) < HALF_WINDOW)
+            {
+                return (_tt_entry._eval = evaluate_nnue(state()));
+            }
+
             /* 1. Material + piece-squares + mobility */
             eval = state().eval();
 
@@ -1238,10 +1244,6 @@ namespace search
                         /* cannot do better than draw, but can do worse */
                         eval = std::min<score_t>(eval, 0);
                     }
-                }
-                else if (abs(eval) < HALF_WINDOW)
-                {
-                    eval = evaluate_nnue(state());
                 }
                 /*
                  * 2. Tactical.
