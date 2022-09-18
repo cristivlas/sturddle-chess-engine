@@ -4,3 +4,6 @@
 [submodule "magic-bits"]
 	path = magic-bits
 	url = https://github.com/cristivlas/magic-bits.git
+[submodule "nnue-probe"]
+	path = nnue-probe
+	url = https://github.com/cristivlas/nnue-probe.git
