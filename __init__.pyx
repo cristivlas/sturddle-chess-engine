@@ -1194,12 +1194,12 @@ def test_incremental_updates(fen):
             raise AssertionError((fen, move, eval, eval_next, eval_incr))
 
 
+NodeContext(chess.Board()) # dummy context initializes static cpython methods
+
 # ---------------------------------------------------------------------
 # initialize c++ global data structures
 # ---------------------------------------------------------------------
 Context.init()
-
-NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0

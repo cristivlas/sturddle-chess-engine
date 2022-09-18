@@ -23,6 +23,7 @@
  * Move ordering, board state evaluation, and other stuff
  * pertaining to the Context of the node being searched.
  */
+#include <cerrno>
 #include <chrono>
 #include <iomanip>
 #include <iterator>
@@ -34,7 +35,12 @@
 #undef CONFIG_IMPL
 
 #if WITH_NNUE
+  #include "auto.h"
   #include "nnue.h"
+
+  bool USE_NNUE = true;
+#else
+  bool USE_NNUE = false;
 #endif
 
 using namespace chess;
@@ -43,7 +49,6 @@ using search::TranspositionTable;
 using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::nanoseconds;
-
 
 
 /*
@@ -169,14 +174,21 @@ void _nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[3
 
 
 #if WITH_NNUE
-static bool nnue_ok = false;
+static std::string nnue_file = "nn-cb26f10b1fd9.nnue";
 
 void NNUE::init()
 {
-    if (nnue_init("nn-cb26f10b1fd9.nnue"))
-        nnue_ok = true;
+    if (nnue_init(nnue_file.c_str()))
+    {
+        search::Context::log_message(
+            LogLevel::INFO,
+            std::string("nnue_init: ") + NNUE_CONFIG + " " + nnue_file);
+    }
     else
-        std::cerr << "nnue_init failed\n";
+    {
+        USE_NNUE = false;
+        search::Context::log_message(LogLevel::ERROR, "nnue_init: " + std::to_string(errno));
+    }
 }
 
 
@@ -1231,7 +1243,7 @@ namespace search
             _tt->_eval_depth = _ply;
 
         #if WITH_NNUE
-            if (nnue_ok && _parent && abs(_parent->state().simple_score) < HALF_WINDOW)
+            if (USE_NNUE && _parent && abs(_parent->state().simple_score) < HALF_WINDOW)
             {
                 return (_tt_entry._eval = evaluate_nnue(state()));
             }

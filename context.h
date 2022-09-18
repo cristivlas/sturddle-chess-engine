@@ -33,11 +33,7 @@
 #include "utility.h"
 
 
-#if defined(WITH_NNUE)
-    constexpr bool USE_NNUE = true;
-#else
-    constexpr bool USE_NNUE = false;
-#endif
+extern bool USE_NNUE;
 
 constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
 
