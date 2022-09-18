@@ -1239,7 +1239,7 @@ namespace search
                         eval = std::min<score_t>(eval, 0);
                     }
                 }
-                else if (abs(eval) <= HALF_WINDOW)
+                else if (abs(eval) < HALF_WINDOW)
                 {
                     eval = evaluate_nnue(state());
                 }
@@ -1886,8 +1886,8 @@ namespace search
             #else
                 move._score =
                     ctxt.history_score(move) / (1 + HISTORY_LOW)
-                    + eval_material_and_piece_squares(*move._state)
-                    - eval_exchanges<true>(ctxt.tid(), move);
+                    /* - eval_exchanges<true>(ctxt.tid(), move) */
+                    + eval_material_and_piece_squares(*move._state);
             #endif
             }
         }

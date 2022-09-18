@@ -59,6 +59,20 @@ else:
     cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
     if cc and cc.startswith('clang'):
         args.append('-Wno-deprecated-declarations')
+
+    ### nnue-probe ###
+    args += [
+        '-DUSE_AVX2',
+        '-mavx2',
+        '-DUSE_SSE41',
+        '-msse4.1',
+        '-DUSE_SSE3',
+        '-msse3',
+        '-DUSE_SSE2',
+        '-msse2',
+        '-DUSE_SSE',
+        '-msse'
+    ]
 """
 end of compiler args.
 """
