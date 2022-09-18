@@ -57,9 +57,10 @@ else:
         '-DCYTHON_WITHOUT_ASSERTIONS',
         #'-fprofile-sample-use=code.prof',
     ]
-    # cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
-    # if cc and cc.startswith('clang'):
-    #     args.append('-Wno-deprecated-declarations')
+    # Silence off Py_DEPRECATED warnings for clang
+    cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
+    if cc and cc.startswith('clang'):
+         args.append('-Wno-deprecated-declarations')
 """
 end of compiler args.
 """
