@@ -1258,10 +1258,12 @@ public:
             }
 
             _tables[i]._ctxt = _root.clone(_tables[i]._raw_mem);
-        #if 0
+
+        #if VARIABLE_WINDOW
             _tables[i]._ctxt->_alpha = std::max<int>(SCORE_MIN, _root._alpha - 2.5 * (i + 1));
             _tables[i]._ctxt->_beta = std::min<int>(SCORE_MAX, _root._beta + 2.5 * (i + 1));
         #endif
+
             _tables[i]._tt._w_alpha = _tables[i]._ctxt->_alpha;
             _tables[i]._tt._w_beta = _tables[i]._ctxt->_beta;
 
