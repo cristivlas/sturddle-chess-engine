@@ -366,6 +366,30 @@ def test_nnue_eval():
         assert eval == engine.nnue_eval_board(chess.Board(fen=fen))
 
 
+def test_incremental_updates():
+    tests = [
+        'r3k2r/pp3ppp/1np5/5PN1/3PB3/2K1P2P/PP3q2/R2Q3R b kq -',
+        'r3r1k1/pp1q1pp1/4b1p1/3p2B1/3Q1R2/8/PPP3PP/4R1K1 w - -',
+        'r4rk1/1bR1bppp/4pn2/1p2N3/1P6/P3P3/4BPPP/3R2K1 b - -',
+        'r3r1k1/5p2/pQ1b2pB/1p6/4p3/6P1/Pq2BP1P/2R3K1 b - -',
+        '8/3b2kp/4p1p1/pr1n4/N1N4P/1P4P1/1K3P2/3R4 w - -',
+        '1br2rk1/1pqb1ppp/p3pn2/8/1P6/P1N1PN1P/1B3PP1/1QRR2K1 w - -',
+        '5rk1/2p4p/2p4r/3P4/4p1b1/1Q2NqPp/PP3P1K/R4R2 b - -',
+        'r1q2rk1/p3bppb/3p1n1p/2nPp3/1p2P1P1/6NP/PP2QPB1/R1BNK2R b KQ -',
+        'rr4k1/p1pq2pp/Q1n1pn2/2bpp3/4P3/2PP1NN1/PP3PPP/R1B1K2R b KQ -',
+        '2r1r2k/1q3ppp/p2Rp3/2p1P3/6QB/p3P3/bP3PPP/3R2K1 w - -',
+        'r1bqk2r/pp3ppp/5n2/8/1b1npB2/2N5/PP1Q2PP/1K2RBNR w kq -',
+        'r1b1r1k1/pp1nqp2/2p1p1pp/8/4N3/P1Q1P3/1P3PPP/1BRR2K1 w - -',
+        '1r3r1k/3p4/1p1Nn1R1/4Pp1q/pP3P1p/P7/5Q1P/6RK w - -',
+        '2kr4/ppp3Pp/4RP1B/2r5/5P2/1P6/P2p4/3K4 w - -',
+        'r1b1kbr1/pp3p1p/5qp1/4p3/1P2P3/P1N3P1/5P1P/R2QKB1R w KQq -',
+        '1nbq1r1k/3rbp1p/p1p1pp1Q/1p6/P1pPN3/5NP1/1P2PPBP/R4RK1 w - -',
+        '3r1rk1/p3qp1p/2bb2p1/2p5/3P4/1P6/PBQN1PPP/2R2RK1 b - -',
+        '3n2nr/4Pqpp/2k5/8/8/8/2B3PP/6K1 w - -',
+    ]
+    for fen in tests:
+        engine.test_incremental_updates(fen)
+
 test_castling()
 test_castling_moves_generation()
 test_connected_rooks()
@@ -378,7 +402,8 @@ test_zobrist()
 test_forks()
 
 #This test requires compiling with MOBILITY_TUNING_ENABLED
-#test_mobility()
+if engine.MOBILITY_TUNING:
+    test_mobility()
 
 test_connected_pawns()
 test_isolated_pawns()
@@ -386,5 +411,5 @@ test_longest_pawn_sequence()
 
 test_repetition()
 
-test_nnue_piece_codes()
-test_nnue_eval()
+test_incremental_updates()
+print ('All tests passed')

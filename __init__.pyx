@@ -80,6 +80,14 @@ def print_board(board):
 cdef extern from 'common.h':
     score_t SCORE_MAX
     score_t SCORE_MIN
+    const int EXTRA_STATS
+    const int MOBILITY_TUNING_ENABLED
+
+    cdef enum MoveOrder 'search::MoveOrder':
+        UNORDERED_MOVES 'search::MoveOrder::UNORDERED_MOVES'
+
+MOBILITY_TUNING = MOBILITY_TUNING_ENABLED
+MOVE_GROUP_MAX = int(MoveOrder.UNORDERED_MOVES)
 
 
 # ---------------------------------------------------------------------
@@ -162,16 +170,19 @@ cdef extern from 'chess.h' namespace 'chess':
         int     count_isolated_pawns(Color, Bitboard) const
 
         bint    equals(const State&) const
+        score_t eval() const
+        score_t eval_incremental(const BaseMove&) const
         size_t  hash() const
         void    rehash()
 
         bint    has_connected_rooks(int) const
         bint    has_fork(Color) const
 
-        bint    is_castling(const Move&)
+        bint    is_castling(const BaseMove&) const
         bint    is_check() const
         bint    is_checkmate() const
         bint    is_endgame() const
+        bint    is_en_passant(const BaseMove&) const
         bint    is_pinned(Color) const
 
         int     longest_pawn_sequence(Bitboard) const
@@ -234,7 +245,9 @@ cdef class BoardState:
 
 
     cdef set_from_board(self, b: chess.Board):
+        #
         # set position bitboards
+        #
         self._state.white = b.occupied_co[WHITE]
         self._state.black = b.occupied_co[BLACK]
         self._state.pawns = b.pawns
@@ -474,6 +487,7 @@ cdef extern from 'context.h' namespace 'search':
         void            init()
 
         bool            is_repeated() const
+        int             iteration() const
 
         int             rewind(int where, bool reorder)
 
@@ -1144,6 +1158,40 @@ def read_config(fname='sturddle.cfg', echo=False):
 
         for name, value in ns.get('params', {}).items():
             set_param(name, value, echo)
+
+
+def test_incremental_updates(fen):
+    cdef TranspositionTable table
+    node = NodeContext(chess.Board(fen=fen))
+    node._ctxt.set_tt(address(table))
+    node._ctxt._max_depth = 50 # avoid LMP
+
+    # print(fen, node._ctxt._state.eval(), node._ctxt._state.simple_score)
+
+    while True:
+        next = node._ctxt.next(False, 0, 0)
+        if next == NULL:
+            break
+
+        move = py_move(next._move).uci()
+        # print(fen, move, node._ctxt._state.simple_score)
+
+        # Full evaluation
+        eval_next = next._state.eval_simple()
+
+        # Incremental evaluation from current node state
+        eval_incr = node._ctxt._state.eval_incremental(next._move)
+
+        # Excepted cases (for now)
+        if (next._move.promotion() or
+            node._ctxt._state.is_en_passant(next._move) or
+            node._ctxt._state.is_castling(next._move)
+           ):
+            # print(fen, py_move(next._move), eval, eval_next, eval_incr)
+            continue
+
+        if eval_next != eval_incr:
+            raise AssertionError((fen, move, eval, eval_next, eval_incr))
 
 
 # ---------------------------------------------------------------------

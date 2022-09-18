@@ -1010,7 +1010,18 @@ namespace chess
 
         void generate_castling_moves(MovesList& moves, Bitboard to_mask = BB_ALL) const;
 
-        void eval_apply_delta(const BaseMove&, const State& previous);
+        /*
+         * Apply incremental material and piece squares evaluation.
+         */
+        void eval_apply_delta(const BaseMove& move, const State& prev)
+        {
+            if (prev.simple_score == 0)
+                this->simple_score = eval_simple();
+            else
+                this->simple_score = prev.eval_incremental(move);
+        }
+
+        score_t eval_incremental(const BaseMove&) const;
 
         /* indirection point for future ideas (dynamic piece weights) */
         static INLINE constexpr int weight(PieceType piece_type)
@@ -1197,6 +1208,19 @@ namespace chess
     }
 
 
+    INLINE score_t State::eval_incremental(const BaseMove& move) const
+    {
+        if (move.promotion() || is_castling(move) || is_en_passant(move))
+        {
+            return 0; /* full eval needed */
+        }
+        else
+        {
+            return this->simple_score + this->eval_delta(move.from_square(), move.to_square());
+        }
+    }
+
+
     INLINE score_t State::eval_simple() const
     {
         int score = 0;
@@ -1324,25 +1348,6 @@ namespace chess
             }
         }
         return score;
-    }
-
-
-    /*
-     * Apply incremental material and piece squares evaluation.
-     */
-    INLINE void State::eval_apply_delta(const BaseMove& move, const State& prev)
-    {
-        if (move.promotion()
-            || prev.simple_score == 0
-            || prev.is_castling(move)
-            || prev.is_en_passant(move))
-        {
-            simple_score = 0; /* clear, eval() will recalculate */
-        }
-        else
-        {
-            simple_score = prev.simple_score + prev.eval_delta(move.from_square(), move.to_square());
-        }
     }
 
 

@@ -32,7 +32,10 @@
 #define CONFIG_IMPL
   #include "context.h"
 #undef CONFIG_IMPL
-#include "nnue.h"
+
+#if WITH_NNUE
+  #include "nnue.h"
+#endif
 
 using namespace chess;
 using search::TranspositionTable;
@@ -144,8 +147,7 @@ std::map<std::string, int> _get_params()
 /*****************************************************************************
  *  NNUE
  *****************************************************************************/
-static void
-_nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
+void _nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
 {
     pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
     pieces[1] = NNUE::piece(KING, BLACK); squares[1] = pos.king(BLACK);
@@ -166,12 +168,15 @@ _nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
 }
 
 
+#if WITH_NNUE
+static bool nnue_ok = false;
+
 void NNUE::init()
 {
-    /*
-     * TODO: modify nnue_init to return bool
-     */
-    nnue_init("nn-cb26f10b1fd9.nnue");
+    if (nnue_init("nn-cb26f10b1fd9.nnue"))
+        nnue_ok = true;
+    else
+        std::cerr << "nnue_init failed\n";
 }
 
 
@@ -191,6 +196,13 @@ int NNUE::eval(const chess::BoardPosition& pos)
     /* nnue-probe colors are inverted */
     return nnue_evaluate(pos.turn == WHITE ? white : black, pieces, squares);
 }
+#else
+
+void NNUE::init() {}
+int NNUE::eval_fen(const std::string&) { return 0; }
+int NNUE::eval(const chess::BoardPosition&) { return 0; }
+
+#endif /* WITH_NNUE */
 
 
 namespace search
@@ -1188,6 +1200,7 @@ namespace search
     }
 
 
+#if WITH_NNUE
     score_t Context::evaluate_nnue(const State& state) const
     {
         auto& pieces = _nnue_scratch[tid()].pieces;
@@ -1200,6 +1213,7 @@ namespace search
 
         return eval;
     }
+#endif /* WITH_NNUE */
 
 
     /*
@@ -1216,10 +1230,12 @@ namespace search
         {
             _tt->_eval_depth = _ply;
 
-            if (_parent && abs(_parent->state().simple_score) < HALF_WINDOW)
+        #if WITH_NNUE
+            if (nnue_ok && _parent && abs(_parent->state().simple_score) < HALF_WINDOW)
             {
                 return (_tt_entry._eval = evaluate_nnue(state()));
             }
+        #endif /* WITH_NNUE */
 
             /* 1. Material + piece-squares + mobility */
             eval = state().eval();
