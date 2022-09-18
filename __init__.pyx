@@ -80,8 +80,8 @@ def print_board(board):
 cdef extern from 'common.h':
     score_t SCORE_MAX
     score_t SCORE_MIN
-    const int EXTRA_STATS
     const int MOBILITY_TUNING_ENABLED
+    const int USE_NNUE
 
     cdef enum MoveOrder 'search::MoveOrder':
         UNORDERED_MOVES 'search::MoveOrder::UNORDERED_MOVES'
@@ -1205,7 +1205,13 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 __major__   = 0
 __minor__   = 99
 __smp__     = get_param_info()['Threads'][2] > 1
-__version__ = '.'.join([str(__major__), str(__minor__), 'SMP' if __smp__ else ''])
+__version__ = '.'.join([str(__major__), str(__minor__)])
+
+if __smp__:
+    __version__ += '.SMP'
+
+if USE_NNUE:
+    __version__ += '.nnue'
 
 
 def version():

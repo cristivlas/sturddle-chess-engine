@@ -33,8 +33,13 @@
 #include "utility.h"
 
 
-constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
+#if defined(WITH_NNUE)
+    constexpr bool USE_NNUE = true;
+#else
+    constexpr bool USE_NNUE = false;
+#endif
 
+constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
 
 /* Configuration API */
 struct Param { int val = 0; int min_val; int max_val; std::string group; };
