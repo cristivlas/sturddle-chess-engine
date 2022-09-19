@@ -407,6 +407,10 @@ cdef extern from 'context.h':
         @staticmethod
         int eval_fen(const string& fen)
 
+        @staticmethod
+        void log_init_message()
+
+
 #
 # Export nnue functions for testing.
 #
@@ -831,6 +835,7 @@ cdef class SearchAlgorithm:
 
 
     def __init__(self, board: chess.Board, depth=100, **kwargs):
+        NNUE.log_init_message()
         self.best_move = None
         self.depth = depth
         self.is_cancelled = False
@@ -1193,12 +1198,12 @@ def test_incremental_updates(fen):
             raise AssertionError((fen, move, eval, eval_next, eval_incr))
 
 
-NodeContext(chess.Board()) # dummy context initializes static cpython methods
-
 # ---------------------------------------------------------------------
 # initialize c++ global data structures
 # ---------------------------------------------------------------------
 Context.init()
+
+NodeContext(chess.Board()) # dummy context initializes static cpython methods
 
 
 __major__   = 0

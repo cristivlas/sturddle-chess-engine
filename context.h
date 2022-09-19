@@ -56,6 +56,8 @@ struct NNUE
         return 7 - ptype + 6 * (color == chess::BLACK);
     }
 
+    static void log_init_message();
+
     int pieces[33];
     int squares[33];
 };

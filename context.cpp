@@ -173,21 +173,31 @@ void _nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[3
 }
 
 
+static std::string _nnue_init_msg;
+
+void NNUE::log_init_message()
+{
+    if (!_nnue_init_msg.empty())
+    {
+        search::Context::log_message(LogLevel::INFO, _nnue_init_msg);
+        _nnue_init_msg.clear();
+    }
+}
+
+
 #if WITH_NNUE
-static std::string nnue_file = "nn-cb26f10b1fd9.nnue";
+static std::string _nnue_file = "nn-cb26f10b1fd9.nnue";
 
 void NNUE::init()
 {
-    if (nnue_init(nnue_file.c_str()))
+    if (nnue_init(_nnue_file.c_str()))
     {
-        search::Context::log_message(
-            LogLevel::INFO,
-            std::string("nnue_init: ") + NNUE_CONFIG + " " + nnue_file);
+        _nnue_init_msg = std::string(NNUE_CONFIG) + " " + _nnue_file;
     }
     else
     {
         USE_NNUE = false;
-        search::Context::log_message(LogLevel::ERROR, "nnue_init: " + std::to_string(errno));
+        _nnue_init_msg = "nnue_init errno=" + std::to_string(errno);
     }
 }
 
@@ -208,6 +218,7 @@ int NNUE::eval(const chess::BoardPosition& pos)
     /* nnue-probe colors are inverted */
     return nnue_evaluate(pos.turn == WHITE ? white : black, pieces, squares);
 }
+
 #else
 
 void NNUE::init() {}
