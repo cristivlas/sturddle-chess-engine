@@ -208,17 +208,15 @@ int NNUE::eval_fen(const std::string& fen)
 }
 
 
-int NNUE::eval(const chess::BoardPosition& pos, int tid, int ply)
+int NNUE::eval(const chess::BoardPosition& pos, int tid)
 {
-    auto& pieces = search::Context::nnue(tid).pieces;
-    auto& squares = search::Context::nnue(tid).squares;
-
-    _nnue_convert(pos, pieces, squares);
+    auto& n = search::Context::nnue(tid);
+    _nnue_convert(pos, n.pieces, n.squares);
 
     /* nnue-probe colors are inverted */
     const int turn = (pos.turn == WHITE) ? white : black;
 
-    return nnue_evaluate(turn, pieces, squares);
+    return nnue_evaluate(turn, n.pieces, n.squares);
 }
 
 #else
@@ -226,7 +224,7 @@ int NNUE::eval(const chess::BoardPosition& pos, int tid, int ply)
 bool USE_NNUE = false;
 void NNUE::init(const std::string&) {}
 int NNUE::eval_fen(const std::string&) { return 0; }
-int NNUE::eval(const chess::BoardPosition&, int, int) { return 0; }
+int NNUE::eval(const chess::BoardPosition&, int) { return 0; }
 
 #endif /* WITH_NNUE */
 
@@ -1243,7 +1241,7 @@ namespace search
         #if WITH_NNUE
             if (USE_NNUE && _parent && abs(_parent->state().simple_score) < HALF_WINDOW)
             {
-                return (_tt_entry._eval = NNUE::eval(state(), tid(), _ply));
+                return (_tt_entry._eval = NNUE::eval(state(), tid()));
             }
         #endif /* WITH_NNUE */
 

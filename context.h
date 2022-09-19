@@ -48,7 +48,7 @@ extern std::map<std::string, int> _get_params();
 struct NNUE
 {
     static void init(const std::string& current_dir);
-    static int eval(const chess::BoardPosition&, int tid, int ply);
+    static int eval(const chess::BoardPosition&, int tid);
     static int eval_fen(const std::string& fen);
 
     static INLINE constexpr int piece(chess::PieceType ptype, chess::Color color)

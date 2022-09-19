@@ -374,8 +374,8 @@ cdef class BoardState:
         return zobrist_hash(self._state)
 
 
-    cpdef int nnue(self, int tid = 0, int ply = 0):
-        return NNUE.eval(self._state, tid, ply)
+    cpdef int nnue(self, int tid = 0):
+        return NNUE.eval(self._state, tid)
 
 
 # ---------------------------------------------------------------------
@@ -402,7 +402,7 @@ cdef extern from 'context.h':
         int piece(PieceType, Color)
 
         @staticmethod
-        int eval(const BoardPosition&, int tid, int ply)
+        int eval(const BoardPosition&, int tid)
 
         @staticmethod
         int eval_fen(const string& fen)
