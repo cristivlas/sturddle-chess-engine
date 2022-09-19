@@ -886,7 +886,10 @@ namespace chess
         bool is_castle = false;
 
         PieceType promotion = PieceType::NONE;
-        mutable score_t simple_score = 0; /* material and PST from white's POV */
+
+        /* material and PST from white's POV */
+        static constexpr auto UNKNOWN_SCORE = std::numeric_limits<score_t>::max();
+        mutable score_t simple_score = UNKNOWN_SCORE;
 
         void apply_move(const BaseMove&);
 
@@ -919,6 +922,14 @@ namespace chess
 
         /* evaluate base score from the perspective of the side to play */
         template<bool EVAL_MOBILITY = true> score_t eval() const;
+
+        INLINE score_t eval_lazy() const
+        {
+            if (simple_score == UNKNOWN_SCORE)
+                simple_score = eval_simple();
+
+            return simple_score;
+        }
 
         score_t eval_material() const;
 
@@ -1013,12 +1024,10 @@ namespace chess
         /*
          * Apply incremental material and piece squares evaluation.
          */
-        void eval_apply_delta(const BaseMove& move, const State& prev)
+        INLINE void eval_apply_delta(const BaseMove& move, const State& prev)
         {
-            if (prev.simple_score == 0)
-                this->simple_score = eval_simple();
-            else
-                this->simple_score = prev.eval_incremental(move);
+            simple_score = prev.eval_incremental(move);
+            eval_lazy();
         }
 
         score_t eval_incremental(const BaseMove&) const;
@@ -1035,8 +1044,10 @@ namespace chess
     private:
         void ep_moves(MovesList& moves, Bitboard to_mask) const;
 
-        /* evaluate the incremental change of a move */
-        score_t eval_delta(Square from_square, Square to_square) const;
+        /*
+         * Evaluate the incremental change of a move.
+         */
+        score_t eval_delta(const BaseMove&) const;
 
         PieceType remove_piece_at(Square);
 
@@ -1161,7 +1172,7 @@ namespace chess
 
         state.capture_value = 0;
         state.promotion = PieceType::NONE;
-        state.simple_score = 0;
+        state.simple_score = UNKNOWN_SCORE;
         state._check = {-1, -1};
         state._hash = 0;
         state._endgame = ENDGAME_UNKNOWN;
@@ -1171,37 +1182,46 @@ namespace chess
     /*
      * Evaluate the incremental score change for a move
      */
-    INLINE score_t State::eval_delta(Square from_square, Square to_square) const
+    INLINE score_t State::eval_delta(const BaseMove& move) const
     {
         const auto endgame = is_endgame();
 
-        const auto color = piece_color_at(from_square);
-        const auto i = square_index(from_square, color);
-        const auto j = square_index(to_square, color);
+        const auto color = piece_color_at(move.from_square());
+        const auto i = square_index(move.from_square(), color);
+        const auto j = square_index(move.to_square(), color);
 
-        const auto& table = select_piece_square_table(endgame, piece_type_at(from_square));
-        score_t delta = SIGN[color] * (table[j] - table[i]);
+        const auto& table_i = select_piece_square_table(endgame, piece_type_at(move.from_square()));
+        const auto& table_j = move.promotion()
+            ? select_piece_square_table(endgame, move.promotion())
+            : table_i;
+        score_t delta = SIGN[color] * (table_j[j] - table_i[i]);
 
-        /* capture? subtract the value of the captured piece */
-        if (const auto type = piece_type_at(to_square))
+        /* capture? subtract the square and weight for the captured piece */
+        if (const auto type = piece_type_at(move.to_square()))
         {
             ASSERT(type != PieceType::KING);
 
             int d = weight(type);
 
+            /* can't capture the king, no need to check for king's endgame table */
+            /* the only alternate endgame table for now is ENDGAME_KING_SQUARE_TABLE */
         #if 0
             const auto& table = select_piece_square_table(endgame, type);
         #else
-            /* can't capture the king, no need to check for king's endgame table */
             const auto& table = SQUARE_TABLE[type];
         #endif
 
-            ASSERT(piece_color_at(to_square) != color);
+            ASSERT(piece_color_at(move.to_square()) != color);
 
             /* subtract the piece-square value */
-            d += table[square_index(to_square, !color)];
+            d += table[square_index(move.to_square(), !color)];
 
             delta -= SIGN[!color] * d; /* subtract weight of captured */
+        }
+
+        if (move.promotion())
+        {
+            delta += SIGN[color] * (weight(move.promotion()) - weight(PAWN));
         }
 
         return delta;
@@ -1210,13 +1230,13 @@ namespace chess
 
     INLINE score_t State::eval_incremental(const BaseMove& move) const
     {
-        if (move.promotion() || is_castling(move) || is_en_passant(move))
+        if (simple_score == UNKNOWN_SCORE || is_castling(move) || is_en_passant(move))
         {
-            return 0; /* full eval needed */
+            return UNKNOWN_SCORE; /* full eval needed */
         }
         else
         {
-            return this->simple_score + this->eval_delta(move.from_square(), move.to_square());
+            return simple_score + eval_delta(move);
         }
     }
 
@@ -1319,10 +1339,7 @@ namespace chess
 
     template<bool EVAL_MOBILITY> INLINE score_t State::eval() const
     {
-        if (simple_score == 0)
-            simple_score = eval_simple();
-
-        auto value = simple_score;
+        auto value = eval_lazy();
 
         if constexpr(EVAL_MOBILITY)
         {

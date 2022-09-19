@@ -482,10 +482,7 @@ namespace search
      */
     INLINE int eval_material_and_piece_squares(State& state)
     {
-        if (state.simple_score == 0)
-            state.simple_score = state.eval_simple();
-
-        return state.simple_score * SIGN[!state.turn];
+        return state.eval_lazy() * SIGN[!state.turn];
     }
 
 
@@ -493,26 +490,23 @@ namespace search
     {
         ASSERT(move._state);
 
-        if (move._state->simple_score == 0)
+        if (move._state->simple_score == State::UNKNOWN_SCORE)
         {
-            /*
-             * Skip at the point of transitioning into endgame
-             * and expect eval_simple() to be called lazily.
-             */
             if (move._state->is_endgame() != ctxt.state().is_endgame())
             {
-                return;
+                /*
+                 * recalculate, because some piece-square tables may change in the endgame
+                 */
+                move._state->simple_score = move._state->eval_simple();
             }
-
-            move._state->eval_apply_delta(move, ctxt.state());
-
-            ASSERT(move._state->simple_score == 0
-                || move._state->simple_score == move._state->eval_simple());
+            else
+            {
+                move._state->eval_apply_delta(move, ctxt.state());
+            }
         }
-        else
-        {
-            ASSERT(move._state->simple_score == move._state->eval_simple());
-        }
+
+        /* post-condition */
+        ASSERT(move._state->simple_score == move._state->eval_simple());
     }
 
 

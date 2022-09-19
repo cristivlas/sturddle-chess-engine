@@ -1183,8 +1183,7 @@ def test_incremental_updates(fen):
         eval_incr = node._ctxt._state.eval_incremental(next._move)
 
         # Excepted cases (for now)
-        if (next._move.promotion() or
-            node._ctxt._state.is_en_passant(next._move) or
+        if (node._ctxt._state.is_en_passant(next._move) or
             node._ctxt._state.is_castling(next._move)
            ):
             # print(fen, py_move(next._move), eval, eval_next, eval_incr)
@@ -1211,7 +1210,7 @@ if __smp__:
     __version__ += '.SMP'
 
 if USE_NNUE:
-    __version__ += '.nnue'
+    __version__ += '.NNUE'
 
 
 def version():
