@@ -29,6 +29,7 @@
 #include <unordered_set> /* unordered_multiset */
 #include "Python.h"
 #include "config.h"
+#include "nnue.h"
 #include "search.h"
 #include "utility.h"
 
@@ -48,7 +49,7 @@ extern std::map<std::string, int> _get_params();
 struct NNUE
 {
     static void init();
-    static int eval(const chess::BoardPosition&);
+    static int eval(const chess::BoardPosition&, int tid, int ply);
     static int eval_fen(const std::string& fen);
 
     static INLINE constexpr int piece(chess::PieceType ptype, chess::Color color)
@@ -60,6 +61,7 @@ struct NNUE
 
     int pieces[33];
     int squares[33];
+    std::array<NNUEdata, PLY_MAX> data; /* for incremental evals */
 };
 
 
@@ -282,7 +284,6 @@ namespace search
 
         /* Static evaluation */
         score_t     _evaluate();
-        score_t     evaluate_nnue(const State&) const;
 
         template<bool EvalCaptures = true> score_t evaluate();
 
@@ -395,6 +396,8 @@ namespace search
 
         static HistoryPtr   _history;
 
+        static NNUE& nnue(int tid) { return _nnue[tid]; }
+
     private:
         const Move* get_next_move(score_t);
         bool has_cycle(const State&) const;
@@ -420,7 +423,7 @@ namespace search
         static std::vector<ContextStack>    _context_stacks;
         static std::vector<MoveStack>       _move_stacks;
         static std::vector<StateStack>      _state_stacks;
-        static std::vector<NNUE>            _nnue_scratch;
+        static std::vector<NNUE>            _nnue;
     };
 
 
@@ -724,12 +727,15 @@ namespace search
                 const auto prev = _parent->_parent;
 
                 if (abs(_tt_entry._eval) < MATE_HIGH && abs(prev->_tt_entry._eval) < MATE_HIGH)
+                {
                     _improvement = std::max(0, prev->_tt_entry._eval - _tt_entry._eval);
-
+                }
                 else
+                {
                     _improvement = std::max(0,
-                      eval_material_and_piece_squares(*_state)
-                    - eval_material_and_piece_squares(*prev->_state));
+                          eval_material_and_piece_squares(*_state)
+                        - eval_material_and_piece_squares(*prev->_state));
+                }
             }
         }
 
@@ -781,6 +787,7 @@ namespace search
             return false;
 
         ASSERT(depth() >= 0);
+
         return evaluate_material() >= _beta
             - NULL_MOVE_DEPTH_WEIGHT * depth()
             + improvement() / NULL_MOVE_IMPROVEMENT_DIV
@@ -1356,6 +1363,9 @@ namespace search
         if constexpr(COUNT_VALID_MOVES_AS_NODES)
             ++ctxt.get_tt()->_nodes;
 
+    #if WITH_NNUE
+        memset(&Context::nnue(ctxt.tid()).data[ctxt._ply].accumulator, 0, sizeof(Accumulator));
+    #endif
         return (_have_move = true);
     }
 

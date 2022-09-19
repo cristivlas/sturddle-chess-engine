@@ -35,12 +35,7 @@
 #undef CONFIG_IMPL
 
 #if WITH_NNUE
-  #include "auto.h"
-  #include "nnue.h"
-
-  bool USE_NNUE = true;
-#else
-  bool USE_NNUE = false;
+  #include "auto.h" /* for NNUE_CONFIG */
 #endif
 
 using namespace chess;
@@ -152,6 +147,9 @@ std::map<std::string, int> _get_params()
 /*****************************************************************************
  *  NNUE
  *****************************************************************************/
+/*
+ * Convert from bitboard representation to format expected by nnue_eval.
+ */
 void _nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
 {
     pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
@@ -172,7 +170,7 @@ void _nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[3
     squares[i] = 0;
 }
 
-
+/* hold on to message and log on first search */
 static std::string _nnue_init_msg;
 
 void NNUE::log_init_message()
@@ -186,6 +184,7 @@ void NNUE::log_init_message()
 
 
 #if WITH_NNUE
+bool USE_NNUE = true;
 static std::string _nnue_file = "nn-cb26f10b1fd9.nnue";
 
 void NNUE::init()
@@ -208,22 +207,40 @@ int NNUE::eval_fen(const std::string& fen)
 }
 
 
-int NNUE::eval(const chess::BoardPosition& pos)
+int NNUE::eval(const chess::BoardPosition& pos, int tid, int ply)
 {
-    int pieces[33] = { 0 };
-    int squares[33] = { 0 };
+    auto& pieces = search::Context::nnue(tid).pieces;
+    auto& squares = search::Context::nnue(tid).squares;
 
     _nnue_convert(pos, pieces, squares);
 
     /* nnue-probe colors are inverted */
-    return nnue_evaluate(pos.turn == WHITE ? white : black, pieces, squares);
+    const int turn = (pos.turn == WHITE) ? white : black;
+#if 0
+    return nnue_evaluate(turn, pieces, squares);
+#else
+    /* incremental eval */
+    auto& nnue = search::Context::nnue(tid).data;
+
+    ::Position p;
+    p.nnue[0] = &nnue[ply];
+    p.nnue[1] = ply > 0 ? &nnue[ply - 1] : nullptr;
+    p.nnue[2] = ply > 1 ? &nnue[ply - 2] : nullptr;
+
+    p.player = turn;
+    p.pieces = pieces;
+    p.squares = squares;
+
+    return nnue_evaluate_pos(&p);
+#endif
 }
 
 #else
 
+bool USE_NNUE = false;
 void NNUE::init() {}
 int NNUE::eval_fen(const std::string&) { return 0; }
-int NNUE::eval(const chess::BoardPosition&) { return 0; }
+int NNUE::eval(const chess::BoardPosition&, int, int) { return 0; }
 
 #endif /* WITH_NNUE */
 
@@ -244,7 +261,7 @@ namespace search
     std::vector<Context::ContextStack> Context::_context_stacks(SMP_CORES);
     std::vector<Context::MoveStack> Context::_move_stacks(SMP_CORES);
     std::vector<Context::StateStack> Context::_state_stacks(SMP_CORES);
-    std::vector<NNUE> Context::_nnue_scratch(SMP_CORES);
+    std::vector<NNUE> Context::_nnue(SMP_CORES);
 
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
@@ -315,7 +332,7 @@ namespace search
             _context_stacks.resize(n_threads);
             _move_stacks.resize(n_threads);
             _state_stacks.resize(n_threads);
-            _nnue_scratch.resize(n_threads);
+            _nnue.resize(n_threads);
         }
     }
 
@@ -1223,22 +1240,6 @@ namespace search
     }
 
 
-#if WITH_NNUE
-    score_t Context::evaluate_nnue(const State& state) const
-    {
-        auto& pieces = _nnue_scratch[tid()].pieces;
-        auto& squares = _nnue_scratch[tid()].squares;
-        _nnue_convert(state, pieces, squares);
-
-        /* nnue-probe colors are inverted */
-        auto eval = nnue_evaluate(!state.turn, pieces, squares);
-        ASSERT(eval == NNUE::eval(state));
-
-        return eval;
-    }
-#endif /* WITH_NNUE */
-
-
     /*
      * Static evaluation has three components:
      * 1. base = material + pst + mobility
@@ -1256,7 +1257,7 @@ namespace search
         #if WITH_NNUE
             if (USE_NNUE && _parent && abs(_parent->state().simple_score) < HALF_WINDOW)
             {
-                return (_tt_entry._eval = evaluate_nnue(state()));
+                return (_tt_entry._eval = NNUE::eval(state(), tid(), _ply));
             }
         #endif /* WITH_NNUE */
 
