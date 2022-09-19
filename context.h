@@ -29,7 +29,6 @@
 #include <unordered_set> /* unordered_multiset */
 #include "Python.h"
 #include "config.h"
-#include "nnue.h"
 #include "search.h"
 #include "utility.h"
 
@@ -61,7 +60,6 @@ struct NNUE
 
     int pieces[33];
     int squares[33];
-    std::array<NNUEdata, PLY_MAX> data; /* for incremental evals */
 };
 
 
@@ -1363,9 +1361,6 @@ namespace search
         if constexpr(COUNT_VALID_MOVES_AS_NODES)
             ++ctxt.get_tt()->_nodes;
 
-    #if WITH_NNUE
-        memset(&Context::nnue(ctxt.tid()).data[ctxt._ply].accumulator, 0, sizeof(Accumulator));
-    #endif
         return (_have_move = true);
     }
 

@@ -36,6 +36,7 @@
 
 #if WITH_NNUE
   #include "auto.h" /* for NNUE_CONFIG */
+  #include "nnue.h"
 #endif
 
 using namespace chess;
@@ -216,23 +217,8 @@ int NNUE::eval(const chess::BoardPosition& pos, int tid, int ply)
 
     /* nnue-probe colors are inverted */
     const int turn = (pos.turn == WHITE) ? white : black;
-#if 0
+
     return nnue_evaluate(turn, pieces, squares);
-#else
-    /* incremental eval */
-    auto& nnue = search::Context::nnue(tid).data;
-
-    ::Position p;
-    p.nnue[0] = &nnue[ply];
-    p.nnue[1] = ply > 0 ? &nnue[ply - 1] : nullptr;
-    p.nnue[2] = ply > 1 ? &nnue[ply - 2] : nullptr;
-
-    p.player = turn;
-    p.pieces = pieces;
-    p.squares = squares;
-
-    return nnue_evaluate_pos(&p);
-#endif
 }
 
 #else

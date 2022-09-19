@@ -1211,8 +1211,6 @@ __minor__   = 99
 __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__)])
 
-if __smp__:
-    __version__ += '.SMP'
 
 if USE_NNUE:
     __version__ += '.NNUE'

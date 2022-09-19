@@ -411,5 +411,7 @@ test_longest_pawn_sequence()
 
 test_repetition()
 
+test_nnue_piece_codes()
+test_nnue_eval()
 test_incremental_updates()
 print ('All tests passed')
