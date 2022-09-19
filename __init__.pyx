@@ -488,7 +488,7 @@ cdef extern from 'context.h' namespace 'search':
         const Move*     first_valid_move() nogil
 
         @staticmethod
-        void            init()
+        void            init(const string&)
 
         bool            is_repeated() const
         int             iteration() const
@@ -1201,7 +1201,7 @@ def test_incremental_updates(fen):
 # ---------------------------------------------------------------------
 # initialize c++ global data structures
 # ---------------------------------------------------------------------
-Context.init()
+Context.init((os.path.dirname(os.path.realpath(__file__)) + os.path.sep).encode())
 
 NodeContext(chess.Board()) # dummy context initializes static cpython methods
 

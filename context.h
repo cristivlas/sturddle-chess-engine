@@ -48,7 +48,7 @@ extern std::map<std::string, int> _get_params();
 
 struct NNUE
 {
-    static void init();
+    static void init(const std::string& current_dir);
     static int eval(const chess::BoardPosition&, int tid, int ply);
     static int eval_fen(const std::string& fen);
 
@@ -301,7 +301,7 @@ namespace search
         float       history_score(const Move&) const;
 
         score_t     improvement() const;
-        static void init();
+        static void init(const std::string& current_dir);
         bool        is_beta_cutoff(Context*, score_t);
         static bool is_cancelled() { return _cancel.load(std::memory_order_relaxed); }
         bool        is_capture() const { return state().capture_value != 0; }

@@ -187,9 +187,9 @@ void NNUE::log_init_message()
 bool USE_NNUE = true;
 static std::string _nnue_file = "nn-cb26f10b1fd9.nnue";
 
-void NNUE::init()
+void NNUE::init(const std::string& current_dir)
 {
-    if (nnue_init(_nnue_file.c_str()))
+    if (nnue_init((current_dir + _nnue_file).c_str()))
     {
         _nnue_init_msg = std::string(NNUE_CONFIG) + " " + _nnue_file;
     }
@@ -238,7 +238,7 @@ int NNUE::eval(const chess::BoardPosition& pos, int tid, int ply)
 #else
 
 bool USE_NNUE = false;
-void NNUE::init() {}
+void NNUE::init(const std::string&) {}
 int NNUE::eval_fen(const std::string&) { return 0; }
 int NNUE::eval(const chess::BoardPosition&, int, int) { return 0; }
 
@@ -280,10 +280,10 @@ namespace search
 
 
     /* Init attack masks and other magic bitboards in chess.cpp */
-    /* static */ void Context::init()
+    /* static */ void Context::init(const std::string& current_dir)
     {
         _init();
-        NNUE::init();
+        NNUE::init(current_dir);
     }
 
 

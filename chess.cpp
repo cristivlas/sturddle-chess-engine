@@ -563,6 +563,6 @@ namespace chess
                 ++count;
         }
 
-        return moves.size();
+        return count;
     }
 }
