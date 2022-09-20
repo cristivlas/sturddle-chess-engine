@@ -1902,11 +1902,12 @@ namespace search
                 else if (ctxt.is_counter_move(move)
                     || move.from_square() == ctxt._capture_square
                     || is_pawn_push(ctxt, move)
-                    || is_attack_on_king(ctxt, move))
+                 /* || is_attack_on_king(ctxt, move) */)
                 {
                     if (make_move<true>(ctxt, move, MoveOrder::TACTICAL_MOVES, hist_score))
                         ASSERT(move._score == hist_score);
                 }
+                /*
                 else if (move._score >= HISTORY_LOW
                     && make_move<true>(ctxt, move, futility)
                     && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
@@ -1914,6 +1915,7 @@ namespace search
                     move._group = MoveOrder::TACTICAL_MOVES;
                     move._score = hist_score;
                 }
+                */
             }
             else if (make_move<true>(ctxt, move, futility)) /* Phase == 4 */
             {
