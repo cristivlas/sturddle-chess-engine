@@ -151,7 +151,7 @@ std::map<std::string, int> _get_params()
 /*
  * Convert from bitboard representation to format expected by nnue_eval.
  */
-void _nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
+INLINE void _nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
 {
     pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
     pieces[1] = NNUE::piece(KING, BLACK); squares[1] = pos.king(BLACK);
@@ -995,7 +995,10 @@ namespace search
      */
     static INLINE int eval_fuzz()
     {
-        return EVAL_FUZZ ? random_int(-EVAL_FUZZ, EVAL_FUZZ) : 0;
+        if constexpr(EVAL_FUZZ_ENABLED)
+            return EVAL_FUZZ ? random_int(-EVAL_FUZZ, EVAL_FUZZ) : 0;
+
+        return 0;
     }
 
 
@@ -1241,7 +1244,15 @@ namespace search
         #if WITH_NNUE
             if (USE_NNUE && _parent && abs(_parent->state().simple_score) < HALF_WINDOW)
             {
-                return (_tt_entry._eval = NNUE::eval(state(), tid()));
+                auto& pieces = _nnue[tid()].pieces;
+                auto& squares = _nnue[tid()].squares;
+                _nnue_convert(state(), pieces, squares);
+
+                /* nnue-probe colors are inverted */
+                eval = nnue_evaluate(!state().turn, pieces, squares);
+                ASSERT(eval == NNUE::eval(state(), tid()));
+
+                return (_tt_entry._eval = eval);
             }
         #endif /* WITH_NNUE */
 

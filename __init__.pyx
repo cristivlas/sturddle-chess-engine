@@ -1118,8 +1118,8 @@ def get_hash_full():
 
 def perft(fen, repeat=1):
     cdef vector[Move] moves
+    cdef int count = 0
     board = BoardState(chess.Board(fen=fen))
-    count = 0
     start = time.perf_counter()
     for i in range(0, repeat):
         board._state.generate_pseudo_legal_moves(moves, BB_ALL, BB_ALL)
@@ -1131,8 +1131,8 @@ def perft(fen, repeat=1):
 def perft2(fen, repeat=1):
     cdef vector[Move] moves
     cdef vector[Move] buffer
+    cdef int count = 0
     board = BoardState(chess.Board(fen=fen))
-    count = 0
     start = time.perf_counter()
     for i in range(0, repeat):
         board._state.generate_moves(moves, buffer)
@@ -1142,9 +1142,9 @@ def perft2(fen, repeat=1):
 
 def perft3(fen, repeat=1):
     cdef TranspositionTable table
+    cdef int count = 0
     node = NodeContext(chess.Board(fen=fen))
     node._ctxt.set_tt(address(table))
-    count = 0
     start = time.perf_counter()
 
     for i in range(0, repeat):

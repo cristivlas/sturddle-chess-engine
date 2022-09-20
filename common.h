@@ -146,6 +146,9 @@ using score_t = int;
   #define CALLBACK_PERIOD                   4096
 #endif
 
+#ifndef EVAL_FUZZ_ENABLED
+  #define EVAL_FUZZ_ENABLED                 false
+#endif
 
 constexpr int ENDGAME_PIECE_COUNT           = 12;
 
