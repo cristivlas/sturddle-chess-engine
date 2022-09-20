@@ -43,6 +43,7 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--book', default='8moves_v3')
     parser.add_argument('-c', '--concurrency', type=int, default=os.cpu_count() // 2)
     parser.add_argument('--hash', type=int)
+    parser.add_argument('-o', '--output')
     parser.add_argument('-p', '--plot-every', type=int, default=20)
     parser.add_argument('-r', '--rounds', type=int)
     parser.add_argument('-s', '--smp-cores', type=int, default=1)
@@ -105,4 +106,10 @@ if __name__ == '__main__':
         'concurrency': args.concurrency
     }
 
-    print(json.dumps(config, sort_keys=False, indent=4))
+    config = json.dumps(config, sort_keys=False, indent=4)
+    if not args.output:
+        print(config)
+    else:
+        with open(args.output, 'w') as file_out:
+            file_out.write(config)
+
