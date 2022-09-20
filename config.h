@@ -111,7 +111,9 @@ static constexpr int HASH_MIN = 16; /* MB */
 GROUP(Settings)
 DECLARE_VALUE(  ASPIRATION_WINDOW,                    1,    0,       1)
 DECLARE_CONST(  DEBUG_CAPTURES,                       0,    0,       1)
+#if EVAL_FUZZ_ENABLED
 DECLARE_PARAM(  EVAL_FUZZ,                            0,    0,     100)
+#endif
 DECLARE_CONST(  FIFTY_MOVES_RULE,                     1,    0,       1)
 DECLARE_VALUE(  FUTILITY_PRUNING,                     1,    0,       1)
 DECLARE_VALUE(  MANAGE_TIME,                          1,    0,       1)

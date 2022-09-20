@@ -995,10 +995,11 @@ namespace search
      */
     static INLINE int eval_fuzz()
     {
-        if constexpr(EVAL_FUZZ_ENABLED)
+        #if EVAL_FUZZ_ENABLED
             return EVAL_FUZZ ? random_int(-EVAL_FUZZ, EVAL_FUZZ) : 0;
-
-        return 0;
+        #else
+            return 0;
+        #endif /* EVAL_FUZZ_ENABLED */
     }
 
 
