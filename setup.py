@@ -55,8 +55,11 @@ else:
         '-Wno-unused-parameter',
         '-Wno-unused-variable',
         '-DCYTHON_WITHOUT_ASSERTIONS',
+        '-fvisibility=hidden',
+        '-DPyMODINIT_FUNC=__attribute__((visibility("default"))) extern "C" PyObject*',
         #'-fprofile-sample-use=code.prof',
     ]
+
     # Silence off Py_DEPRECATED warnings for clang
     cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
     if cc and cc.startswith('clang'):
