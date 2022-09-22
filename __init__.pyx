@@ -408,6 +408,9 @@ cdef extern from 'context.h':
         int eval_fen(const string& fen)
 
         @staticmethod
+        void init(const string& data_dir)
+
+        @staticmethod
         void log_init_message()
 
 
@@ -488,7 +491,7 @@ cdef extern from 'context.h' namespace 'search':
         const Move*     first_valid_move() nogil
 
         @staticmethod
-        void            init(const string&)
+        void            init()
 
         bool            is_repeated() const
         int             iteration() const
@@ -1198,12 +1201,21 @@ def test_incremental_updates(fen):
             raise AssertionError((fen, move, eval, eval_next, eval_incr))
 
 
+def nnue_init(data_dir):
+    NNUE.init(os.path.join(data_dir, '').encode())
+
+
+def nnue_ok():
+    return USE_NNUE
+
+
 # ---------------------------------------------------------------------
 # initialize c++ global data structures
 # ---------------------------------------------------------------------
-Context.init((os.path.dirname(os.path.realpath(__file__)) + os.path.sep).encode())
+Context.init()
 
 NodeContext(chess.Board()) # dummy context initializes static cpython methods
+nnue_init(os.path.dirname(os.path.realpath(__file__)))
 
 
 __major__   = 0
@@ -1212,9 +1224,6 @@ __smp__     = get_param_info()['Threads'][2] > 1
 __version__ = '.'.join([str(__major__), str(__minor__)])
 
 
-if USE_NNUE:
-    __version__ += '.NNUE'
-
-
 def version():
-    return __version__
+    return __version__ + ('.NNUE' if USE_NNUE else '')
+

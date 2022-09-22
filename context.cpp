@@ -205,7 +205,8 @@ NNUE_convert_position(const BoardPosition& pos, int (&pieces)[33], int (&squares
     squares[i] = 0;
 }
 
-/* hold on to message and log on first search */
+/* Logging may not be initialized when NNUE::init() is called */
+/* Hold on to message and log on first search. */
 static std::string NNUE_init_msg;
 
 void NNUE::log_init_message()
@@ -223,10 +224,12 @@ bool USE_NNUE = true;
 
 static std::string NNUE_file = "nn-cb26f10b1fd9.nnue";
 
-void NNUE::init(const std::string& current_dir)
+
+void NNUE::init(const std::string& data_dir)
 {
-    if (nnue_init((current_dir + NNUE_file).c_str()))
+    if (nnue_init((data_dir + NNUE_file).c_str()))
     {
+        USE_NNUE = true;
         NNUE_init_msg = std::string(NNUE_CONFIG) + " " + NNUE_file;
     }
     else
@@ -336,10 +339,9 @@ namespace search
 
 
     /* Init attack masks and other magic bitboards in chess.cpp */
-    /* static */ void Context::init(const std::string& current_dir)
+    /* static */ void Context::init()
     {
         _init();
-        NNUE::init(current_dir);
     }
 
 
@@ -1322,12 +1324,12 @@ namespace search
      */
     score_t Context::_evaluate()
     {
+        _tt->_eval_depth = _ply;
+
         auto eval = _tt_entry._eval;
 
         if (eval == SCORE_MIN)
         {
-            _tt->_eval_depth = _ply;
-
         #if !NNUE_ENDGAME
             if (!state().is_endgame())
         #endif
