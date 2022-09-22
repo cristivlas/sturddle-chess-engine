@@ -74,6 +74,11 @@ std::map<std::string, Param> _get_param_info()
 
     for (const auto& elem : Config::_namespace)
     {
+    #if NNUE_ENDGAME
+        if (USE_NNUE && elem.second._group == "Eval" && elem.first.find("MOBILITY") != 0)
+            continue;
+    #endif /* NNUE_ENDGAME */
+
         info.emplace(elem.first,
             Param {
                 *elem.second._val,
@@ -112,6 +117,12 @@ void _set_param(const std::string& name, int value, bool echo)
     {
         std::cerr << "unknown parameter: \"" << name << "\"\n";
     }
+#if NNUE_ENDGAME
+    else if (USE_NNUE && iter->second._group == "Eval" && name.find("MOBILITY") != 0)
+    {
+        std::cerr << "parameter is not used in NNUE mode: \"" << name << "\"\n";
+    }
+#endif /* NNUE_ENDGAME */
     else if (value < iter->second._min || value > iter->second._max)
     {
         std::clog << name << " value " << value << " is out of range [";
@@ -144,6 +155,28 @@ std::map<std::string, int> _get_params()
 }
 
 
+template<typename F>
+static INLINE score_t eval_insufficient_material(const State& state, score_t eval, F f)
+{
+    if (state.is_endgame() && state.has_insufficient_material(state.turn))
+    {
+        if (state.has_insufficient_material(!state.turn))
+        {
+            eval = 0; /* neither side can win */
+        }
+        else
+        {
+            eval = std::min<score_t>(eval, 0); /* cannot do better than draw */
+        }
+    }
+    else
+    {
+        eval = f();
+    }
+
+    return eval;
+}
+
 
 /*****************************************************************************
  *  NNUE
@@ -151,19 +184,20 @@ std::map<std::string, int> _get_params()
 /*
  * Convert from bitboard representation to format expected by nnue_eval.
  */
-INLINE void _nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
+INLINE void
+NNUE_convert_position(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
 {
     pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
     pieces[1] = NNUE::piece(KING, BLACK); squares[1] = pos.king(BLACK);
 
     int i = 2;
+
     for (auto color : { BLACK, WHITE })
-        for (auto piece_type : { PAWN, KNIGHT, BISHOP, ROOK, QUEEN })
-            for_each_square(pos.pieces(piece_type) & pos.occupied_co(color), [&](Square s) {
-                pieces[i] = NNUE::piece(piece_type, color);
-                squares[i] = s;
-                ++i;
-            });
+        for_each_square(pos.occupied_co(color) & ~pos.kings, [&](Square s) {
+            pieces[i] = NNUE::piece(pos.piece_type_at(s), color);
+            squares[i] = s;
+            ++i;
+        });
 
     ASSERT(i < 33);
 
@@ -172,34 +206,38 @@ INLINE void _nnue_convert(const BoardPosition& pos, int (&pieces)[33], int (&squ
 }
 
 /* hold on to message and log on first search */
-static std::string _nnue_init_msg;
+static std::string NNUE_init_msg;
 
 void NNUE::log_init_message()
 {
-    if (!_nnue_init_msg.empty())
+    if (!NNUE_init_msg.empty())
     {
-        search::Context::log_message(LogLevel::INFO, _nnue_init_msg);
-        _nnue_init_msg.clear();
+        search::Context::log_message(LogLevel::INFO, NNUE_init_msg);
+        NNUE_init_msg.clear();
     }
 }
 
 
 #if WITH_NNUE
 bool USE_NNUE = true;
-static std::string _nnue_file = "nn-cb26f10b1fd9.nnue";
+
+static std::string NNUE_file = "nn-cb26f10b1fd9.nnue";
 
 void NNUE::init(const std::string& current_dir)
 {
-    if (nnue_init((current_dir + _nnue_file).c_str()))
+    if (nnue_init((current_dir + NNUE_file).c_str()))
     {
-        _nnue_init_msg = std::string(NNUE_CONFIG) + " " + _nnue_file;
+        NNUE_init_msg = std::string(NNUE_CONFIG) + " " + NNUE_file;
     }
     else
     {
         USE_NNUE = false;
-        _nnue_init_msg = "nnue_init errno=" + std::to_string(errno);
+        NNUE_init_msg = "nnue_init errno=" + std::to_string(errno);
     }
 }
+
+
+static std::vector<std::array<NNUEdata, PLY_MAX>> NNUE_accumulator_data(SMP_CORES);
 
 
 int NNUE::eval_fen(const std::string& fen)
@@ -211,12 +249,46 @@ int NNUE::eval_fen(const std::string& fen)
 int NNUE::eval(const chess::BoardPosition& pos, int tid)
 {
     auto& n = search::Context::nnue(tid);
-    _nnue_convert(pos, n.pieces, n.squares);
+    NNUE_convert_position(pos, n.pieces, n.squares);
 
     /* nnue-probe colors are inverted */
     const int turn = (pos.turn == WHITE) ? white : black;
 
     return nnue_evaluate(turn, n.pieces, n.squares);
+}
+
+
+void search::Context::eval_incremental()
+{
+    const auto turn = this->turn();
+
+    auto& pieces = _nnue[tid()].pieces;
+    auto& squares = _nnue[tid()].squares;
+    NNUE_convert_position(state(), pieces, squares);
+
+    NNUEdata* nnue_data[3] = { nullptr, nullptr, nullptr };
+    auto& acc = NNUE_accumulator_data[tid()];
+
+    nnue_data[0] = &acc[_ply];
+    nnue_data[0]->accumulator.computedAccumulation = 0;
+    if (_parent)
+    {
+        nnue_data[1] = &acc[_parent->_ply];
+        nnue_data[1]->accumulator.computedAccumulation = 0;
+        if (_parent->_parent)
+        {
+            nnue_data[2] = &acc[_parent->_parent->_ply];
+        }
+    }
+
+    auto eval = nnue_evaluate_incremental(!turn, pieces, squares, nnue_data);
+    ASSERT(eval == nnue_evaluate(!turn, pieces, squares));
+
+#if NNUE_ENDGAME
+    _tt_entry._eval = eval_insufficient_material(state(), eval, [eval]() { return eval; });
+#else
+    _tt_entry._eval = eval;
+#endif /* NNUE_ENDGAME */
 }
 
 #else
@@ -311,12 +383,26 @@ namespace search
     /* static */ void Context::ensure_stacks()
     {
         const size_t n_threads(SMP_CORES);
+
         if (_context_stacks.size() < n_threads)
         {
             _context_stacks.resize(n_threads);
             _move_stacks.resize(n_threads);
             _state_stacks.resize(n_threads);
             _nnue.resize(n_threads);
+        #if WITH_NNUE
+            NNUE_accumulator_data.resize(n_threads);
+        #endif
+
+            /* pre-allocate memory */
+            for (size_t n = 0; n < n_threads; ++n)
+            {
+                for (size_t ply = 0; ply < PLY_MAX; ++ply)
+                {
+                    _move_stacks[n][ply].reserve(64);
+                    _state_stacks[n][ply].reserve(64);
+                }
+            }
         }
     }
 
@@ -1213,6 +1299,7 @@ namespace search
             eval += BISHOP_PAIR * state.diff_bishop_pairs();
         }
         eval += eval_threats(state, piece_count);
+        eval += eval_king_safety(state, piece_count);
 
         return eval;
     }
@@ -1223,8 +1310,7 @@ namespace search
         const auto piece_count = popcount(ctxt.state().occupied());
         const auto mat_eval = ctxt.evaluate_material();
 
-        return eval_tactical(ctxt.state(), mat_eval, piece_count)
-             + ctxt.eval_king_safety(piece_count);
+        return eval_tactical(ctxt.state(), mat_eval, piece_count);
     }
 
 
@@ -1242,22 +1328,18 @@ namespace search
         {
             _tt->_eval_depth = _ply;
 
-        #if WITH_NNUE
-            if (USE_NNUE && _parent && abs(_parent->state().simple_score) < HALF_WINDOW)
-            {
-                auto& pieces = _nnue[tid()].pieces;
-                auto& squares = _nnue[tid()].squares;
-                _nnue_convert(state(), pieces, squares);
+        #if !NNUE_ENDGAME
+            if (!state().is_endgame())
+        #endif
+                if (USE_NNUE)
+                {
+                    eval_incremental();
+                    return _tt_entry._eval;
+                }
 
-                /* nnue-probe colors are inverted */
-                eval = nnue_evaluate(!state().turn, pieces, squares);
-                ASSERT(eval == NNUE::eval(state(), tid()));
-
-                return (_tt_entry._eval = eval);
-            }
-        #endif /* WITH_NNUE */
-
-            /* 1. Material + piece-squares + mobility */
+            /*
+             * 1. Material + piece-squares + mobility
+             */
             eval = state().eval();
 
             ASSERT(eval > SCORE_MIN);
@@ -1267,36 +1349,23 @@ namespace search
             {
                 eval += eval_fuzz();
 
-                const auto turn = state().turn;
-
-                if (state().is_endgame() && state().has_insufficient_material(turn))
-                {
-                    if (state().has_insufficient_material(!turn))
+                eval = eval_insufficient_material(state(), eval, [&]() {
+                    /*
+                     * 2. Tactical (positional) evaluation.
+                     * 2nd order evaluation is currently slow (and possibly inaccurate).
+                     * To mitigate, in midgame it is done only at lower plies, and only
+                     * if 1st order eval delta is within a 2-3 pawns margin. The idea is
+                     * that deeper search paths may not benefit as much from qualitative
+                     * positional evaluation anyway; and tactical advantages will rarely
+                     * overcome significant material deficits.
+                     */
+                    if (state().is_endgame() || (_ply < EVAL_LOW_DEPTH && abs(eval) < EVAL_MARGIN))
                     {
-                        eval = 0;
+                        eval += SIGN[turn()] * eval_tactical(*this);
+                        ASSERT(eval < SCORE_MAX);
                     }
-                    else
-                    {
-                        /* cannot do better than draw, but can do worse */
-                        eval = std::min<score_t>(eval, 0);
-                    }
-                }
-                /*
-                 * 2. Tactical.
-                 * 2nd order evaluation is currently slow (and possibly inaccurate).
-                 * To mitigate, in midgame it is done only at lower plies, and only
-                 * if 1st order eval delta is within a 2-3 pawns margin. The idea is
-                 * that deeper search paths may not benefit as much from qualitative
-                 * positional evaluation anyway; and tactical advantages will rarely
-                 * overcome significant material deficits.
-                 */
-                else if (state().is_endgame()
-                    || (_ply < TACTICAL_LOW_DEPTH && abs(eval) < TACTICAL_EVAL_MARGIN))
-                {
-                    eval += SIGN[turn] * eval_tactical(*this);
-
-                    ASSERT(eval < SCORE_MAX);
-                }
+                    return eval;
+                });
             }
 
             _tt_entry._eval = eval;
@@ -1306,17 +1375,6 @@ namespace search
         ASSERT(eval < SCORE_MAX);
 
         return eval;
-    }
-
-
-    int Context::eval_king_safety(int piece_count)
-    {
-        if (_tt_entry._king_safety == SCORE_MIN)
-        {
-            _tt_entry._king_safety = search::eval_king_safety(state(), piece_count);
-        }
-
-        return _tt_entry._king_safety;
     }
 
 
@@ -1753,14 +1811,11 @@ namespace search
         {
             moves_list.swap(ctxt.get_tt()->_moves);
 
-            if (!ctxt.is_retry())
+            for (auto& move : moves_list)
             {
-                for (auto& move : moves_list)
-                {
-                    move._state = nullptr;
-                    move._score = 0;
-                    move._group = MoveOrder::UNORDERED_MOVES;
-                }
+                move._state = nullptr;
+                move._score = 0;
+                move._group = MoveOrder::UNORDERED_MOVES;
             }
         }
 
@@ -1802,11 +1857,13 @@ namespace search
     }
 
 
+/*
     static INLINE bool is_attack_on_king(const Context& ctxt, const Move& move)
     {
         const auto king = ctxt.state().king(!ctxt.turn());
         return square_distance(king, move.to_square()) <= 2;
     }
+*/
 
 
     template<std::size_t... I>
@@ -1921,14 +1978,10 @@ namespace search
             else if (make_move<true>(ctxt, move, futility)) /* Phase == 4 */
             {
                 move._group = MoveOrder::LATE_MOVES;
-            #if 0
-                move._score = ctxt.history_score(move);
-            #else
+
                 move._score =
                     ctxt.history_score(move) / (1 + HISTORY_LOW)
-                    /* - eval_exchanges<true>(ctxt.tid(), move) */
                     + eval_material_and_piece_squares(*move._state);
-            #endif
             }
         }
     }

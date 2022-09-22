@@ -287,7 +287,7 @@ namespace search
 
         score_t     evaluate_end();
         score_t     evaluate_material(bool with_piece_squares = true) const;
-        int         eval_king_safety(int piece_count);
+        void        eval_incremental();
         void        extend();       /* fractional extensions */
         const Move* first_valid_move();
         score_t     futility_margin();
@@ -351,7 +351,6 @@ namespace search
         int         singular_margin() const;
 
         int         tid() const { return _tt->_tid; }
-
         Color       turn() const { return state().turn; }
 
         const State& state() const { ASSERT(_state); return *_state; }
@@ -606,6 +605,13 @@ namespace search
             now - _time_start.load(std::memory_order_relaxed)
         ).count();
     }
+
+
+#if !WITH_NNUE /* dummy */
+    INLINE void Context::eval_incremental()
+    {
+    }
+#endif /* !WITH_NNUE */
 
 
     template<bool EvalCaptures> INLINE score_t Context::evaluate()
@@ -1148,7 +1154,7 @@ namespace search
         auto move = &moves_list[index];
         ASSERT(move->_group != MoveOrder::UNDEFINED);
 
-        while (move->_group == MoveOrder::UNORDERED_MOVES)
+        if (move->_group == MoveOrder::UNORDERED_MOVES)
         {
             if (_phase > 2 && can_late_move_prune(ctxt))
             {

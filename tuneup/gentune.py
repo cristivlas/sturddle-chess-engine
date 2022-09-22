@@ -10,6 +10,9 @@ import sys
 
 import psutil
 
+desc='Generate JSON config for tuneup (see https://chess-tuning-tools.readthedocs.io/en/latest/)'
+
+
 def root_path():
     return os.path.abspath(os.path.join(os.path.split(sys.argv[0])[0], '..'))
 
@@ -38,11 +41,11 @@ def engine(command, **kwargs):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--asymmetric', action='store_true')
-    parser.add_argument('-b', '--book', default='8moves_v3')
+    parser = argparse.ArgumentParser(description=desc)
+    parser.add_argument('-a', '--asymmetric', action='store_true', help='test mtdf vs. negascout')
+    parser.add_argument('-b', '--book', default='8moves_v3', help='opening book file')
     parser.add_argument('-c', '--concurrency', type=int, default=os.cpu_count() // 2)
-    parser.add_argument('--hash', type=int)
+    parser.add_argument('--hash', type=int, help='hash table size')
     parser.add_argument('-o', '--output')
     parser.add_argument('-p', '--plot-every', type=int, default=20)
     parser.add_argument('-r', '--rounds', type=int)

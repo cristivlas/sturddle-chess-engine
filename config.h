@@ -23,6 +23,16 @@
 #include <string>
 #include <thread>
 
+/*
+ * This file contains parameters that control the behavior of the
+ * search and evaluation functions, and infrastructure for exposing
+ * them to Python scripts for the purpose of tuning the engine.
+ *
+ * To expose ALL settings, compile with -DTUNING_ENABLED -DMOBILITY_TUNING_ENABLED
+ *
+ * To cherry-pick, replace DECLARE_VALUE with DECLARE_PARAM
+ */
+
 struct Config
 {
     struct Param
@@ -156,13 +166,13 @@ DECLARE_VALUE(  BISHOP_PAIR,                         68,    0,     100)
 DECLARE_VALUE(  CASTLING_RIGHTS_BONUS,               33,    0,     100)
 DECLARE_VALUE(  CENTER_ATTACKS,                      14,    0,     100)
 DECLARE_VALUE(  CENTER_OCCUPANCY,                    50,    0,     100)
+DECLARE_VALUE(  EVAL_MARGIN,                        300,    0,    5000)
+DECLARE_VALUE(  EVAL_LOW_DEPTH,                       5,    0,     100)
 DECLARE_VALUE(  KING_ATTACK_DIV,                     28,    1,     100)
 DECLARE_VALUE(  KING_OUT_PENALTY,                  -150, -500,       0)
 DECLARE_VALUE(  PAWN_SHIELD,                         22,    0,     100)
 DECLARE_VALUE(  MATERIAL_IMBALANCE,                -256, -500,       0)
 DECLARE_VALUE(  REDUNDANT_ROOK,                    -325, -500,       0)
-DECLARE_VALUE(  TACTICAL_EVAL_MARGIN,               300,    0,    5000)
-DECLARE_VALUE(  TACTICAL_LOW_DEPTH,                   5,    0,     100)
 
 DECLARE_VALUE(  ENDGAME_CONNECTED_ROOKS,             13,    0,     100)
 DECLARE_VALUE(  ENDGAME_DEFENDED_PASSED,             15,    0,     100)

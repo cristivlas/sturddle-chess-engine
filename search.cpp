@@ -361,7 +361,6 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
         entry._eval = ctxt._tt_entry._eval;
 
     entry._capt = ctxt._tt_entry._capt;
-    entry._king_safety = ctxt._tt_entry._king_safety;
 }
 
 
@@ -700,6 +699,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             return ctxt._score = ctxt._alpha;
         }
     }
+
+#if !NNUE_ENDGAME
+    if (!ctxt.state().is_endgame())
+#endif /* !NNUE_ENDGAME */
+        ctxt.eval_incremental();
 
     /*
      * https://www.chessprogramming.org/Node_Types#PV

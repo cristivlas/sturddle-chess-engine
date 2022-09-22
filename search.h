@@ -167,7 +167,6 @@ namespace search
         int16_t     _capt = SCORE_MIN;
         int16_t     _value = SCORE_MIN;
         int16_t     _eval = SCORE_MIN;
-        int16_t     _king_safety = SCORE_MIN;
         BaseMove    _hash_move;
 
     #if !NO_ASSERT
