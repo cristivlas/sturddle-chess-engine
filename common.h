@@ -120,6 +120,13 @@ using score_t = int;
 #endif
 
 /*
+ * Use NNUE-based or "classic" evaluation in the endgame?
+ */
+#if !defined(DNNUE_ENDGAME)
+  #define DNNUE_ENDGAME                     true
+#endif
+
+/*
  * When TUNING_ENABLED is true, values introduced by DECLARE_VALUE in config.h
  * become visible to Python scripts (via set_param, get_params, get_param_info)
  * and can be tweaked at runtime.
@@ -228,3 +235,12 @@ template <typename T, typename S> static inline constexpr void assert_expr(T&& e
     #endif
     }
 }
+
+// ---------------------------------------------------------------------
+//
+// ---------------------------------------------------------------------
+static inline std::string timestamp()
+{
+    return _TOSTR(BUILD_STAMP);
+}
+

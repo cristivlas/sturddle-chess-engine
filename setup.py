@@ -1,7 +1,11 @@
 from setuptools import Extension, setup
 from Cython.Build import cythonize
 from os import environ
+from datetime import datetime
 import sysconfig
+
+build_stamp = datetime.now().strftime('%m%d%y.%H%M')
+
 
 sourcefiles = [
     '__init__.pyx',
@@ -57,7 +61,7 @@ else:
         '-DCYTHON_WITHOUT_ASSERTIONS',
         '-fvisibility=hidden',
         '-DPyMODINIT_FUNC=__attribute__((visibility("default"))) extern "C" PyObject*',
-        #'-fprofile-sample-use=code.prof',
+        '-DBUILD_STAMP=' + build_stamp,
     ]
 
     # Silence off Py_DEPRECATED warnings for clang

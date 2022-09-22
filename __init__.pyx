@@ -86,6 +86,9 @@ cdef extern from 'common.h':
     cdef enum MoveOrder 'search::MoveOrder':
         UNORDERED_MOVES 'search::MoveOrder::UNORDERED_MOVES'
 
+    string timestamp() nogil
+
+
 MOBILITY_TUNING = MOBILITY_TUNING_ENABLED
 MOVE_GROUP_MAX = int(MoveOrder.UNORDERED_MOVES)
 
@@ -1221,7 +1224,7 @@ nnue_init(os.path.dirname(os.path.realpath(__file__)))
 __major__   = 0
 __minor__   = 99
 __smp__     = get_param_info()['Threads'][2] > 1
-__version__ = '.'.join([str(__major__), str(__minor__)])
+__version__ = '.'.join([str(__major__), str(__minor__), timestamp().decode()])
 
 
 def version():
