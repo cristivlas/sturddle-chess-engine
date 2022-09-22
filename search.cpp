@@ -110,8 +110,7 @@ static inline size_t pick_prime(size_t n)
 static constexpr int ONE_MEGABYTE = 1024 * 1024;
 
 
-TranspositionTable::HashTablePtr TranspositionTable::_table =
-    std::make_shared<TranspositionTable::HashTable>(pick_prime(TRANSPOSITION_TABLE_SLOTS));
+auto TranspositionTable::_table = TranspositionTable::HashTable(pick_prime(TRANSPOSITION_TABLE_SLOTS));
 
 
 static size_t mem_avail()
@@ -140,9 +139,7 @@ static size_t mem_avail()
 
 /* static */ size_t TranspositionTable::max_hash_size()
 {
-    ASSERT_ALWAYS(_table);
-
-    const size_t cur_size = HashTable::size_in_bytes(_table->capacity());
+    const size_t cur_size = HashTable::size_in_bytes(_table.capacity());
     const size_t max_mem = mem_avail() + cur_size;
 
     return max_mem / ONE_MEGABYTE;
@@ -151,15 +148,12 @@ static size_t mem_avail()
 
 /* static */ size_t TranspositionTable::get_hash_size()
 {
-    ASSERT_ALWAYS(_table);
-    return HashTable::size_in_bytes(_table->capacity()) / ONE_MEGABYTE;
+    return HashTable::size_in_bytes(_table.capacity()) / ONE_MEGABYTE;
 }
 
 
 /* static */ void TranspositionTable::set_hash_size(size_t MB)
 {
-    ASSERT_ALWAYS(_table);
-
     const auto max_size = max_hash_size(); /* in Megabytes */
 
     /* convert requested size to requested capacity */
@@ -170,7 +164,7 @@ static size_t mem_avail()
 
     while (true)
     {
-        if (prime_cap == _table->capacity())
+        if (prime_cap == _table.capacity())
             return;
 
         auto size = HashTable::size_in_bytes(prime_cap) / ONE_MEGABYTE;
@@ -188,7 +182,7 @@ static size_t mem_avail()
             prime_cap = pick_prime(req_cap);
         }
     }
-    _table->resize(prime_cap);
+    _table.resize(prime_cap);
 
     std::ostringstream out;
     out << "hash: req=" << MB << " new=" << get_hash_size() << " free=" << mem_avail() / ONE_MEGABYTE;
@@ -232,25 +226,25 @@ void TranspositionTable::clear()
 
 /* static */ void TranspositionTable::clear_shared_hashtable()
 {
-    _table->clear();
+    _table.clear();
 }
 
 
 /* static */ void TranspositionTable::increment_clock()
 {
-    _table->increment_clock();
+    _table.increment_clock();
 }
 
 
 /* static */ size_t TranspositionTable::size()
 {
-    return _table->size();
+    return _table.size();
 }
 
 
 /* static */ double TranspositionTable::usage()
 {
-    return (100.0 * _table->size()) / _table->capacity();
+    return (100.0 * _table.size()) / _table.capacity();
 }
 
 
@@ -273,7 +267,7 @@ const int16_t* TranspositionTable::lookup(Context& ctxt)
     /* expect repetitions to be dealt with before calling into this function */
     ASSERT(!ctxt.is_repeated());
 
-    if (const auto p = _table->lookup_read(ctxt.state()))
+    if (const auto p = _table.lookup_read(ctxt.state()))
     {
         ASSERT(p->matches(ctxt.state()));
         ctxt._tt_entry = *p;
@@ -373,7 +367,7 @@ void TranspositionTable::store(Context& ctxt, score_t alpha, int depth)
     update_stats(ctxt);
 #endif /* EXTRA_STATS */
 
-    if (auto p = _table->lookup_write(ctxt.state(), depth))
+    if (auto p = _table.lookup_write(ctxt.state(), depth))
     {
         store(ctxt, *p, alpha, depth);
     }
@@ -458,7 +452,7 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
         /* Add the move to the principal variation. */
         pv.emplace_back(move);
 
-        auto p = _table->lookup_read(state);
+        auto p = _table.lookup_read(state);
         if (!p)
             break;
 

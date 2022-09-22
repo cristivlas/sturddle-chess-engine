@@ -193,7 +193,6 @@ namespace search
     class TranspositionTable
     {
         using HashTable = SharedHashTable<TT_Entry>;
-        using HashTablePtr = std::shared_ptr<HashTable>;
 
     #if USE_BUTTERFLY_TABLES
         using HistoryCounters = MoveTable<std::pair<int, int>>;
@@ -211,7 +210,7 @@ namespace search
 
         KillerMovesTable    _killer_moves; /* killer moves at each ply */
         HistoryCounters     _hcounters[2]; /* History heuristic counters. */
-        static HashTablePtr _table;        /* shared hashtable */
+        static HashTable    _table;        /* shared hashtable */
 
     public:
         TranspositionTable() = default;
