@@ -122,8 +122,8 @@ using score_t = int;
 /*
  * Use NNUE-based or "classic" evaluation in the endgame?
  */
-#if !defined(DNNUE_ENDGAME)
-  #define DNNUE_ENDGAME                     true
+#if !defined(NNUE_ENDGAME)
+  #define NNUE_ENDGAME                      true
 #endif
 
 /*

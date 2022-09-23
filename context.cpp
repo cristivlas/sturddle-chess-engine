@@ -288,6 +288,7 @@ void search::Context::eval_incremental()
     ASSERT(eval == nnue_evaluate(!turn, pieces, squares));
 
 #if NNUE_ENDGAME
+#pragma message("NNUE_ENDGAME")
     _tt_entry._eval = eval_insufficient_material(state(), eval, [eval]() { return eval; });
 #else
     _tt_entry._eval = eval;
@@ -1330,6 +1331,7 @@ namespace search
 
         if (eval == SCORE_MIN)
         {
+        #if WITH_NNUE
         #if !NNUE_ENDGAME
             if (!state().is_endgame())
         #endif
@@ -1338,6 +1340,7 @@ namespace search
                     eval_incremental();
                     return _tt_entry._eval;
                 }
+        #endif /* WITH_NNUE */
 
             /*
              * 1. Material + piece-squares + mobility
