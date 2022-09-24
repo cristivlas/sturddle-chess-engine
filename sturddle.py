@@ -422,7 +422,7 @@ class UCI:
                 pv = 'pv ' + pv
 
             depth = f'depth {algorithm.current_depth} seldepth {seldepth}'
-            nodes = f'nodes {node_count} nps {knps * 1000}'
+            nodes = f'nodes {node_count} nps {int(knps * 1000)}'
 
             hashfull = f'hashfull {engine.get_hash_full()}'
             self.output(f'info {depth} {score_info} time {ms} {hashfull} {nodes} {pv}')
