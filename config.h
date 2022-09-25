@@ -129,9 +129,10 @@ DECLARE_VALUE(  FUTILITY_PRUNING,                     1,    0,       1)
 DECLARE_VALUE(  MANAGE_TIME,                          1,    0,       1)
 DECLARE_VALUE(  MULTICUT,                             1,    0,       1)
 
+/* SEE */
 /* -1 disables pin awareness */
 DECLARE_VALUE(  SEE_PIN_AWARENESS_DEPTH,             -1,   -1,     100)
-DECLARE_CONST(  STATIC_EXCHANGES,                     0,    0,       1) /* SEE */
+DECLARE_CONST(  STATIC_EXCHANGES,                     0,    0,       1)
 
 DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
 

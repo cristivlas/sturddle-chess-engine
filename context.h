@@ -1293,7 +1293,6 @@ namespace search
 
         if (move._state == nullptr)
         {
-            /* assign state buffer */
             ASSERT(_state_index < Context::states(ctxt.tid(), ctxt._ply).size());
 
             move._state = &Context::states(ctxt.tid(), ctxt._ply)[_state_index++];

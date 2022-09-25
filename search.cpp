@@ -64,36 +64,6 @@ static void log_pv(const TranspositionTable& tt, const char* info)
 }
 
 
-const int16_t* TT_Entry::lookup_score(Context& ctxt) const
-{
-    if (_depth >= ctxt.depth())
-    {
-        ASSERT(is_valid());
-
-        if (is_lower())
-        {
-            ctxt._alpha = std::max<score_t>(ctxt._alpha, _value);
-        }
-        else if (is_upper())
-        {
-            ctxt._beta = std::min<score_t>(ctxt._beta, _value);
-        }
-        else
-        {
-            return &_value;
-        }
-
-        if (ctxt._alpha >= ctxt._beta)
-        {
-            ASSERT(_value >= ctxt._beta);
-            return &_value;
-        }
-    }
-
-    return nullptr;
-}
-
-
 /*
  * Thanks to Thomas Neumann for primes.hpp
  * http://databasearchitects.blogspot.com/2020/01/all-hash-table-sizes-you-will-ever-need.html
@@ -248,51 +218,6 @@ void TranspositionTable::clear()
 }
 
 
-BaseMove TranspositionTable::lookup_countermove(const Context& ctxt) const
-{
-#if USE_BUTTERFLY_TABLES
-    return _countermoves[ctxt.turn()].lookup(ctxt._move);
-#else
-    const auto pt = ctxt.state().piece_type_at(ctxt._move.to_square());
-    return _countermoves[ctxt.turn()].lookup(pt, ctxt._move);
-#endif /* USE_BUTTERFLY_TABLES */
-}
-
-
-const int16_t* TranspositionTable::lookup(Context& ctxt)
-{
-    if (ctxt._ply == 0 || ctxt._excluded)
-        return nullptr;
-
-    /* expect repetitions to be dealt with before calling into this function */
-    ASSERT(!ctxt.is_repeated());
-
-    if (const auto p = _table.lookup_read(ctxt.state()))
-    {
-        ASSERT(p->matches(ctxt.state()));
-        ctxt._tt_entry = *p;
-#if EXTRA_STATS
-        ++_hits;
-#endif /* EXTRA_STATS */
-    }
-
-    /* http://www.talkchess.com/forum3/viewtopic.php?topic_view=threads&p=305236&t=30788 */
-    if (ctxt._ply && !ctxt.is_pv_node())
-    {
-        if (auto value = ctxt._tt_entry.lookup_score(ctxt))
-        {
-            ctxt._score = *value;
-            return value;
-        }
-    }
-
-    if (ctxt._move)
-        ctxt.set_counter_move(lookup_countermove(ctxt));
-
-    return nullptr;
-}
-
-
 void TranspositionTable::update_stats(const Context& ctxt)
 {
     if (ctxt.is_qsearch())
@@ -355,39 +280,6 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
         entry._eval = ctxt._tt_entry._eval;
 
     entry._capt = ctxt._tt_entry._capt;
-}
-
-
-void TranspositionTable::store(Context& ctxt, score_t alpha, int depth)
-{
-    ASSERT(ctxt._score > SCORE_MIN);
-    ASSERT(ctxt._score < SCORE_MAX);
-
-#if EXTRA_STATS
-    update_stats(ctxt);
-#endif /* EXTRA_STATS */
-
-    if (auto p = _table.lookup_write(ctxt.state(), depth))
-    {
-        store(ctxt, *p, alpha, depth);
-    }
-}
-
-
-void TranspositionTable::store_countermove(Context& ctxt)
-{
-    if (ctxt._move)
-    {
-        ASSERT(ctxt._cutoff_move);
-#if USE_BUTTERFLY_TABLES
-        _countermoves[ctxt.turn()][ctxt._move] = ctxt._cutoff_move;
-#else
-        const auto pt = ctxt.state().piece_type_at(ctxt._move.to_square());
-        _countermoves[ctxt.turn()].lookup(pt, ctxt._move) = ctxt._cutoff_move;
-#endif /* USE_BUTTERFLY_TABLES */
-
-        ctxt.set_counter_move(ctxt._cutoff_move);
-    }
 }
 
 
@@ -694,9 +586,9 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         }
     }
 
-#if !NNUE_ENDGAME
+#if WITH_NNUE && !NNUE_ENDGAME
     if (!ctxt.state().is_endgame())
-#endif /* !NNUE_ENDGAME */
+#endif /* WITH_NNUE && !NNUE_ENDGAME */
         ctxt.eval_incremental();
 
     /*

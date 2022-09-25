@@ -38,6 +38,9 @@
   #include "auto.h" /* for NNUE_CONFIG */
   #include "nnue.h"
 #endif
+#if USE_VECTOR
+#include <xmmintrin.h>
+#endif
 
 using namespace chess;
 using search::TranspositionTable;
@@ -572,6 +575,8 @@ namespace search
 
         int score = 0;
         int moves_count = 0;
+
+        (void) moves_count; /* silence off compiler warning */
 
         State next_state;
 
@@ -1194,6 +1199,40 @@ namespace search
      */
     static INLINE int eval_piece_grading(const State& state, int pcs)
     {
+        int score = 0;
+        const int p = popcount(state.pawns);
+
+    #if USE_VECTOR && !(MOBILITY_TUNING)
+
+        using ix4 = int __attribute__((vector_size(4 * sizeof(int))));
+        auto constexpr N = WEIGHT[KNIGHT];
+        auto constexpr B = WEIGHT[BISHOP];
+        auto constexpr R = WEIGHT[ROOK];
+        auto constexpr Q = WEIGHT[QUEEN];
+
+        static constexpr ix4 perc_w[4] = {
+            {   2 * N,  0 * B, -3 * R,  -2 * Q, }, /* closed */
+            {   2 * N,  1 * B, -2 * R,  -1 * Q, }, /* semi-closed */
+            {  -2 * N,  3 * B,  2 * R,   4 * Q, }, /* semi-open */
+            {  -3 * N,  4 * B,  2 * R,   6 * Q, }, /* open */
+        };
+        using ux4 = uint64_t __attribute__((vector_size(4 * sizeof(uint64_t))));
+        const auto& g = perc_w[int(p > 4) + int(p > 8) + int(p > 12)];
+        const ux4 b = { state.knights, state.bishops, state.rooks, state.queens };
+
+        for (const auto color : { BLACK, WHITE })
+        {
+            const auto c_mask = state.occupied_co(color);
+            const ux4 c = b & c_mask;
+            ix4 p = { popcount(c[0]), popcount(c[1]), popcount(c[2]), popcount(c[3]) };
+            p *= g;
+
+            score += SIGN[color] * (
+                __builtin_reduce_add(p) / 100
+                + popcount(state.pawns * c_mask) * interpolate(pcs, 0, 3)
+            );
+        }
+    #else
         static constexpr int percents[4][4] = {
             /*  n,  b,   r,  q */
             {   2,  0, -3,  -2, }, /* closed */
@@ -1201,11 +1240,7 @@ namespace search
             {  -2,  3,  2,   4, }, /* semi-open */
             {  -3,  4,  2,   6, }, /* open */
         };
-
-        const int p = popcount(state.pawns);
         const auto& grading = percents[int(p > 4) + int(p > 8) + int(p > 12)];
-
-        int score = 0;
 
         for (const auto color : { BLACK, WHITE })
         {
@@ -1220,6 +1255,7 @@ namespace search
 
             score += SIGN[color] * popcount(state.pawns * color_mask) * interpolate(pcs, 0, 3);
         }
+    #endif /* USE_VECTOR && !MOBILITY_TUNING */
 
         return score;
     }
@@ -1308,12 +1344,33 @@ namespace search
     }
 
 
-    static INLINE int eval_tactical(Context& ctxt)
+    static INLINE int eval_tactical(Context& ctxt, score_t eval)
     {
-        const auto piece_count = popcount(ctxt.state().occupied());
-        const auto mat_eval = ctxt.evaluate_material();
+        const auto& state = ctxt.state();
+        const auto piece_count = popcount(state.occupied());
 
-        return eval_tactical(ctxt.state(), mat_eval, piece_count);
+        /*
+         * 2nd order evaluation is currently slow (and possibly inaccurate).
+         * To mitigate, in midgame it is done only at lower plies, and only
+         * if 1st order eval delta is within a 2-3 pawns margin. The idea is
+         * that deeper search paths may not benefit as much from qualitative
+         * positional evaluation anyway; and tactical advantages will rarely
+         * overcome significant material deficits.
+         */
+        if (state.is_endgame() || (ctxt._ply < EVAL_LOW_DEPTH && abs(eval) < EVAL_MARGIN))
+        {
+            const auto mat_eval = ctxt.evaluate_material();
+
+            eval += SIGN[state.turn] * eval_tactical(state, mat_eval, piece_count);
+        }
+        else
+        {
+            eval += SIGN[state.turn] * eval_piece_grading(state, piece_count);
+        }
+
+        ASSERT(eval < SCORE_MAX);
+
+        return eval;
     }
 
 
@@ -1354,22 +1411,11 @@ namespace search
             {
                 eval += eval_fuzz();
 
+                /*
+                 * 2. Tactical (positional) evaluation.
+                 */
                 eval = eval_insufficient_material(state(), eval, [&]() {
-                    /*
-                     * 2. Tactical (positional) evaluation.
-                     * 2nd order evaluation is currently slow (and possibly inaccurate).
-                     * To mitigate, in midgame it is done only at lower plies, and only
-                     * if 1st order eval delta is within a 2-3 pawns margin. The idea is
-                     * that deeper search paths may not benefit as much from qualitative
-                     * positional evaluation anyway; and tactical advantages will rarely
-                     * overcome significant material deficits.
-                     */
-                    if (state().is_endgame() || (_ply < EVAL_LOW_DEPTH && abs(eval) < EVAL_MARGIN))
-                    {
-                        eval += SIGN[turn()] * eval_tactical(*this);
-                        ASSERT(eval < SCORE_MAX);
-                    }
-                    return eval;
+                    return eval_tactical(*this, eval);
                 });
             }
 
@@ -1827,8 +1873,9 @@ namespace search
         _count = int(moves_list.size());
         _current = 0;
 
-        /* Initialize scratch buffers for making the moves. */
-        Context::states(ctxt.tid(), ctxt._ply).resize(_count);
+        auto& states_vec = Context::states(ctxt.tid(), ctxt._ply);
+        if (states_vec.size() < size_t(_count))
+            states_vec.resize(_count);
 
         /*
          * In quiescent search, only quiet moves are interesting.

@@ -92,19 +92,19 @@ namespace search
             clear();
         }
 
-        inline void clear()
+        INLINE void clear()
         {
             std::fill_n(&_table[0][0], 64 * 64, T());
         }
 
-        inline T& operator[](const Move& move)
+        INLINE T& operator[](const Move& move)
         {
             ASSERT(move);
             return _table[move.from_square()][move.to_square()];
         }
 
 
-        inline const T& lookup(const Move& move) const
+        INLINE const T& lookup(const Move& move) const
         {
             ASSERT(move);
             return _table[move.from_square()][move.to_square()];
@@ -121,19 +121,19 @@ namespace search
             clear();
         }
 
-        inline void clear()
+        INLINE void clear()
         {
             std::fill_n(&_table[0][0], 7 * 64, T());
         }
 
-        inline T& lookup(chess::PieceType piece_type, const Move& move)
+        INLINE T& lookup(chess::PieceType piece_type, const Move& move)
         {
             ASSERT(piece_type != chess::PieceType::NONE);
             ASSERT(move);
             return _table[piece_type][move.to_square()];
         }
 
-        inline const T& lookup(chess::PieceType piece_type, const Move& move) const
+        INLINE const T& lookup(chess::PieceType piece_type, const Move& move) const
         {
             return const_cast<PieceMoveTable*>(this)->lookup(piece_type, move);
         }
@@ -173,16 +173,44 @@ namespace search
         void*       _owner = nullptr;
     #endif /* NO_ASSERT */
 
-        inline bool is_lower() const { return _type == TT_Type::LOWER; }
-        inline bool is_upper() const { return _type == TT_Type::UPPER; }
-        inline bool is_valid() const { return _type != TT_Type::NONE; }
+        INLINE bool is_lower() const { return _type == TT_Type::LOWER; }
+        INLINE bool is_upper() const { return _type == TT_Type::UPPER; }
+        INLINE bool is_valid() const { return _type != TT_Type::NONE; }
 
-        inline bool matches(const State& state) const
+        INLINE bool matches(const State& state) const
         {
             return is_valid() && _hash == state.hash();
         }
 
-        const int16_t* lookup_score(Context&) const;
+        template<typename C>
+        INLINE const int16_t* lookup_score(C& ctxt) const
+        {
+            if (_depth >= ctxt.depth())
+            {
+                ASSERT(is_valid());
+
+                if (is_lower())
+                {
+                    ctxt._alpha = std::max<score_t>(ctxt._alpha, _value);
+                }
+                else if (is_upper())
+                {
+                    ctxt._beta = std::min<score_t>(ctxt._beta, _value);
+                }
+                else
+                {
+                    return &_value;
+                }
+
+                if (ctxt._alpha >= ctxt._beta)
+                {
+                    ASSERT(_value >= ctxt._beta);
+                    return &_value;
+                }
+            }
+
+            return nullptr;
+        }
     };
 
 
@@ -254,7 +282,8 @@ namespace search
         size_t _reductions = 0;
         size_t _retry_reductions = 0;
 
-        BaseMove lookup_countermove(const Context&) const;
+        template<typename C>
+        BaseMove lookup_countermove(const C& ctxt) const;
 
         const KillerMoves* get_killer_moves(int ply) const
         {
@@ -267,12 +296,12 @@ namespace search
         template<bool Debug=false>
         void get_pv_from_table(Context&, const Context&, PV&);
 
-        const int16_t* lookup(Context&);
+        template<typename C> const int16_t* lookup(C& ctxt);
+        template<typename C> void store(C& ctxt, score_t alpha, int depth);
 
-        void store(Context&, score_t alpha, int depth);
         void store(Context&, TT_Entry&, score_t, int depth);
 
-        void store_countermove(Context&);
+        template<typename C> void store_countermove(C& ctxt);
         void store_killer_move(const Context&);
 
         template<bool Debug=false> void store_pv(Context&);
@@ -314,7 +343,7 @@ namespace search
      * https://www.chessprogramming.org/History_Heuristic
      * https://www.chessprogramming.org/Relative_History_Heuristic
      */
-    inline const std::pair<int, int>&
+    INLINE const std::pair<int, int>&
     TranspositionTable::historical_counters(
         const State& state,
         Color turn,
@@ -331,7 +360,7 @@ namespace search
     }
 
 
-    inline float
+    INLINE float
     TranspositionTable::history_score(
         int ply,
         const State& state,
@@ -352,7 +381,7 @@ namespace search
     }
 
 
-    inline void TranspositionTable::history_update_non_cutoffs(const Move& move, bool low)
+    INLINE void TranspositionTable::history_update_non_cutoffs(const Move& move, bool low)
     {
         if (move)
         {
@@ -374,7 +403,7 @@ namespace search
     }
 
 
-    inline void TranspositionTable::history_update_cutoffs(const Move& move)
+    INLINE void TranspositionTable::history_update_cutoffs(const Move& move)
     {
         ASSERT(move);
         ASSERT(move._state);
@@ -392,4 +421,83 @@ namespace search
         ++counts.first;
         ++counts.second;
     }
-}
+
+
+    template<typename C>
+    INLINE BaseMove TranspositionTable::lookup_countermove(const C& ctxt) const
+    {
+    #if USE_BUTTERFLY_TABLES
+        return _countermoves[ctxt.turn()].lookup(ctxt._move);
+    #else
+        const auto pt = ctxt.state().piece_type_at(ctxt._move.to_square());
+        return _countermoves[ctxt.turn()].lookup(pt, ctxt._move);
+    #endif /* USE_BUTTERFLY_TABLES */
+    }
+
+
+    template<typename C>
+    INLINE const int16_t* TranspositionTable::lookup(C& ctxt)
+    {
+        if (ctxt._ply == 0 || ctxt._excluded)
+            return nullptr;
+
+        /* expect repetitions to be dealt with before calling into this function */
+        ASSERT(!ctxt.is_repeated());
+
+        if (const auto p = _table.lookup_read(ctxt.state()))
+        {
+            ASSERT(p->matches(ctxt.state()));
+            ctxt._tt_entry = *p;
+
+            if constexpr(EXTRA_STATS)
+                ++_hits;
+        }
+
+        /* http://www.talkchess.com/forum3/viewtopic.php?topic_view=threads&p=305236&t=30788 */
+        if (ctxt._ply && !ctxt.is_pv_node())
+        {
+            if (auto value = ctxt._tt_entry.lookup_score(ctxt))
+            {
+                ctxt._score = *value;
+                return value;
+            }
+        }
+
+        if (ctxt._move)
+            ctxt.set_counter_move(lookup_countermove(ctxt));
+
+        return nullptr;
+    }
+
+
+    template<typename C>
+    INLINE void TranspositionTable::store(C& ctxt, score_t alpha, int depth)
+    {
+        ASSERT(ctxt._score > SCORE_MIN);
+        ASSERT(ctxt._score < SCORE_MAX);
+
+        if constexpr(EXTRA_STATS)
+            update_stats(ctxt);
+
+        if (auto p = _table.lookup_write(ctxt.state(), depth))
+            store(ctxt, *p, alpha, depth);
+    }
+
+
+    template<typename C>
+    INLINE void TranspositionTable::store_countermove(C& ctxt)
+    {
+        if (ctxt._move)
+        {
+            ASSERT(ctxt._cutoff_move);
+    #if USE_BUTTERFLY_TABLES
+            _countermoves[ctxt.turn()][ctxt._move] = ctxt._cutoff_move;
+    #else
+            const auto pt = ctxt.state().piece_type_at(ctxt._move.to_square());
+            _countermoves[ctxt.turn()].lookup(pt, ctxt._move) = ctxt._cutoff_move;
+    #endif /* USE_BUTTERFLY_TABLES */
+
+            ctxt.set_counter_move(ctxt._cutoff_move);
+        }
+    }
+} /* namespace */
