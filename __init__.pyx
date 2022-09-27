@@ -1193,10 +1193,8 @@ def test_incremental_updates(fen):
         # Incremental evaluation from current node state
         eval_incr = node._ctxt._state.eval_incremental(next._move)
 
-        # Excepted cases (for now)
-        if (node._ctxt._state.is_en_passant(next._move) or
-            node._ctxt._state.is_castling(next._move)
-           ):
+        # Except en passant (for now)
+        if (node._ctxt._state.is_en_passant(next._move)):
             # print(fen, py_move(next._move), eval, eval_next, eval_incr)
             continue
 

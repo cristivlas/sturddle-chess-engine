@@ -184,10 +184,53 @@ static INLINE score_t eval_insufficient_material(const State& state, score_t eva
 /*****************************************************************************
  *  NNUE
  *****************************************************************************/
+#if WITH_NNUE
+bool USE_NNUE = true;
+
+static std::string NNUE_file = "nn-cb26f10b1fd9.nnue";
+
+/* Logging may not be initialized when NNUE::init() is called */
+/* Hold on to message and log on first search. */
+static std::string NNUE_init_msg;
+
+static std::vector<std::array<NNUEdata, PLY_MAX>> NNUE_accumulator_data(SMP_CORES);
+
+
+void NNUE::log_init_message()
+{
+    if (!NNUE_init_msg.empty())
+    {
+        search::Context::log_message(LogLevel::INFO, NNUE_init_msg);
+        NNUE_init_msg.clear();
+    }
+}
+
+
+void NNUE::init(const std::string& data_dir)
+{
+    if (nnue_init((data_dir + NNUE_file).c_str()))
+    {
+        USE_NNUE = true;
+        NNUE_init_msg = std::string(NNUE_CONFIG) + " " + NNUE_file;
+    }
+    else
+    {
+        USE_NNUE = false;
+        NNUE_init_msg = "nnue_init errno=" + std::to_string(errno);
+    }
+}
+
+
+int NNUE::eval_fen(const std::string& fen)
+{
+    return nnue_evaluate_fen(fen.c_str());
+}
+
+
 /*
  * Convert from bitboard representation to format expected by nnue_eval.
  */
-INLINE void
+static INLINE void
 NNUE_convert_position(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
 {
     pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
@@ -208,49 +251,6 @@ NNUE_convert_position(const BoardPosition& pos, int (&pieces)[33], int (&squares
     squares[i] = 0;
 }
 
-/* Logging may not be initialized when NNUE::init() is called */
-/* Hold on to message and log on first search. */
-static std::string NNUE_init_msg;
-
-void NNUE::log_init_message()
-{
-    if (!NNUE_init_msg.empty())
-    {
-        search::Context::log_message(LogLevel::INFO, NNUE_init_msg);
-        NNUE_init_msg.clear();
-    }
-}
-
-
-#if WITH_NNUE
-bool USE_NNUE = true;
-
-static std::string NNUE_file = "nn-cb26f10b1fd9.nnue";
-
-
-void NNUE::init(const std::string& data_dir)
-{
-    if (nnue_init((data_dir + NNUE_file).c_str()))
-    {
-        USE_NNUE = true;
-        NNUE_init_msg = std::string(NNUE_CONFIG) + " " + NNUE_file;
-    }
-    else
-    {
-        USE_NNUE = false;
-        NNUE_init_msg = "nnue_init errno=" + std::to_string(errno);
-    }
-}
-
-
-static std::vector<std::array<NNUEdata, PLY_MAX>> NNUE_accumulator_data(SMP_CORES);
-
-
-int NNUE::eval_fen(const std::string& fen)
-{
-    return nnue_evaluate_fen(fen.c_str());
-}
-
 
 int NNUE::eval(const chess::BoardPosition& pos, int tid)
 {
@@ -261,6 +261,59 @@ int NNUE::eval(const chess::BoardPosition& pos, int tid)
     const int turn = (pos.turn == WHITE) ? white : black;
 
     return nnue_evaluate(turn, n.pieces, n.squares);
+}
+
+
+static INLINE void
+NNUE_update_dirty_pieces(
+    const State& from_pos,
+    const State& to_pos,
+    const Move& move,
+    Color color, /* color of side that moved */
+    DirtyPiece& dp)
+{
+    dp.dirtyNum = 1;
+
+    dp.to[0] = move.to_square();
+
+    if (to_pos.promotion)
+    {
+        dp.pc[0] = NNUE::piece(to_pos.promotion, color);
+        dp.from[0] = NNUE::NO_SQUARE;
+        dp.pc[1] = NNUE::piece(chess::PieceType::PAWN, color);
+        dp.to[1] = NNUE::NO_SQUARE;
+        dp.from[1] = move.from_square();
+        ++dp.dirtyNum;
+    }
+    else
+    {
+        dp.pc[0] = NNUE::piece(from_pos.piece_type_at(move.from_square()), color);
+        dp.from[0] = move.from_square();
+
+        if (to_pos.is_castle)
+        {
+            const auto king_file = square_file(move.to_square());
+
+            dp.pc[1] = NNUE::piece(chess::PieceType::ROOK, color);
+            dp.from[1] = chess::rook_castle_squares[king_file == 2][0][color];
+            dp.to[1] = chess::rook_castle_squares[king_file == 2][1][color];
+            ++dp.dirtyNum;
+        }
+    }
+
+    if (to_pos.capture_value)
+    {
+        const auto capture_square = from_pos.is_en_passant(move)
+            ? Square(from_pos.en_passant_square - 8 * SIGN[color])
+            : move.to_square();
+        const auto victim_type = from_pos.piece_type_at(capture_square);
+
+        dp.pc[dp.dirtyNum] = NNUE::piece(victim_type, !color);
+        dp.to[dp.dirtyNum] = NNUE::NO_SQUARE;
+        dp.from[dp.dirtyNum] = capture_square;
+
+        ++dp.dirtyNum;
+    }
 }
 
 
@@ -277,33 +330,39 @@ void search::Context::eval_incremental()
 
     nnue_data[0] = &acc[_ply];
     nnue_data[0]->accumulator.computedAccumulation = 0;
-    if (_parent)
+
+    if (_parent && !is_null_move())
     {
         nnue_data[1] = &acc[_parent->_ply];
-        nnue_data[1]->accumulator.computedAccumulation = 0;
-        if (_parent->_parent)
-        {
+
+        auto& dp = nnue_data[0]->dirtyPiece;
+        NNUE_update_dirty_pieces(_parent->state(), state(), _move, !turn, dp);
+
+        if (_parent->_parent && !_parent->is_null_move())
             nnue_data[2] = &acc[_parent->_parent->_ply];
-        }
     }
 
     auto eval = nnue_evaluate_incremental(!turn, pieces, squares, nnue_data);
+
+    /* Verify incremental result againt full eval. */
     ASSERT(eval == nnue_evaluate(!turn, pieces, squares));
 
-#if NNUE_ENDGAME
-#pragma message("NNUE_ENDGAME")
-    _tt_entry._eval = eval_insufficient_material(state(), eval, [eval]() { return eval; });
-#else
+    /* Make sure that insufficient material conditions are detected. */
+    eval = eval_insufficient_material(state(), eval, [eval](){ return eval; });
+
     _tt_entry._eval = eval;
-#endif /* NNUE_ENDGAME */
 }
 
+
 #else
+
 
 bool USE_NNUE = false;
 void NNUE::init(const std::string&) {}
+void NNUE::log_init_message() {}
 int NNUE::eval_fen(const std::string&) { return 0; }
 int NNUE::eval(const chess::BoardPosition&, int) { return 0; }
+
 
 #endif /* WITH_NNUE */
 
@@ -382,6 +441,7 @@ namespace search
         ctxt->_tt_entry = _tt_entry;
         ctxt->_counter_move = _counter_move;
 
+        ctxt->_is_null_move = _is_null_move;
         return ctxt;
     }
 
@@ -400,9 +460,9 @@ namespace search
             NNUE_accumulator_data.resize(n_threads);
         #endif
 
-            /* pre-allocate memory */
             for (size_t n = 0; n < n_threads; ++n)
             {
+                /* pre-allocate memory */
                 for (size_t ply = 0; ply < PLY_MAX; ++ply)
                 {
                     _move_stacks[n][ply].reserve(64);
@@ -442,9 +502,10 @@ namespace search
                     if (next_ctxt->_retry_above_alpha == RETRY::Reduced)
                     {
                         _retry_next = true;
-                    #if EXTRA_STATS
-                        ++_tt->_retry_reductions;
-                    #endif /* EXTRA_STATS */
+
+                        if constexpr(EXTRA_STATS)
+                            ++_tt->_retry_reductions;
+
                         /* increment, so that late_move_reduce() skips it */
                         _full_depth_count = next_move_index() + 1;
                     }
@@ -556,7 +617,7 @@ namespace search
         for (auto& move : moves)
         {
             ASSERT(state.piece_type_at(move.from_square()));
-            move._score = state.weight(state.piece_type_at(move.from_square()));
+            move._score = state.piece_weight_at(move.from_square());
         }
         /* sort lower-value attackers first */
         insertion_sort(moves.begin(), moves.end(),
@@ -595,7 +656,7 @@ namespace search
                 Context::log_message(LogLevel::DEBUG, "\t>>> " + move.uci());
 
             const score_t capturer_value = move._score;
-            ASSERT(capturer_value == state.weight(state.piece_type_at(move.from_square())));
+            ASSERT(capturer_value == state.piece_weight_at(move.from_square()));
 
             /*
              * If the value of the capture exceed the other's side gain plus the value of the
@@ -712,7 +773,7 @@ namespace search
             ASSERT(state.piece_type_at(move.to_square()));
             ASSERT(state.piece_type_at(move.from_square()));
 
-            move._score = state.weight(state.piece_type_at(move.to_square()));
+            move._score = state.piece_weight_at(move.to_square());
         }
 
         /*
@@ -768,7 +829,7 @@ namespace search
             ASSERT(move._score == next_state.capture_value);
             ASSERT(next_state.capture_value > score || EXCHANGES_DETECT_CHECKMATE);
 
-            auto attacker_value = state.weight(state.piece_type_at(move.from_square()));
+            auto attacker_value = state.piece_weight_at(move.from_square());
             auto gain = next_state.capture_value - attacker_value;
 
             /*
@@ -1609,9 +1670,8 @@ namespace search
          */
         _retry_above_alpha = RETRY::Reduced;
 
-    #if EXTRA_STATS
-        ++_tt->_reductions;
-    #endif /* EXTRA_STATS */
+        if constexpr(EXTRA_STATS)
+            ++_tt->_reductions;
 
         return LMRAction::Ok;
     }
@@ -1915,7 +1975,7 @@ namespace search
         const auto king = ctxt.state().king(!ctxt.turn());
         return square_distance(king, move.to_square()) <= 2;
     }
-*/
+ */
 
 
     template<std::size_t... I>
@@ -1984,7 +2044,7 @@ namespace search
                      */
 
                     /* Sort in decreasing order of the capturing piece's value. */
-                    move._score = -WEIGHT[ctxt.state().piece_type_at(move.from_square())];
+                    move._score = -ctxt.state().piece_weight_at(move.from_square());
                 }
             }
             /* Captures and killer moves. */
@@ -2017,7 +2077,6 @@ namespace search
                     if (make_move<true>(ctxt, move, MoveOrder::TACTICAL_MOVES, hist_score))
                         ASSERT(move._score == hist_score);
                 }
-                /*
                 else if (move._score >= HISTORY_LOW
                     && make_move<true>(ctxt, move, futility)
                     && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
@@ -2025,7 +2084,6 @@ namespace search
                     move._group = MoveOrder::TACTICAL_MOVES;
                     move._score = hist_score;
                 }
-                */
             }
             else if (make_move<true>(ctxt, move, futility)) /* Phase == 4 */
             {

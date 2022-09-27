@@ -22,8 +22,8 @@
 /*
  * Core Chess support data structures and routines.
  *
- * Parts inspired and ported from python-chess (C) Niklas Fiekas
- * https://python-chess.readthedocs.io/en/latest/
+ * Parts inspired and ported from:
+ * python-chess (C) Niklas Fiekas (https://python-chess.readthedocs.io/en/latest/)
 */
 #include <array>
 #include <cmath>
@@ -1032,10 +1032,21 @@ namespace chess
 
         score_t eval_incremental(const BaseMove&) const;
 
-        /* indirection point for future ideas (dynamic piece weights) */
+        /*
+         * Indirection point for future ideas (dynamic piece weights).
+         * Ideas:
+         * - use different weights for midgame / endgame and interpolate;
+         * - use tables for game phases, use number of pawns to determine phase;
+         * - leave weights alone and alter material eval (see eval_piece_grading).
+         */
         static INLINE constexpr int weight(PieceType piece_type)
         {
             return WEIGHT[piece_type];
+        }
+
+        INLINE int piece_weight_at(Square square) const
+        {
+            return weight(piece_type_at(square));
         }
 
         mutable std::array<int8_t, 2> _check = {-1, -1};
@@ -1079,6 +1090,12 @@ namespace chess
     }
 
 
+    static constexpr Square rook_castle_squares[2][2][2] = {
+        { { H8, H1 }, { F8, F1 } },
+        { { A8, A1 }, { D8, D1 } },
+    };
+
+
     INLINE void State::apply_move(const BaseMove& move)
     {
         ASSERT(move);
@@ -1086,7 +1103,7 @@ namespace chess
 
         _check = { -1, -1 };
 
-        this->capture_value = weight(piece_type_at(move.to_square()));
+        this->capture_value = piece_weight_at(move.to_square());
         this->promotion = move.promotion();
 
         const auto color = piece_color_at(move.from_square());
@@ -1109,12 +1126,8 @@ namespace chess
                 rook_to_square = (color == WHITE ? F1 : F8);
             }
         #else
-            static constexpr Square swap_squares[2][2][2] = {
-                { { H8, H1 }, { F8, F1 } },
-                { { A8, A1 }, { D8, D1 } },
-            };
-            const auto rook_from_square = swap_squares[king_to_file == 2][0][color];
-            const auto rook_to_square = swap_squares[king_to_file == 2][1][color];
+            const auto rook_from_square = rook_castle_squares[king_to_file == 2][0][color];
+            const auto rook_to_square = rook_castle_squares[king_to_file == 2][1][color];
         #endif
             const auto piece_type = remove_piece_at(rook_from_square);
             ASSERT(piece_type == ROOK);
@@ -1230,13 +1243,24 @@ namespace chess
 
     INLINE score_t State::eval_incremental(const BaseMove& move) const
     {
-        if (simple_score == UNKNOWN_SCORE || is_castling(move) || is_en_passant(move))
+        if (simple_score == UNKNOWN_SCORE || is_en_passant(move))
         {
             return UNKNOWN_SCORE; /* full eval needed */
         }
         else
         {
-            return simple_score + eval_delta(move);
+            auto eval = simple_score + eval_delta(move);
+
+            if (is_castling(move))
+            {
+                const auto king_file = square_file(move.to_square());
+                const auto rook_move = BaseMove(
+                    chess::rook_castle_squares[king_file == 2][0][turn],
+                    chess::rook_castle_squares[king_file == 2][1][turn]);
+
+                eval += eval_delta(rook_move);
+            }
+            return eval;
         }
     }
 

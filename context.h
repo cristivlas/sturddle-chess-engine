@@ -47,6 +47,8 @@ extern std::map<std::string, int> _get_params();
 
 struct NNUE
 {
+    static constexpr int NO_SQUARE = 64;
+
     static void init(const std::string& data_dir);
     static int eval(const chess::BoardPosition&, int tid); /* test */
     static int eval_fen(const std::string& fen); /* test */
@@ -288,6 +290,8 @@ namespace search
         score_t     evaluate_end();
         score_t     evaluate_material(bool with_piece_squares = true) const;
         void        eval_incremental();
+        score_t     static_eval();
+
         void        extend();       /* fractional extensions */
         const Move* first_valid_move();
         score_t     futility_margin();
@@ -614,6 +618,16 @@ namespace search
 #endif /* !WITH_NNUE */
 
 
+    /*
+     * Use value from the TT if available,
+     * else do a quick material evaluation.
+     */
+    INLINE score_t Context::static_eval()
+    {
+        return _tt_entry._eval == SCORE_MIN ? evaluate_material() : _tt_entry._eval;
+    }
+
+
     template<bool EvalCaptures> INLINE score_t Context::evaluate()
     {
         ASSERT(_fifty < 100);
@@ -792,7 +806,7 @@ namespace search
 
         ASSERT(depth() >= 0);
 
-        return evaluate_material() >= _beta
+        return static_eval() >= _beta
             - NULL_MOVE_DEPTH_WEIGHT * depth()
             + improvement() / NULL_MOVE_IMPROVEMENT_DIV
             + NULL_MOVE_MARGIN;
@@ -867,7 +881,7 @@ namespace search
     {
         return NULL_MOVE_REDUCTION
             + ctxt.depth() / NULL_MOVE_DEPTH_DIV
-            + std::min(3, (ctxt.evaluate_material() - ctxt._beta) / NULL_MOVE_DIV);
+            + std::min(3, (ctxt.static_eval() - ctxt._beta) / NULL_MOVE_DIV);
     }
 
 
@@ -1242,7 +1256,7 @@ namespace search
              * Now determine which capture group it belongs to.
              */
             auto capture_gain = move._state->capture_value;
-            auto other = chess::WEIGHT[ctxt.state().piece_type_at(move.from_square())];
+            auto other = ctxt.state().piece_weight_at(move.from_square());
 
             /* skip exchange evaluation if the capturer is worth less than the captured */
 

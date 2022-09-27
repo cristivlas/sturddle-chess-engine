@@ -777,6 +777,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                             /* Store it in the TT as a cutoff move. */
                             ctxt._alpha = ctxt._score = s_beta;
 
+                            ++move_count;
+
                             /*
                              * Same as with null move pruning below, make sure that
                              * the move is updated in the TT when storing the result.
@@ -946,7 +948,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         if (!ctxt.is_cancelled())
     #endif
         {
-            if (!ctxt.has_moves())
+            if (!move_count && !ctxt.has_moves())
             {
                 /* checkmate or stalemate? */
                 ctxt._score = ctxt.evaluate_end();
@@ -1073,7 +1075,7 @@ static score_t search_iteration(Context& ctxt, TranspositionTable& table, score_
 /****************************************************************************
  * Lazy SMP. https://www.chessprogramming.org/Lazy_SMP
  ****************************************************************************/
- using ThreadPool = thread_pool<int>;
+using ThreadPool = thread_pool<int>;
 static std::unique_ptr<ThreadPool> threads;
 
 
