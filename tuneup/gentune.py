@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+import sysconfig
 
 import psutil
 
@@ -92,6 +93,9 @@ if __name__ == '__main__':
         tune_params[p] = f'({lo}, {hi})'
 
     command = make_path('sturddle.py')
+    platform = sysconfig.get_platform()
+    if platform.startswith('win'):
+        command = sys.executable + ' ' + command
 
     config = {
         'engines': [

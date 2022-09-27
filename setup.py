@@ -17,7 +17,7 @@ sourcefiles = [
     'nnue-probe/src/nnue.cpp',
 ]
 
-platform = sysconfig.get_platform()
+
 """
 Compiler args.
 """
@@ -36,6 +36,9 @@ args = ['-DNO_ASSERT']
 if environ.get('BUILD_ASSERT', None):
     args = ['-DTUNING_ENABLED=true']
 
+
+platform = sysconfig.get_platform()
+
 # Debug build
 if environ.get('BUILD_DEBUG', None):
     if platform.startswith('win'):
@@ -43,6 +46,13 @@ if environ.get('BUILD_DEBUG', None):
          link = ['/DEBUG']
     else:
          args = [ '-O0', '-D_DEBUG', '-DTUNING_ENABLED' ]
+
+
+args.append('-DBUILD_STAMP=' + build_stamp)
+
+
+if environ.get('BUILD_WITH_NNUE', None):
+    args.append('-DWITH_NNUE')
 
 
 if platform.startswith('win'):
@@ -61,7 +71,6 @@ else:
         '-DCYTHON_WITHOUT_ASSERTIONS',
         '-fvisibility=hidden',
         '-DPyMODINIT_FUNC=__attribute__((visibility("default"))) extern "C" PyObject*',
-        '-DBUILD_STAMP=' + build_stamp,
     ]
 
     # Silence off Py_DEPRECATED warnings for clang

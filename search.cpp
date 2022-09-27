@@ -80,7 +80,7 @@ static inline size_t pick_prime(size_t n)
 static constexpr int ONE_MEGABYTE = 1024 * 1024;
 
 
-auto TranspositionTable::_table = TranspositionTable::HashTable(pick_prime(TRANSPOSITION_TABLE_SLOTS));
+TranspositionTable::HashTable TranspositionTable::_table(pick_prime(TRANSPOSITION_TABLE_SLOTS));
 
 
 static size_t mem_avail()
