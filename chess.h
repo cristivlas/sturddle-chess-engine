@@ -1058,7 +1058,7 @@ namespace chess
         /*
          * Evaluate the incremental change of a move.
          */
-        score_t eval_delta(const BaseMove&) const;
+        template<bool WithEnPassant> score_t eval_delta(const BaseMove&) const;
 
         PieceType remove_piece_at(Square);
 
@@ -1193,63 +1193,104 @@ namespace chess
 
 
     /*
-     * Evaluate the incremental score change for a move
+     * Evaluate the incremental score change for a move.
      */
+    template<bool WithEnPassant>
     INLINE score_t State::eval_delta(const BaseMove& move) const
     {
-        const auto endgame = is_endgame();
+        score_t delta;
 
-        const auto color = piece_color_at(move.from_square());
+        const auto eg = is_endgame();
+        const auto color = turn;
+        const auto moved_piece_type = piece_type_at(move.from_square());
+
+        ASSERT(color == piece_color_at(move.from_square()));
+
         const auto i = square_index(move.from_square(), color);
         const auto j = square_index(move.to_square(), color);
 
-        const auto& table_i = select_piece_square_table(endgame, piece_type_at(move.from_square()));
-        const auto& table_j = move.promotion()
-            ? select_piece_square_table(endgame, move.promotion())
-            : table_i;
-        score_t delta = SIGN[color] * (table_j[j] - table_i[i]);
-
-        /* capture? subtract the square and weight for the captured piece */
-        if (const auto type = piece_type_at(move.to_square()))
-        {
-            ASSERT(type != PieceType::KING);
-
-            int d = weight(type);
-
-            /* can't capture the king, no need to check for king's endgame table */
-            /* the only alternate endgame table for now is ENDGAME_KING_SQUARE_TABLE */
-        #if 0
-            const auto& table = select_piece_square_table(endgame, type);
-        #else
-            const auto& table = SQUARE_TABLE[type];
-        #endif
-
-            ASSERT(piece_color_at(move.to_square()) != color);
-
-            /* subtract the piece-square value */
-            d += table[square_index(move.to_square(), !color)];
-
-            delta -= SIGN[!color] * d; /* subtract weight of captured */
-        }
+        /* piece-square table for the initial position of the moved piece */
+        const auto& table_i = select_piece_square_table(eg, moved_piece_type);
 
         if (move.promotion())
         {
-            delta += SIGN[color] * (weight(move.promotion()) - weight(PAWN));
+            const auto& table_j = select_piece_square_table(eg, move.promotion());
+
+            delta = table_j[j] - table_i[i] + weight(move.promotion()) - weight(PieceType::PAWN);
+        }
+        else
+        {
+            delta = table_i[j] - table_i[i];
         }
 
-        return delta;
+        /*
+         * Capture?
+         */
+        Square capt_sq = move.to_square();
+
+        if constexpr(WithEnPassant)
+            if (is_en_passant(move))
+            {
+                ASSERT(move.to_square() == en_passant_square);
+                capt_sq = Square(move.to_square() - 8 * SIGN[color]);
+            }
+
+        if (const auto type = piece_type_at(capt_sq))
+        {
+            ASSERT(type != PieceType::KING);
+            ASSERT(piece_color_at(capt_sq) != color);
+
+            delta += weight(type);
+
+            /*
+             * Can't capture the king, no need to check for king's endgame table;
+             * the only alternate endgame table for now is ENDGAME_KING_SQUARE_TABLE
+             */
+            /* const auto& table = select_piece_square_table(eg, type); */
+
+            const auto& table = SQUARE_TABLE[type];
+
+            delta += table[square_index(capt_sq, !color)];
+
+            /*
+             * Does the capture cause a transition to endgame phase?
+             */
+            if (!eg && popcount(occupied()) == ENDGAME_PIECE_COUNT + 1)
+            {
+                /* Update piece-square values for KING */
+                for (const auto c : { BLACK, WHITE })
+                {
+                    const auto k1 = square_index(king(c), c);
+                    auto k2 = k1;
+
+                    if (moved_piece_type == PieceType::KING && c == color) /* king moved? */
+                    {
+                        k2 = square_index(move.to_square(), c);
+
+                        /* undo same table assumption */
+                        delta -= SQUARE_TABLE[PieceType::KING][k2] - SQUARE_TABLE[PieceType::KING][k1];
+                    }
+
+                    const auto d = ENDGAME_KING_SQUARE_TABLE[k2] - SQUARE_TABLE[PieceType::KING][k1];
+
+                    delta += SIGN[c == color] * d;
+                }
+            }
+        }
+
+        return delta * SIGN[color];
     }
 
 
     INLINE score_t State::eval_incremental(const BaseMove& move) const
     {
-        if (simple_score == UNKNOWN_SCORE || is_en_passant(move))
+        if (simple_score == UNKNOWN_SCORE)
         {
             return UNKNOWN_SCORE; /* full eval needed */
         }
         else
         {
-            auto eval = simple_score + eval_delta(move);
+            auto eval = simple_score + eval_delta<true>(move);
 
             if (is_castling(move))
             {
@@ -1258,7 +1299,7 @@ namespace chess
                     chess::rook_castle_squares[king_file == 2][0][turn],
                     chess::rook_castle_squares[king_file == 2][1][turn]);
 
-                eval += eval_delta(rook_move);
+                eval += eval_delta<false>(rook_move);
             }
             return eval;
         }

@@ -221,6 +221,7 @@ def test_zobrist():
         ('z.06', 'r4rk1/1ppnbppp/p2q4/3pNb2/3P4/PP5P/2PNBPP1/R2QK2R w K -'),
         ('z.07', 'r4rk1/1ppnbppp/p2q4/3pNb2/3P4/PP5P/2PNBPP1/R2QK2R w KQ -'),
         ('z.08', 'r4rk1/1ppnbppp/p2q4/3pNb2/3P4/PP5P/2PNBPP1/R2QK2R b kq -'),
+        ('z.09', 'r3kb1r/1b1pnpp1/p6p/2P4q/Pp2PP2/1B2Bn1P/1PP1N1P1/R2QR1K1 w kq -'),
         ('z.ep', '8/8/4R3/2r3pk/6Pp/7P/1PPB1P2/1K1R4 b - g3'),
     ]
     for id, fen in tests:
@@ -390,6 +391,12 @@ def test_incremental_updates():
         '1nbq1r1k/3rbp1p/p1p1pp1Q/1p6/P1pPN3/5NP1/1P2PPBP/R4RK1 w - -',
         '3r1rk1/p3qp1p/2bb2p1/2p5/3P4/1P6/PBQN1PPP/2R2RK1 b - -',
         '3n2nr/4Pqpp/2k5/8/8/8/2B3PP/6K1 w - -',
+
+        # transition from non-endgame to endgame
+        '8/8/4R3/2r3pk/6Pp/7P/1PPB1P2/1K1R4 b - g3',
+
+        '4k3/8/8/8/3pP3/8/8/4K3 b - e3',
+        '4k3/8/8/3pP3/8/8/8/4K3 w - d6',
     ]
     for fen in tests:
         engine.test_incremental_updates(fen)

@@ -457,9 +457,8 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
         }
     }
 
-#if EXTRA_STATS
-    ++ctxt.get_tt()->_null_move_failed;
-#endif /* EXTRA_STATS */
+    if constexpr(EXTRA_STATS)
+        ++ctxt.get_tt()->_null_move_failed;
 
     return false;
 }
@@ -570,7 +569,12 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
     if (ctxt._ply != 0)
     {
-        if (ctxt._fifty >= 100 || ctxt.is_repeated() > 0)
+        if (ctxt._fifty >= 100)
+            return 0;
+
+        zobrist_update(ctxt._parent->state(), ctxt._move, *ctxt._state);
+
+        if (ctxt.is_repeated() > 0)
             return 0;
 
         /*
@@ -676,9 +680,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
         bool null_move = ctxt.is_null_move_ok();
 
-    #if EXTRA_STATS
-        table._null_move_not_ok += !null_move;
-    #endif /* EXTRA_STATS */
+        if constexpr(EXTRA_STATS)
+            table._null_move_not_ok += !null_move;
 
         const auto root_depth = table._iteration;
 
@@ -693,9 +696,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             }
             else
             {
-            #if EXTRA_STATS
-                table._history_counters += next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS;
-            #endif /* EXTRA_STATS */
+                if constexpr(EXTRA_STATS)
+                    table._history_counters += next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS;
 
                 /* Futility pruning, 2nd pass. */
                 if (futility > 0)
@@ -842,9 +844,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         continue;
                     }
 
-                #if EXTRA_STATS
-                    ++table._null_move_cutoffs;
-                #endif /* EXTRA_STATS */
+                    if constexpr(EXTRA_STATS)
+                        ++table._null_move_cutoffs;
 
                     /* verification not expected to modify ctxt._score */
                     ASSERT(ctxt._score == move_score);
@@ -901,9 +902,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     }
                 }
 
-            #if EXTRA_STATS
-                table._history_counters_hit += (next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS);
-            #endif /* EXTRA_STATS */
+                if constexpr(EXTRA_STATS)
+                    table._history_counters_hit += (next_ctxt->_move._group == MoveOrder::HISTORY_COUNTERS);
 
                 break; /* found a cutoff */
             }
@@ -911,7 +911,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             {
                 const auto depth = std::max(1, next_ctxt->depth());
                 const auto failed_low = next_ctxt->is_pv_node()
-                    || (move_score + HISTORY_FAIL_LOW_MARGIN / depth <= table._w_alpha);
+                    || (move_score + HISTORY_FAIL_LOW_MARGIN / depth <= alpha);
 
                 table.history_update_non_cutoffs(next_ctxt->_move, failed_low);
             }

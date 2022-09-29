@@ -498,17 +498,7 @@ namespace search
 
         if (move._state->simple_score == State::UNKNOWN_SCORE)
         {
-            if (move._state->is_endgame() != ctxt.state().is_endgame())
-            {
-                /*
-                 * recalculate, because some piece-square tables may change in the endgame
-                 */
-                move._state->simple_score = move._state->eval_simple();
-            }
-            else
-            {
-                move._state->eval_apply_delta(move, ctxt.state());
-            }
+            move._state->eval_apply_delta(move, ctxt.state());
         }
 
         /* post-condition */

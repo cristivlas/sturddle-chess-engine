@@ -37,9 +37,12 @@
 #if WITH_NNUE
   #include "auto.h" /* for NNUE_CONFIG */
   #include "nnue.h"
+
+  constexpr auto NNUE_file = "nn-cb26f10b1fd9.nnue";
 #endif
+
 #if USE_VECTOR
-#include <xmmintrin.h>
+  #include <xmmintrin.h>
 #endif
 
 using namespace chess;
@@ -187,7 +190,6 @@ static INLINE score_t eval_insufficient_material(const State& state, score_t eva
 #if WITH_NNUE
 bool USE_NNUE = true;
 
-static std::string NNUE_file = "nn-cb26f10b1fd9.nnue";
 
 /* Logging may not be initialized when NNUE::init() is called */
 /* Hold on to message and log on first search. */

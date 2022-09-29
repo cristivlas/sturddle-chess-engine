@@ -262,10 +262,10 @@ cdef class BoardState:
 
         self._state.castling_rights = b.clean_castling_rights()
 
-        if b.ep_square != None:
-            self._state.en_passant_square = b.ep_square
-        else:
+        if b.ep_square == None:
             self._state.en_passant_square = UNDEFINED
+        else:
+            self._state.en_passant_square = b.ep_square
 
         self._state.turn = b.turn
         for square in range(0, 64):
@@ -1177,29 +1177,20 @@ def test_incremental_updates(fen):
     node._ctxt.set_tt(address(table))
     node._ctxt._max_depth = 50 # avoid LMP
 
-    # print(fen, node._ctxt._state.eval(), node._ctxt._state.simple_score)
-
     while True:
         next = node._ctxt.next(False, 0, 0)
         if next == NULL:
             break
 
-        move = py_move(next._move).uci()
-        # print(fen, move, node._ctxt._state.simple_score)
-
         # Full evaluation
-        eval_next = next._state.eval_simple()
+        eval_full = next._state.eval_simple()
 
         # Incremental evaluation from current node state
         eval_incr = node._ctxt._state.eval_incremental(next._move)
 
-        # Except en passant (for now)
-        if (node._ctxt._state.is_en_passant(next._move)):
-            # print(fen, py_move(next._move), eval, eval_next, eval_incr)
-            continue
-
-        if eval_next != eval_incr:
-            raise AssertionError((fen, move, eval, eval_next, eval_incr))
+        if eval_full != eval_incr:
+            move = py_move(next._move).uci()
+            raise AssertionError((fen, move, eval_full, eval_incr))
 
 
 def nnue_init(data_dir):

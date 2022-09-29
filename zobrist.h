@@ -304,4 +304,64 @@ namespace chess
         hash_value ^= side_to_move_key(state.turn);
         return hash_value;
     }
+
+
+    /*
+     * Apply incremental updates to Zobrist hash.
+     */
+    INLINE void zobrist_update(const State& prev_state, const BaseMove& move, State& state)
+    {
+        ASSERT(prev_state._hash);
+
+        if (state._hash != 0)
+        {
+            ASSERT(state._hash == zobrist_hash(state));
+
+            return;
+        }
+        else if (state.castling_rights != prev_state.castling_rights)
+        {
+            /*
+             * TODO
+             */
+            state._hash = zobrist_hash(state);
+        }
+        else
+        {
+            state._hash = prev_state._hash;
+
+            if (move)
+            {
+                if (prev_state.is_en_passant(move))
+                {
+                    int capt_square = prev_state.en_passant_square - 8 * SIGN[prev_state.turn];
+                    state._hash ^= random_u64[64 * state.turn + capt_square];
+                }
+                else if (auto capt_type = prev_state.piece_type_at(move.to_square()))
+                {
+                    int index = (static_cast<int>(capt_type) - 1) * 2 + state.turn;
+                    state._hash ^= random_u64[64 * index + move.to_square()];
+                }
+
+                auto moved_piece_type = prev_state.piece_type_at(move.from_square());
+                ASSERT(moved_piece_type);
+
+                int index = (static_cast<int>(moved_piece_type) - 1) * 2 + prev_state.turn;
+                state._hash ^= random_u64[64 * index + move.from_square()];
+
+                if (move.promotion())
+                {
+                    index = (static_cast<int>(move.promotion()) - 1) * 2 + prev_state.turn;
+                }
+                state._hash ^= random_u64[64 * index + move.to_square()];
+            }
+
+            state._hash ^= en_passant_key(prev_state);
+            state._hash ^= en_passant_key(state);
+            state._hash ^= side_to_move_key(BLACK);
+            state._hash ^= side_to_move_key(WHITE);
+
+            ASSERT(state._hash == zobrist_hash(state));
+        }
+    }
 } /* namespace chess */
