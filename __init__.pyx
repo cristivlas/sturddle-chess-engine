@@ -126,6 +126,8 @@ cdef extern from 'chess.h' namespace 'chess':
 
     cdef cppclass BaseMove:
         BaseMove()
+        BaseMove(Square from_square, Square to_square, PieceType promotion_type)
+
         Square      from_square() const
         Square      to_square() const
         PieceType   promotion() const
@@ -137,7 +139,7 @@ cdef extern from 'chess.h' namespace 'chess':
 
     cdef cppclass Move(BaseMove):
         Move()
-        Move(Square from_square, Square to_square, PieceType promotion_type)
+        Move(const BaseMove&)
 
 
     cdef cppclass Position:
@@ -200,6 +202,7 @@ cdef extern from 'chess.h' namespace 'chess':
 
 
     cdef score_t estimate_static_exchanges(const State&, Color, int, PieceType)
+    cdef void zobrist_update(const State&, const BaseMove&, State&)
 
 
 cdef extern from 'zobrist.h' namespace 'chess':
@@ -217,8 +220,8 @@ cdef py_move(const BaseMove& m):
 
 
 """ Convert Py move object to C++ """
-cdef Move cxx_move(move: chess.Move):
-    cdef Move m = Move(
+cdef BaseMove cxx_move(move: chess.Move):
+    cdef BaseMove m = BaseMove(
         move.from_square,
         move.to_square,
         move.promotion if move.promotion else PieceType.NONE
@@ -275,9 +278,11 @@ cdef class BoardState:
         self._state.simple_score = self._state.eval_simple()
 
 
-    def apply(self, move: chess.Move):
-        cdef Move cm = cxx_move(move)
-        self._state.apply_move(cm)
+    cpdef void apply(self, move: chess.Move):
+        cdef BaseMove m = cxx_move(move)
+        cdef State prev = self._state
+        self._state.apply_move(m)
+        zobrist_update(prev, m, self._state)
 
 
     cpdef capture_value(self):
@@ -708,7 +713,7 @@ cdef class NodeContext:
         self._ctxt._state = address(self.state._state)
 
         if board.move_stack:
-            self._ctxt._move = cxx_move(board.move_stack[-1])
+            self._ctxt._move = Move(cxx_move(board.move_stack[-1]))
 
 
     cpdef get_pv(self):
@@ -1124,7 +1129,7 @@ def get_hash_full():
 
 def perft(fen, repeat=1):
     cdef vector[Move] moves
-    cdef int count = 0
+    cdef size_t count = 0
     board = BoardState(chess.Board(fen=fen))
     start = time.perf_counter()
     for i in range(0, repeat):
@@ -1137,7 +1142,7 @@ def perft(fen, repeat=1):
 def perft2(fen, repeat=1):
     cdef vector[Move] moves
     cdef vector[Move] buffer
-    cdef int count = 0
+    cdef size_t count = 0
     board = BoardState(chess.Board(fen=fen))
     start = time.perf_counter()
     for i in range(0, repeat):
@@ -1148,7 +1153,7 @@ def perft2(fen, repeat=1):
 
 def perft3(fen, repeat=1):
     cdef TranspositionTable table
-    cdef int count = 0
+    cdef size_t count = 0
     node = NodeContext(chess.Board(fen=fen))
     node._ctxt.set_tt(address(table))
     start = time.perf_counter()

@@ -310,7 +310,6 @@ void TranspositionTable::store_killer_move(const Context& ctxt)
 }
 
 
-template<bool Debug>
 void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, PV& pv)
 {
     auto state = ctxt.state().clone();
@@ -328,9 +327,6 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
 
     while (move)
     {
-        if constexpr(Debug)
-            std::cout << move << " ";
-
         /* Legality check, in case of a (low probability) hash collision. */
         if (state.piece_type_at(move.to_square()) == PieceType::KING)
             break;
@@ -373,37 +369,21 @@ void TranspositionTable::store_pv(Context& root)
     {
         pv.emplace_back(ctxt->_move);
 
-        if constexpr(Debug)
+        auto next = ctxt->next_ply();
+
+        if (next->is_null_move())
+            break;
+
+        if (ctxt->_best_move && next->_move == ctxt->_best_move)
         {
-            if (ctxt->_ply)
-                std::cout << ctxt->_move << " ";
+            ASSERT(next->_parent == ctxt);
+            ctxt = next;
+            continue;
         }
 
-        if (auto next = ctxt->next_ply())
-        {
-            if (next->is_null_move())
-            {
-                if (!_pv.empty())
-                    return;
-                else if constexpr(Debug)
-                    std::cout << "NULL ";
-            }
-            if (ctxt->_best_move && next->_move == ctxt->_best_move)
-            {
-                ctxt = next;
-                continue;
-            }
-        }
-
-        if constexpr(Debug)
-            std::cout << ctxt->_score << " hash: ";
-
-        get_pv_from_table<Debug>(root, *ctxt, pv);
+        get_pv_from_table(root, *ctxt, pv);
         break;
     }
-
-    if constexpr(Debug)
-        std::cout << "\n";
 
     if (pv.size() > _pv.size() || !std::equal(pv.begin(), pv.end(), _pv.begin()))
     {

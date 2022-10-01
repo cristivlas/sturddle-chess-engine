@@ -293,7 +293,6 @@ namespace search
 
         const PV& get_pv() const { return _pv; }
 
-        template<bool Debug=false>
         void get_pv_from_table(Context&, const Context&, PV&);
 
         template<typename C> const int16_t* lookup(C& ctxt);
