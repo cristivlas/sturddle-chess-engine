@@ -1481,8 +1481,7 @@ namespace chess
             || state.just_king_and_pawns(WHITE)
 
            Bad idea. After a promotion an endgame node
-           context can end up with a non-endgame child,
-           which breaks evaluation with !NNUE_ENDGAME.
+           context can end up with a non-endgame child
          */
     }
 

@@ -80,10 +80,8 @@ std::map<std::string, Param> _get_param_info()
 
     for (const auto& elem : Config::_namespace)
     {
-    #if NNUE_ENDGAME
         if (USE_NNUE && elem.second._group == "Eval" && elem.first.find("MOBILITY") != 0)
             continue;
-    #endif /* NNUE_ENDGAME */
 
         info.emplace(elem.first,
             Param {
@@ -123,12 +121,10 @@ void _set_param(const std::string& name, int value, bool echo)
     {
         std::cerr << "unknown parameter: \"" << name << "\"\n";
     }
-#if NNUE_ENDGAME
     else if (USE_NNUE && iter->second._group == "Eval" && name.find("MOBILITY") != 0)
     {
         std::cerr << "parameter is not used in NNUE mode: \"" << name << "\"\n";
     }
-#endif /* NNUE_ENDGAME */
     else if (value < iter->second._min || value > iter->second._max)
     {
         std::clog << name << " value " << value << " is out of range [";
@@ -181,6 +177,19 @@ static INLINE score_t eval_insufficient_material(const State& state, score_t eva
     }
 
     return eval;
+}
+
+
+/*
+ * Allow apps on top of the engine to implement strength levels by "fuzzing" the evaluation.
+ */
+static INLINE int eval_fuzz()
+{
+    #if EVAL_FUZZ_ENABLED
+        return EVAL_FUZZ ? random_int(-EVAL_FUZZ, EVAL_FUZZ) : 0;
+    #else
+        return 0;
+    #endif /* EVAL_FUZZ_ENABLED */
 }
 
 
@@ -333,15 +342,24 @@ void search::Context::eval_incremental()
     nnue_data[0] = &acc[_ply];
     nnue_data[0]->accumulator.computedAccumulation = 0;
 
-    if (_parent && !is_null_move())
+    if (_parent)
     {
-        nnue_data[1] = &acc[_parent->_ply];
-
-        auto& dp = nnue_data[0]->dirtyPiece;
-        NNUE_update_dirty_pieces(_parent->state(), state(), _move, !turn, dp);
-
+        if (is_null_move())
+        {
+            ASSERT(_parent->_parent);
+            nnue_data[0]->dirtyPiece = acc[_parent->_ply].dirtyPiece;
+            nnue_data[1] = &acc[_parent->_parent->_ply];
+        }
+        else
+        {
+            nnue_data[1] = &acc[_parent->_ply];
+            auto& dp = nnue_data[0]->dirtyPiece;
+            NNUE_update_dirty_pieces(_parent->state(), state(), _move, !turn, dp);
+        }
         if (_parent->_parent && !_parent->is_null_move())
+        {
             nnue_data[2] = &acc[_parent->_parent->_ply];
+        }
     }
 
     auto eval = nnue_evaluate_incremental(!turn, pieces, squares, nnue_data);
@@ -349,10 +367,12 @@ void search::Context::eval_incremental()
     /* Verify incremental result againt full eval. */
     ASSERT(eval == nnue_evaluate(!turn, pieces, squares));
 
+    eval += eval_fuzz();
+
     /* Make sure that insufficient material conditions are detected. */
     eval = eval_insufficient_material(state(), eval, [eval](){ return eval; });
 
-    _tt_entry._eval = eval;
+    _tt_entry._eval = std::max(-CHECKMATE, std::min(CHECKMATE, eval));
 }
 
 
@@ -1147,19 +1167,6 @@ namespace search
     }
 
 
-    /*
-     * Allow apps on top of the engine to implement strength levels by "fuzzing" the evaluation.
-     */
-    static INLINE int eval_fuzz()
-    {
-        #if EVAL_FUZZ_ENABLED
-            return EVAL_FUZZ ? random_int(-EVAL_FUZZ, EVAL_FUZZ) : 0;
-        #else
-            return 0;
-        #endif /* EVAL_FUZZ_ENABLED */
-    }
-
-
     static INLINE int eval_passed_formation(const State& state, int piece_count)
     {
         const auto diff =
@@ -1451,17 +1458,7 @@ namespace search
 
         if (eval == SCORE_MIN)
         {
-        #if WITH_NNUE
-        #if !NNUE_ENDGAME
-            if (!state().is_endgame())
-        #endif
-                if (USE_NNUE)
-                {
-                    eval_incremental();
-                    return _tt_entry._eval;
-                }
-        #endif /* WITH_NNUE */
-
+            ASSERT(!USE_NNUE);
             /*
              * 1. Material + piece-squares + mobility
              */
@@ -1470,17 +1467,14 @@ namespace search
             ASSERT(eval > SCORE_MIN);
             ASSERT(eval < SCORE_MAX);
 
-            if (abs(eval) < MATE_HIGH)
-            {
-                eval += eval_fuzz();
+            eval += eval_fuzz();
 
-                /*
-                 * 2. Tactical (positional) evaluation.
-                 */
-                eval = eval_insufficient_material(state(), eval, [&]() {
-                    return eval_tactical(*this, eval);
-                });
-            }
+            /*
+             * 2. Tactical (positional) evaluation.
+             */
+            eval += eval_insufficient_material(state(), eval, [&]() {
+                return eval_tactical(*this, eval);
+            });
 
             _tt_entry._eval = eval;
         }
@@ -2141,10 +2135,6 @@ namespace search
         }
 
     #if !defined(NO_ASSERT)
-        for (size_t i = _count; i < moves_list.size(); ++i)
-        {
-            ASSERT(moves_list[i]._group >= MoveOrder::PRUNED_MOVES);
-        }
         for (size_t i = 1; i < moves_list.size(); ++i)
         {
             ASSERT(compare_moves_ge(moves_list[i-1], moves_list[i]));

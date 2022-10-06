@@ -120,13 +120,6 @@ using score_t = int;
 #endif
 
 /*
- * Use NNUE-based or "classic" evaluation in the endgame?
- */
-#if !defined(NNUE_ENDGAME)
-  #define NNUE_ENDGAME                      true
-#endif
-
-/*
  * When TUNING_ENABLED is true, values introduced by DECLARE_VALUE in config.h
  * become visible to Python scripts (via set_param, get_params, get_param_info)
  * and can be tweaked at runtime.

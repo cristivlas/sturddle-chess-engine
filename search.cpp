@@ -322,19 +322,12 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
 
     auto move = ctxt._best_move;
 
-    if (!move)
-        move = ctxt._tt_entry._hash_move;
-
     while (move)
     {
-        /* Legality check, in case of a (low probability) hash collision. */
-        if (state.piece_type_at(move.to_square()) == PieceType::KING)
-            break;
-
         state.apply_move(move);
 
-        /* Another legality check, and guard against infinite loops. */
-        if (state.is_check(!state.turn) || !visited.insert(state.hash()).second)
+        /* Guard against infinite loops. */
+        if (!visited.insert(state.hash()).second)
             break;
 
         /* Add the move to the principal variation. */
@@ -374,7 +367,7 @@ void TranspositionTable::store_pv(Context& root)
         if (next->is_null_move())
             break;
 
-        if (ctxt->_best_move && next->_move == ctxt->_best_move)
+        if (next->_move == ctxt->_best_move)
         {
             ASSERT(next->_parent == ctxt);
             ctxt = next;
@@ -472,8 +465,9 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
     int move_count = 0, cutoffs = 0;
     const auto reduction = (ctxt.depth() - 1) / 2;
 
-    BaseMove best_move;
+    BaseMove best_move, opponent_best_move;
     score_t best_score = SCORE_MIN;
+    State* best_pos = nullptr;
 
     /*
      * A take on the idea from https://skemman.is/bitstream/1946/9180/1/research-report.pdf
@@ -500,6 +494,8 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
             {
                 best_score = score;
                 best_move = next_ctxt->_move;
+                opponent_best_move = next_ctxt->_best_move;
+                best_pos = next_ctxt->_state;
             }
 
             if (++cutoffs >= min_cutoffs)
@@ -510,8 +506,14 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
                 ctxt._alpha = ctxt._score;
 
                 /* Fix-up best move */
-                ctxt.next_ply()->_move = ctxt._best_move = best_move;
+                ASSERT(next_ctxt == ctxt.next_ply());
 
+                if (best_move != next_ctxt->_move)
+                {
+                    next_ctxt->_best_move = opponent_best_move;
+                    next_ctxt->_move = ctxt._best_move = best_move;
+                    next_ctxt->_state = best_pos;
+                }
                 return true;
             }
         }
@@ -570,10 +572,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         }
     }
 
-#if WITH_NNUE && !NNUE_ENDGAME
-    if (!ctxt.state().is_endgame())
-#endif /* WITH_NNUE && !NNUE_ENDGAME */
-        ctxt.eval_incremental();
+    ctxt.eval_incremental();
 
     /*
      * https://www.chessprogramming.org/Node_Types#PV
