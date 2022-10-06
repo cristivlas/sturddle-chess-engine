@@ -38,7 +38,7 @@
   #include "auto.h" /* for NNUE_CONFIG */
   #include "nnue.h"
 
-  constexpr auto NNUE_file = "nn-cb26f10b1fd9.nnue";
+  constexpr auto NNUE_file = "nn-03744f8d56d8.nnue";
 #endif
 
 #if USE_VECTOR

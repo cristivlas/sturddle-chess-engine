@@ -492,6 +492,7 @@ namespace chess
     }
 
 
+#if USE_PIECE_SQUARE_TABLES
     INLINE const int (&select_piece_square_table(bool endgame, PieceType pt))[64]
     {
         if (endgame && pt == PieceType::KING)
@@ -499,6 +500,7 @@ namespace chess
 
         return SQUARE_TABLE[pt];
     }
+#endif /* USE_PIECE_SQUARE_TABLES */
 
 
     /* A position on the chessboard represented as a collection of bitboards. */
@@ -1206,6 +1208,7 @@ namespace chess
 
         ASSERT(color == piece_color_at(move.from_square()));
 
+    #if USE_PIECE_SQUARE_TABLES
         const auto i = square_index(move.from_square(), color);
         const auto j = square_index(move.to_square(), color);
 
@@ -1222,6 +1225,9 @@ namespace chess
         {
             delta = table_i[j] - table_i[i];
         }
+    #else
+        delta = 0;
+    #endif /* USE_PIECE_SQUARE_TABLES */
 
         /*
          * Capture?
@@ -1320,11 +1326,13 @@ namespace chess
                 const auto mask = pieces_mask(piece_type, color);
                 score += sign * weight(piece_type) * popcount(mask);
 
+            #if USE_PIECE_SQUARE_TABLES
                 const auto& table = select_piece_square_table(endgame, piece_type);
 
                 for_each_square(mask, [&](Square square) {
                     score += sign * table[square_index(square, color)];
                 });
+            #endif /* USE_PIECE_SQUARE_TABLES */
             }
         }
 

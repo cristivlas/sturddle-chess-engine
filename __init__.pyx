@@ -1214,13 +1214,12 @@ Context.init()
 NodeContext(chess.Board()) # dummy context initializes static cpython methods
 nnue_init(os.path.dirname(os.path.realpath(__file__)))
 
-
 __major__   = 0
 __minor__   = 99
-__smp__     = get_param_info()['Threads'][2] > 1
-__version__ = '.'.join([str(__major__), str(__minor__), timestamp().decode()])
+__build__   = [str(x) for x in ['NNUE', __major__, __minor__, timestamp().decode()]]
+__version__ = '.'.join(__build__[not USE_NNUE:])
 
 
 def version():
-    return __version__ + ('.NNUE' if USE_NNUE else '')
+    return __version__
 

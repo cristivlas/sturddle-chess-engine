@@ -1158,7 +1158,7 @@ namespace search
         auto move = &moves_list[index];
         ASSERT(move->_group != MoveOrder::UNDEFINED);
 
-        if (move->_group == MoveOrder::UNORDERED_MOVES)
+        while (move->_group == MoveOrder::UNORDERED_MOVES)
         {
             if (_phase > 2 && can_late_move_prune(ctxt))
             {

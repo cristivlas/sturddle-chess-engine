@@ -293,7 +293,8 @@ namespace search
 
         const PV& get_pv() const { return _pv; }
 
-        void get_pv_from_table(Context&, const Context&, PV&);
+        /* Reconstruct PV from hash table moves. Called by store_pv. */
+        template<bool Debug=false> void get_pv_from_table(Context&, const Context&, PV&);
 
         template<typename C> const int16_t* lookup(C& ctxt);
         template<typename C> void store(C& ctxt, score_t alpha, int depth);

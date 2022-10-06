@@ -433,11 +433,18 @@ class UCI:
 
     def validate_pv(self, pv):
         if self.args.debug:
+            # valid_pv = []
             board = chess.Board()
             self.algorithm.context.state.copy_to_board(board)
-            for move in pv:
-                board.push(chess.Move.from_uci(move))
-                assert board.is_valid(), (board.epd(), move)
+            start = board.copy()
+            try:
+                for move in pv:
+                    board.push(chess.Move.from_uci(move))
+                    assert board.is_valid()
+                    # valid_pv.append(move)
+            except:
+                logging.exception(f'{move}: pv={pv}, pos={start.epd()}')
+                # pv = valid_pv
         return pv
 
 

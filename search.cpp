@@ -49,7 +49,7 @@ using namespace search;
 
 
 template<bool Debug = false>
-static void log_pv(const TranspositionTable& tt, const char* info)
+static void log_pv(const TranspositionTable& tt, const Context* ctxt, const char* info)
 {
     if constexpr(Debug)
     {
@@ -58,8 +58,9 @@ static void log_pv(const TranspositionTable& tt, const char* info)
         out << info << ": ";
         for (const auto& move : tt._pv)
             out << move << " ";
-
-        Context::log_message(LogLevel::DEBUG, out.str());
+        if (ctxt)
+            out << " pos=" << ctxt->epd();
+        Context::log_message(LogLevel::INFO, out.str());
     }
 }
 
@@ -310,6 +311,45 @@ void TranspositionTable::store_killer_move(const Context& ctxt)
 }
 
 
+static void log_invalid_pv(
+    const std::string& func,
+    const PV& pv,
+    const Context& start,
+    const BaseMove& move)
+{
+    std::ostringstream out;
+    out << "invalid: " << move << " pv=";
+    for (const auto& m : pv)
+        out << m << " ";
+    out << move << " start=" << start.epd();
+    Context::log_message(LogLevel::WARN, out.str());
+}
+
+
+template<bool Debug>
+static bool is_valid_pv_move(
+    const std::string& func,
+    const PV& pv,
+    const Context& start,
+    const State& pos,
+    const BaseMove& move)
+{
+    if constexpr(Debug)
+    {
+        if (   (pos.piece_type_at(move.from_square()) == PieceType::NONE)
+            || (pos.occupied_co(pos.turn) & chess::BB_SQUARES[move.to_square()])
+            || (pos.kings & chess::BB_SQUARES[move.to_square()])
+           )
+        {
+            log_invalid_pv(func, pv, start, move);
+            return false;
+        }
+    }
+    return true;
+}
+
+
+template<bool Debug>
 void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, PV& pv)
 {
     auto state = ctxt.state().clone();
@@ -324,11 +364,23 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
 
     while (move)
     {
+        if (!is_valid_pv_move<Debug>(__func__, pv, root, state, move))
+            break;
+
         state.apply_move(move);
 
         /* Guard against infinite loops. */
         if (!visited.insert(state.hash()).second)
             break;
+
+        if constexpr(Debug)
+        {
+            if (state.is_check(!state.turn))
+            {
+                log_invalid_pv(__func__, pv, root, move);
+                break;
+            }
+        }
 
         /* Add the move to the principal variation. */
         pv.emplace_back(move);
@@ -361,27 +413,27 @@ void TranspositionTable::store_pv(Context& root)
     for (auto ctxt = &root; true; )
     {
         pv.emplace_back(ctxt->_move);
-
         auto next = ctxt->next_ply();
 
         if (next->is_null_move())
             break;
 
-        if (next->_move == ctxt->_best_move)
+        if ((next->_move == ctxt->_best_move)
+            && is_valid_pv_move<Debug>(__func__, pv, root, ctxt->state(), next->_move))
         {
             ASSERT(next->_parent == ctxt);
             ctxt = next;
             continue;
         }
 
-        get_pv_from_table(root, *ctxt, pv);
+        get_pv_from_table<Debug>(root, *ctxt, pv);
         break;
     }
 
     if (pv.size() > _pv.size() || !std::equal(pv.begin(), pv.end(), _pv.begin()))
     {
         _pv.swap(pv);
-        log_pv<Debug>(*this, "store_pv");
+        log_pv<Debug>(*this, &root, "store_pv");
     }
 }
 
@@ -465,9 +517,8 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
     int move_count = 0, cutoffs = 0;
     const auto reduction = (ctxt.depth() - 1) / 2;
 
-    BaseMove best_move, opponent_best_move;
+    BaseMove best_move;
     score_t best_score = SCORE_MIN;
-    State* best_pos = nullptr;
 
     /*
      * A take on the idea from https://skemman.is/bitstream/1946/9180/1/research-report.pdf
@@ -494,26 +545,16 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
             {
                 best_score = score;
                 best_move = next_ctxt->_move;
-                opponent_best_move = next_ctxt->_best_move;
-                best_pos = next_ctxt->_state;
             }
 
             if (++cutoffs >= min_cutoffs)
             {
                 ctxt._score = score >= MATE_HIGH ? ctxt._beta : score;
+                ctxt._best_move = best_move;
 
                 /* Store it in the TT as a cutoff move. */
                 ctxt._alpha = ctxt._score;
 
-                /* Fix-up best move */
-                ASSERT(next_ctxt == ctxt.next_ply());
-
-                if (best_move != next_ctxt->_move)
-                {
-                    next_ctxt->_best_move = opponent_best_move;
-                    next_ctxt->_move = ctxt._best_move = best_move;
-                    next_ctxt->_state = best_pos;
-                }
                 return true;
             }
         }
@@ -1276,19 +1317,21 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
 
 
 /*
- * Shift PV and killer moves tables by two.
+ * Shift ply history and killer moves tables by two.
  * Should be called at the beginning of each new search.
  */
 void TranspositionTable::shift()
 {
+#if 0
     if (_pv.size() >= 2)
     {
         std::rotate(_pv.begin(), _pv.begin() + 2, _pv.end());
         _pv.resize(_pv.size() - 2);
     }
-
+    log_pv<true>(*this, nullptr, "shift");
+#else
+    _pv.clear();
+#endif
     shift_left_2(_killer_moves.begin(), _killer_moves.end());
     shift_left_2(_plyHistory.begin(), _plyHistory.end());
-
-    log_pv(*this, "shift");
 }
