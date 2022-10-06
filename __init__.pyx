@@ -1217,9 +1217,8 @@ nnue_init(os.path.dirname(os.path.realpath(__file__)))
 __major__   = 0
 __minor__   = 99
 __build__   = [str(x) for x in ['NNUE', __major__, __minor__, timestamp().decode()]]
-__version__ = '.'.join(__build__[not USE_NNUE:])
 
 
 def version():
-    return __version__
+    return '.'.join(__build__[not USE_NNUE:])
 
