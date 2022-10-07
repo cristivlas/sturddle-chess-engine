@@ -164,9 +164,9 @@ class UCI:
         self.algorithm.depth = self.depth
         self.output_expected = True # The GUI expects a response
 
-        if ponder and movetime:
+        if ponder:
             assert not self.pondering
-            self.extended_time = int(movetime)
+            self.extended_time = max(1, int(movetime))
             self.algorithm.time_limit_ms = 0
             self.pondering = True
             self.worker.send_message(self._ponder, max_count = 1)
