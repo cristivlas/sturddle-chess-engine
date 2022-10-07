@@ -311,7 +311,7 @@ void TranspositionTable::store_killer_move(const Context& ctxt)
 }
 
 
-static void log_invalid_pv(
+inline void log_invalid_pv(
     const std::string& func,
     const PV& pv,
     const Context& start,
