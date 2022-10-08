@@ -243,21 +243,10 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
     {
         if  (!entry.matches(ctxt.state()))
         {
-            entry._eval = SCORE_MIN;
             entry._type = TT_Type::NONE;
             entry._hash_move = BaseMove();
         }
-       /*
-        * Another thread has completed a deeper search from the time the current
-        * thread has started searching (and probed the cache) in this position?
-        */
-        else if (entry._depth > depth && entry._version > ctxt._tt_entry._version)
-        {
-            return;
-        }
     }
-
-    ++entry._version;
 
     /* Store or reset hash move */
     auto move = ctxt._best_move;
@@ -276,11 +265,6 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
 
     entry._hash = ctxt.state().hash();
     entry._depth = depth;
-
-    if (ctxt._tt_entry._eval != SCORE_MIN)
-        entry._eval = ctxt._tt_entry._eval;
-
-    entry._capt = ctxt._tt_entry._capt;
 }
 
 
@@ -306,12 +290,11 @@ void TranspositionTable::store_killer_move(const Context& ctxt)
         killers[0]._score = ctxt._score;
         killers[0]._state = nullptr; /* prevent accidental use */
     }
-
 #endif /* KILLER_MOVE_HEURISTIC */
 }
 
 
-static void log_invalid_pv(
+inline void log_invalid_pv(
     const std::string& func,
     const PV& pv,
     const Context& start,
@@ -321,7 +304,7 @@ static void log_invalid_pv(
     out << "invalid: " << move << " pv=";
     for (const auto& m : pv)
         out << m << " ";
-    out << move << " start=" << start.epd();
+    out << move << " start=" << start.epd() << " func=" << func;
     Context::log_message(LogLevel::WARN, out.str());
 }
 
@@ -677,15 +660,15 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             && !ctxt.is_pv_node()
             && ctxt.depth() > 0
             && ctxt.depth() < 7
-            && ctxt._tt_entry._eval < MATE_HIGH
-            && ctxt._tt_entry._eval > ctxt._beta
+            && ctxt._eval < MATE_HIGH
+            && ctxt._eval > ctxt._beta
                 + std::max<score_t>(REVERSE_FUTILITY_MARGIN * ctxt.depth(), ctxt.improvement())
             && !ctxt.is_check())
         {
             ASSERT(ctxt._tt_entry._eval > SCORE_MIN);
             ASSERT(ctxt._tt_entry._eval < SCORE_MAX);
 
-            return ctxt._tt_entry._eval;
+            return ctxt._eval;
         }
     #endif /* REVERSE_FUTILITY_PRUNING */
 
@@ -1322,16 +1305,8 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
  */
 void TranspositionTable::shift()
 {
-#if 0
-    if (_pv.size() >= 2)
-    {
-        std::rotate(_pv.begin(), _pv.begin() + 2, _pv.end());
-        _pv.resize(_pv.size() - 2);
-    }
-    log_pv<true>(*this, nullptr, "shift");
-#else
     _pv.clear();
-#endif
+
     shift_left_2(_killer_moves.begin(), _killer_moves.end());
     shift_left_2(_plyHistory.begin(), _plyHistory.end());
 }

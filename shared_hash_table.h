@@ -20,19 +20,36 @@
  */
 #pragma once
 
-static_assert(std::atomic<uint64_t>::is_always_lock_free);
-
-static constexpr uint64_t LOCKED = uint64_t(-1);
 static constexpr auto QUADRATIC_PROBING = false;
 
 
 namespace search
 {
-    template<typename T, int BUCKET_SIZE = 8> class SharedHashTable
+#if 0
+    using key_t = uint64_t;
+
+    static INLINE constexpr key_t key(uint64_t hash)
+    {
+        return hash;
+    }
+#else
+    using key_t = uint32_t;
+
+    static INLINE constexpr key_t key(uint64_t key)
+    {
+        return key & 0xFFFFFFFF;
+    }
+#endif
+
+    static_assert(std::atomic<key_t>::is_always_lock_free);
+    static constexpr key_t LOCKED = key_t(-1);
+
+
+    template<typename T> class SharedHashTable
     {
         using entry_t = T;
         using data_t = std::vector<entry_t>;
-        using lock_t = std::atomic<uint64_t>;
+        using lock_t = std::atomic<key_t>;
 
     public:
         class SpinLock
@@ -46,22 +63,23 @@ namespace search
     #if SMP
             INLINE lock_t* lock_p()
             {
-                static_assert(sizeof(lock_t) == sizeof(uint64_t));
+                static_assert(sizeof(lock_t) == sizeof(key_t));
                 return reinterpret_cast<lock_t*>(&entry()->_lock);
             }
 
             template<bool strong=false>
-            static bool try_lock(lock_t* lock, uint64_t key)
+            static bool try_lock(lock_t* lock, uint64_t hash)
             {
+                auto k = key(hash);
                 if constexpr(strong)
                     return lock->compare_exchange_strong(
-                        key,
+                        k,
                         LOCKED,
                         std::memory_order_release,
                         std::memory_order_relaxed);
                 else
                     return lock->compare_exchange_weak(
-                        key,
+                        k,
                         LOCKED,
                         std::memory_order_release,
                         std::memory_order_relaxed);
@@ -98,7 +116,7 @@ namespace search
                 ASSERT(entry()->_owner == this);
                 ASSERT(entry()->_hash);
 
-                lock_p()->store(entry()->_hash, std::memory_order_release);
+                lock_p()->store(key(entry()->_hash), std::memory_order_release);
                 _locked = false;
             }
     #else
@@ -218,18 +236,31 @@ namespace search
                 return (hash + j) % _data.size();
         }
 
+    #if 0
+        static size_t bucket_size() { return SMP_CORES * 2; }
+    #else
+        static constexpr size_t bucket_size() { return 8; }
+    #endif
+
         Proxy lookup_read(const chess::State& state)
         {
             const auto h = state.hash();
             const size_t index = h % _data.size();
 
-            for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
+            for (size_t i = index, j = 1; j < bucket_size(); ++j)
             {
                 Proxy p(*this, i, h);
 
-                if (p)
+                if constexpr(sizeof(key_t) == sizeof(h))
                 {
-                    ASSERT(p->matches(state));
+                    if (p)
+                    {
+                        ASSERT(p->matches(state));
+                        return p;
+                    }
+                }
+                else if (p && p->matches(state))
+                {
                     return p;
                 }
                 i = next<QUADRATIC_PROBING>(h, j);
@@ -243,7 +274,7 @@ namespace search
             const auto h = state.hash();
             size_t index = h % _data.size();
 
-            for (size_t i = index, j = 1; j < BUCKET_SIZE; ++j)
+            for (size_t i = index, j = 1; j < bucket_size(); ++j)
             {
                 Proxy q(*this, i, h); /* try non-blocking locking 1st */
                 if (q)

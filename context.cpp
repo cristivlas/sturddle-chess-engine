@@ -372,7 +372,7 @@ void search::Context::eval_incremental()
     /* Make sure that insufficient material conditions are detected. */
     eval = eval_insufficient_material(state(), eval, [eval](){ return eval; });
 
-    _tt_entry._eval = std::max(-CHECKMATE, std::min(CHECKMATE, eval));
+    _eval = std::max(-CHECKMATE, std::min(CHECKMATE, eval));
 }
 
 
@@ -924,11 +924,6 @@ namespace search
 
         auto state = ctxt._state;
 
-    #if NO_ASSERT
-        if (ctxt._tt_entry._capt != SCORE_MIN)
-            return ctxt._tt_entry._capt;
-    #endif /* NO_ASSERT */
-
         score_t result;
 
         if constexpr(STATIC_EXCHANGES)
@@ -940,9 +935,6 @@ namespace search
 
         if constexpr(DEBUG_CAPTURES)
             ctxt.log_message(LogLevel::DEBUG, "captures: " + std::to_string(result));
-
-        ASSERT(ctxt._tt_entry._capt == SCORE_MIN || ctxt._tt_entry._capt == result);
-        ctxt._tt_entry._capt = result;
 
         return result;
     }
@@ -1454,35 +1446,31 @@ namespace search
     {
         _tt->_eval_depth = _ply;
 
-        auto eval = _tt_entry._eval;
-
-        if (eval == SCORE_MIN)
+        if (_eval == SCORE_MIN)
         {
             ASSERT(!USE_NNUE);
             /*
              * 1. Material + piece-squares + mobility
              */
-            eval = state().eval();
+            _eval = state().eval();
 
             ASSERT(eval > SCORE_MIN);
             ASSERT(eval < SCORE_MAX);
 
-            eval += eval_fuzz();
+            _eval += eval_fuzz();
 
             /*
              * 2. Tactical (positional) evaluation.
              */
-            eval += eval_insufficient_material(state(), eval, [&]() {
-                return eval_tactical(*this, eval);
+            _eval += eval_insufficient_material(state(), _eval, [this]() {
+                return eval_tactical(*this, _eval);
             });
-
-            _tt_entry._eval = eval;
         }
 
         ASSERT(eval > SCORE_MIN);
         ASSERT(eval < SCORE_MAX);
 
-        return eval;
+        return _eval;
     }
 
 
@@ -1648,7 +1636,7 @@ namespace search
             reduction -= _parent->history_count(_move) / HISTORY_COUNT_HIGH;
         }
 
-        if (is_capture())
+        if (is_capture() || (_move.from_square() == _parent->_capture_square))
             --reduction;
 
         reduction = std::max(1, reduction);
@@ -1964,15 +1952,13 @@ namespace search
         return ctxt.state().pawns & BB_PASSED[ctxt.turn()] & BB_SQUARES[move.from_square()];
     }
 
-
-/*
+#if 0
     static INLINE bool is_attack_on_king(const Context& ctxt, const Move& move)
     {
         const auto king = ctxt.state().king(!ctxt.turn());
         return square_distance(king, move.to_square()) <= 2;
     }
- */
-
+#endif
 
     template<std::size_t... I>
     static constexpr std::array<double, sizeof ... (I)> thresholds(std::index_sequence<I...>)
@@ -2068,7 +2054,10 @@ namespace search
                 else if (ctxt.is_counter_move(move)
                     || move.from_square() == ctxt._capture_square
                     || is_pawn_push(ctxt, move)
-                 /* || is_attack_on_king(ctxt, move) */)
+                #if 0
+                    || is_attack_on_king(ctxt, move)
+                #endif
+                    )
                 {
                     if (make_move<true>(ctxt, move, MoveOrder::TACTICAL_MOVES, hist_score))
                         ASSERT(move._score == hist_score);

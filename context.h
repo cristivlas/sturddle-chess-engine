@@ -245,6 +245,7 @@ namespace search
         bool        _retry_next = false;
 
         int         _double_ext = 0;
+        score_t     _eval = SCORE_MIN; /* static eval */
         int         _extension = 0; /* count pending fractional extensions */
         int         _fifty = 0;
         int         _full_depth_count = late_move_reduction_count();
@@ -614,7 +615,7 @@ namespace search
      */
     INLINE score_t Context::static_eval()
     {
-        return _tt_entry._eval == SCORE_MIN ? evaluate_material() : _tt_entry._eval;
+        return _eval == SCORE_MIN ? evaluate_material() : _eval;
     }
 
 
@@ -734,9 +735,9 @@ namespace search
             {
                 const auto prev = _parent->_parent;
 
-                if (abs(_tt_entry._eval) < MATE_HIGH && abs(prev->_tt_entry._eval) < MATE_HIGH)
+                if (abs(_eval) < MATE_HIGH && abs(prev->_eval) < MATE_HIGH)
                 {
-                    _improvement = std::max(0, prev->_tt_entry._eval - _tt_entry._eval);
+                    _improvement = std::max(0, prev->_eval - _eval);
                 }
                 else
                 {
@@ -1321,6 +1322,15 @@ namespace search
                 return false;
             }
 
+        /* History-based pruning. */
+        if (ctxt.history_count(move) >= HISTORY_PRUNE * pow2(std::max(1, ctxt.depth()))
+            && ctxt.history_score(move) < HISTORY_LOW
+            && ctxt.can_prune_move(move))
+        {
+            mark_as_pruned(ctxt, move);
+            return false;
+        }
+
         ctxt.state().clone_into(*move._state);
         ASSERT(move._state->capture_value == 0);
 
@@ -1338,7 +1348,7 @@ namespace search
         /* Futility pruning (1st pass, 2nd pass done in search) */
         /* Prune after making the move (state is needed for simple eval). */
 
-        if (futility > 0 /* && ctxt.depth() > 0 */)
+        if (futility > 0)
         {
             /* The futility margin is calculated after at least one move has been searched. */
             ASSERT(_current > 0);

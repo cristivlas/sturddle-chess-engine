@@ -57,6 +57,9 @@ static constexpr auto M_E = 2.718281828459045;
 
 constexpr int SIGN[] = { -1, 1 };
 
+
+template<typename T> INLINE T constexpr pow2(T x) { return x * x; }
+
 namespace chess
 {
     using Bitboard = uint64_t;
@@ -804,8 +807,6 @@ namespace chess
         return !lhs.equals(rhs);
     }
 
-
-    template<typename T> INLINE T constexpr pow2(T x) { return x * x; }
 
     namespace
     {
