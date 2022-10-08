@@ -1648,7 +1648,7 @@ namespace search
             reduction -= _parent->history_count(_move) / HISTORY_COUNT_HIGH;
         }
 
-        if (is_capture())
+        if (is_capture() || (_move.from_square() == _parent->_capture_square))
             --reduction;
 
         reduction = std::max(1, reduction);

@@ -1338,7 +1338,7 @@ namespace search
         /* Futility pruning (1st pass, 2nd pass done in search) */
         /* Prune after making the move (state is needed for simple eval). */
 
-        if (futility > 0 /* && ctxt.depth() > 0 */)
+        if (futility > 0)
         {
             /* The futility margin is calculated after at least one move has been searched. */
             ASSERT(_current > 0);
