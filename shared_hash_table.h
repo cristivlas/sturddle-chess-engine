@@ -25,7 +25,7 @@ static constexpr auto QUADRATIC_PROBING = false;
 
 namespace search
 {
-#if 0
+#if 1
     using key_t = uint64_t;
 
     static INLINE constexpr key_t key(uint64_t hash)

@@ -183,15 +183,14 @@ class UCI:
             self.worker.send_message(self.search_async, max_count = 1)
             return True
 
-        # synchronous search
         self.algorithm.time_limit_ms = movetime
 
         move, _ = self.algorithm.search(
             self.board,
             time_info = None if explicit_movetime else (time_remaining[turn], movestogo)
         )
-
-        self.output_best(move)
+        # Do not ponder below 1s / move.
+        self.output_best(move, request_ponder=(self.ponder_enabled and movetime >= 1000))
         return True
 
 
@@ -221,7 +220,7 @@ class UCI:
         if self.extended_time:
             self.extended_time = 0
         else:
-            self.output_best(move, request_ponder = True)
+            self.output_best(move, request_ponder=False)
 
         self.pondering = False
 

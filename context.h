@@ -799,7 +799,7 @@ namespace search
 
         return static_eval() >= _beta
             - NULL_MOVE_DEPTH_WEIGHT * depth()
-            + improvement() / NULL_MOVE_IMPROVEMENT_DIV
+            - improvement() / NULL_MOVE_IMPROVEMENT_DIV
             + NULL_MOVE_MARGIN;
     }
 
