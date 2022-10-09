@@ -489,13 +489,13 @@ namespace chess
     using MovesList = std::vector<Move>;
 
 
+#if USE_PIECE_SQUARE_TABLES
     INLINE constexpr int square_index(int i, chess::Color color)
     {
         return square_indices[color][i];
     }
 
 
-#if USE_PIECE_SQUARE_TABLES
     INLINE const int (&select_piece_square_table(bool endgame, PieceType pt))[64]
     {
         if (endgame && pt == PieceType::KING)
@@ -1227,7 +1227,14 @@ namespace chess
             delta = table_i[j] - table_i[i];
         }
     #else
-        delta = 0;
+        if (move.promotion())
+        {
+            delta = weight(move.promotion()) - weight(PieceType::PAWN);
+        }
+        else
+        {
+            delta = 0;
+        }
     #endif /* USE_PIECE_SQUARE_TABLES */
 
         /*
@@ -1249,6 +1256,7 @@ namespace chess
 
             delta += weight(type);
 
+        #if USE_PIECE_SQUARE_TABLES
             /*
              * Can't capture the king, no need to check for king's endgame table;
              * the only alternate endgame table for now is ENDGAME_KING_SQUARE_TABLE
@@ -1283,6 +1291,7 @@ namespace chess
                     delta += SIGN[c == color] * d;
                 }
             }
+        #endif /* USE_PIECE_SQUARE_TABLES */
         }
 
         return delta * SIGN[color];

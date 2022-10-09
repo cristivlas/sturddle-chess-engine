@@ -665,8 +665,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                 + std::max<score_t>(REVERSE_FUTILITY_MARGIN * ctxt.depth(), ctxt.improvement())
             && !ctxt.is_check())
         {
-            ASSERT(ctxt._tt_entry._eval > SCORE_MIN);
-            ASSERT(ctxt._tt_entry._eval < SCORE_MAX);
+            ASSERT(ctxt._eval > SCORE_MIN);
+            ASSERT(ctxt._eval < SCORE_MAX);
 
             return ctxt._eval;
         }

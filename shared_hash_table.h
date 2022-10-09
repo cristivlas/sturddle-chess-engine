@@ -20,12 +20,13 @@
  */
 #pragma once
 
+#define FULL_SIZE_LOCK true
 static constexpr auto QUADRATIC_PROBING = false;
 
 
 namespace search
 {
-#if 1
+#if FULL_SIZE_LOCK
     using key_t = uint64_t;
 
     static INLINE constexpr key_t key(uint64_t hash)
@@ -39,7 +40,7 @@ namespace search
     {
         return key & 0xFFFFFFFF;
     }
-#endif
+#endif /* FULL_SIZE_LOCK */
 
     static_assert(std::atomic<key_t>::is_always_lock_free);
     static constexpr key_t LOCKED = key_t(-1);
@@ -285,8 +286,6 @@ namespace search
 
                 if (!p->is_valid())
                 {
-                    ASSERT(p->_version == 0);
-
                     /* slot is unoccupied, bump up usage count */
                 #if SMP
                     _used.fetch_add(1, std::memory_order_relaxed);

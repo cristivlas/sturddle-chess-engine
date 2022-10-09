@@ -1454,8 +1454,8 @@ namespace search
              */
             _eval = state().eval();
 
-            ASSERT(eval > SCORE_MIN);
-            ASSERT(eval < SCORE_MAX);
+            ASSERT(_eval > SCORE_MIN);
+            ASSERT(_eval < SCORE_MAX);
 
             _eval += eval_fuzz();
 
@@ -1467,8 +1467,8 @@ namespace search
             });
         }
 
-        ASSERT(eval > SCORE_MIN);
-        ASSERT(eval < SCORE_MAX);
+        ASSERT(_eval > SCORE_MIN);
+        ASSERT(_eval < SCORE_MAX);
 
         return _eval;
     }
