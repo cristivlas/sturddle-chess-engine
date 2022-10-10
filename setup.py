@@ -57,6 +57,7 @@ if environ.get('BUILD_WITH_NNUE', None):
 
 if platform.startswith('win'):
     args.append('/std:c++17')
+    args.append('/DWITH_NNUE')
 else:
     if '-O0' not in args:
         args.append('-O3')
@@ -71,6 +72,7 @@ else:
         '-DCYTHON_WITHOUT_ASSERTIONS',
         '-fvisibility=hidden',
         '-DPyMODINIT_FUNC=__attribute__((visibility("default"))) extern "C" PyObject*',
+        '-DWITH_NNUE',
     ]
 
     # Silence off Py_DEPRECATED warnings for clang
