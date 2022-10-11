@@ -59,9 +59,6 @@ struct NNUE
     }
 
     static void log_init_message();
-
-    int pieces[33];
-    int squares[33];
 };
 
 
@@ -346,7 +343,7 @@ namespace search
         int         rewind(int where = 0, bool reorder = false);
 
         void        set_counter_move(const BaseMove& move) { _counter_move = move; }
-        void        set_search_window(score_t);
+        void        set_search_window(score_t score, score_t& prev_score);
 
         static void set_time_limit_ms(int milliseconds);
         void        set_time_info(int time_left /* millisec */, int moves_left);
@@ -398,8 +395,6 @@ namespace search
 
         static HistoryPtr   _history;
 
-        static NNUE& nnue(int tid) { return _nnue[tid]; }
-
     private:
         const Move* get_next_move(score_t);
         bool has_cycle(const State&) const;
@@ -425,7 +420,6 @@ namespace search
         static std::vector<ContextStack>    _context_stacks;
         static std::vector<MoveStack>       _move_stacks;
         static std::vector<StateStack>      _state_stacks;
-        static std::vector<NNUE>            _nnue;
     };
 
 
@@ -870,9 +864,15 @@ namespace search
      */
     INLINE int null_move_reduction(Context& ctxt)
     {
+    #if 0
+        return NULL_MOVE_REDUCTION
+            + ctxt.depth() / NULL_MOVE_DEPTH_DIV
+            + std::min(5, (ctxt.static_eval() - ctxt._beta) / NULL_MOVE_DIV);
+    #else
         return NULL_MOVE_REDUCTION
             + ctxt.depth() / NULL_MOVE_DEPTH_DIV
             + std::min(3, (ctxt.static_eval() - ctxt._beta) / NULL_MOVE_DIV);
+    #endif
     }
 
 
@@ -1316,19 +1316,22 @@ namespace search
 
         /* Late-move prune before making the move. */
         if constexpr(LateMovePrune)
+        {
             if (can_late_move_prune(ctxt))
             {
                 mark_as_pruned(ctxt, move);
                 return false;
             }
 
-        /* History-based pruning. */
-        if (ctxt.history_count(move) >= HISTORY_PRUNE * pow2(std::max(1, ctxt.depth()))
-            && ctxt.history_score(move) < HISTORY_LOW
-            && ctxt.can_prune_move(move))
-        {
-            mark_as_pruned(ctxt, move);
-            return false;
+            /* History-based pruning. */
+            if (ctxt.depth() > 0
+                && ctxt.history_count(move) >= HISTORY_PRUNE * pow2(ctxt.depth())
+                && ctxt.history_score(move) < HISTORY_LOW
+                && ctxt.can_prune_move(move))
+            {
+                mark_as_pruned(ctxt, move);
+                return false;
+            }
         }
 
         ctxt.state().clone_into(*move._state);
@@ -1357,11 +1360,8 @@ namespace search
 
             if ((val < ctxt._alpha || val < ctxt._score) && ctxt.can_prune_move<true>(move))
             {
-            #if EXTRA_STATS
-
-                ++ctxt.get_tt()->_futility_prune_count;
-
-            #endif /* EXTRA_STATS */
+                if constexpr(EXTRA_STATS)
+                    ++ctxt.get_tt()->_futility_prune_count;
 
                 mark_as_pruned(ctxt, move);
                 return false;

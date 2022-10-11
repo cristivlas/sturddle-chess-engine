@@ -241,8 +241,8 @@ int NNUE::eval_fen(const std::string& fen)
 /*
  * Convert from bitboard representation to format expected by nnue_eval.
  */
-static INLINE void
-NNUE_convert_position(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
+template<typename T> static INLINE void
+NNUE_convert_position(const BoardPosition& pos, T (&pieces)[33], T (&squares)[33])
 {
     pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
     pieces[1] = NNUE::piece(KING, BLACK); squares[1] = pos.king(BLACK);
@@ -265,13 +265,14 @@ NNUE_convert_position(const BoardPosition& pos, int (&pieces)[33], int (&squares
 
 int NNUE::eval(const chess::BoardPosition& pos, int tid)
 {
-    auto& n = search::Context::nnue(tid);
-    NNUE_convert_position(pos, n.pieces, n.squares);
+    int pieces[33];
+    int squares[33];
+    NNUE_convert_position(pos, pieces, squares);
 
     /* nnue-probe colors are inverted */
     const int turn = (pos.turn == WHITE) ? white : black;
 
-    return nnue_evaluate(turn, n.pieces, n.squares);
+    return nnue_evaluate(turn, pieces, squares);
 }
 
 
@@ -330,18 +331,16 @@ NNUE_update_dirty_pieces(
 
 void search::Context::eval_incremental()
 {
-    const auto turn = this->turn();
+    int8_t pieces[33];
+    int8_t squares[33];
 
-    auto& pieces = _nnue[tid()].pieces;
-    auto& squares = _nnue[tid()].squares;
     NNUE_convert_position(state(), pieces, squares);
-
     NNUEdata* nnue_data[3] = { nullptr, nullptr, nullptr };
     auto& acc = NNUE_accumulator_data[tid()];
-
     nnue_data[0] = &acc[_ply];
     nnue_data[0]->accumulator.computedAccumulation = 0;
 
+    const auto turn = this->turn();
     if (_parent)
     {
         if (is_null_move())
@@ -356,16 +355,15 @@ void search::Context::eval_incremental()
             auto& dp = nnue_data[0]->dirtyPiece;
             NNUE_update_dirty_pieces(_parent->state(), state(), _move, !turn, dp);
         }
-        if (_parent->_parent && !_parent->is_null_move())
+        if (_parent->_parent /* && !_parent->is_null_move() */)
         {
             nnue_data[2] = &acc[_parent->_parent->_ply];
         }
     }
-
-    auto eval = nnue_evaluate_incremental(!turn, pieces, squares, nnue_data);
+    auto eval = nnue::evaluate(!turn, pieces, squares, nnue_data);
 
     /* Verify incremental result againt full eval. */
-    ASSERT(eval == nnue_evaluate(!turn, pieces, squares));
+    ASSERT(eval == nnue::evaluate(!turn, pieces, squares));
 
     eval += eval_fuzz();
 
@@ -375,16 +373,13 @@ void search::Context::eval_incremental()
     _eval = std::max(-CHECKMATE, std::min(CHECKMATE, eval));
 }
 
-
 #else
-
 
 bool USE_NNUE = false;
 void NNUE::init(const std::string&) {}
 void NNUE::log_init_message() {}
 int NNUE::eval_fen(const std::string&) { return 0; }
 int NNUE::eval(const chess::BoardPosition&, int) { return 0; }
-
 
 #endif /* WITH_NNUE */
 
@@ -396,7 +391,7 @@ namespace search
      *---------------------------------------------------------------------*/
     atomic_bool Context::_cancel(false);
 
-    atomic_int  Context::_time_limit = -1; /* milliseconds */
+    atomic_int  Context::_time_limit(-1); /* milliseconds */
     atomic_time Context::_time_start;
     size_t Context::_callback_count(0);
 
@@ -405,7 +400,6 @@ namespace search
     std::vector<Context::ContextStack> Context::_context_stacks(SMP_CORES);
     std::vector<Context::MoveStack> Context::_move_stacks(SMP_CORES);
     std::vector<Context::StateStack> Context::_state_stacks(SMP_CORES);
-    std::vector<NNUE> Context::_nnue(SMP_CORES);
 
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
@@ -477,7 +471,7 @@ namespace search
             _context_stacks.resize(n_threads);
             _move_stacks.resize(n_threads);
             _state_stacks.resize(n_threads);
-            _nnue.resize(n_threads);
+
         #if WITH_NNUE
             NNUE_accumulator_data.resize(n_threads);
         #endif
@@ -1560,40 +1554,40 @@ namespace search
     }
 
 
-    void Context::set_search_window(score_t score)
+    void Context::set_search_window(score_t score, score_t& prev_score)
     {
         if (!ASPIRATION_WINDOW || iteration() == 1)
         {
             _alpha = SCORE_MIN;
             _beta = SCORE_MAX;
         }
+        else if (_mate_detected % 2)
+        {
+            _alpha = _tt->_w_alpha;
+            _beta = SCORE_MAX;
+        }
+        else if (_mate_detected)
+        {
+            _alpha = SCORE_MIN;
+            _beta = _tt->_w_beta;
+        }
+        else if (score <= _tt->_w_alpha)
+        {
+            _alpha = std::max<score_t>(SCORE_MIN, score - HALF_WINDOW * pow2(iteration()));
+            _beta = _tt->_w_beta;
+        }
+        else if (score >= _tt->_w_beta)
+        {
+            _alpha = _tt->_w_alpha;
+            _beta = std::min<score_t>(SCORE_MAX, score + HALF_WINDOW * pow2(iteration()));
+        }
         else
         {
-            if (_mate_detected % 2)
-            {
-                _alpha = _tt->_w_alpha;
-                _beta = SCORE_MAX;
-            }
-            else if (_mate_detected)
-            {
-                _alpha = SCORE_MIN;
-                _beta = _tt->_w_beta;
-            }
-            else if (score <= _tt->_w_alpha)
-            {
-                _alpha = std::max<score_t>(SCORE_MIN, score - HALF_WINDOW * pow2(iteration()));
-                _beta = _tt->_w_beta;
-            }
-            else if (score >= _tt->_w_beta)
-            {
-                _alpha = _tt->_w_alpha;
-                _beta = std::min<score_t>(SCORE_MAX, score + HALF_WINDOW * pow2(iteration()));
-            }
-            else
-            {
-                _alpha = std::max<score_t>(SCORE_MIN, score - HALF_WINDOW);
-                _beta = std::min<score_t>(SCORE_MAX, score + HALF_WINDOW);
-            }
+            const score_t delta = score - prev_score;
+            prev_score = score;
+
+            _alpha = std::max<score_t>(SCORE_MIN, score - std::max(HALF_WINDOW, delta));
+            _beta = std::min<score_t>(SCORE_MAX, score + std::max(HALF_WINDOW, -delta));
         }
 
         /* save iteration bounds */

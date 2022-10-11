@@ -1238,7 +1238,7 @@ struct SMPTasks /* dummy */
  */
 score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter_count)
 {
-    score_t score = 0;
+    score_t score = 0, prev_score = 0;
     max_iter_count = std::min(PLY_MAX, max_iter_count);
 
     for (int i = 1; i != max_iter_count;)
@@ -1246,7 +1246,7 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
         table._iteration = i;
         ASSERT(ctxt.iteration() == i);
 
-        ctxt.set_search_window(score);
+        ctxt.set_search_window(score, prev_score);
 
         ctxt.reinitialize();
 
