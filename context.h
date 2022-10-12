@@ -50,7 +50,7 @@ struct NNUE
     static constexpr int NO_SQUARE = 64;
 
     static void init(const std::string& data_dir);
-    static int eval(const chess::BoardPosition&, int tid); /* test */
+    static int eval(const chess::BoardPosition&); /* test */
     static int eval_fen(const std::string& fen); /* test */
 
     static INLINE constexpr int piece(chess::PieceType ptype, chess::Color color)

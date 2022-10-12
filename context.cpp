@@ -232,16 +232,10 @@ void NNUE::init(const std::string& data_dir)
 }
 
 
-int NNUE::eval_fen(const std::string& fen)
-{
-    return nnue_evaluate_fen(fen.c_str());
-}
-
-
 /*
  * Convert from bitboard representation to format expected by nnue_eval.
  */
-template<typename T> static INLINE void
+template<typename T, bool Full=true> static INLINE void
 NNUE_convert_position(const BoardPosition& pos, T (&pieces)[33], T (&squares)[33])
 {
     pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
@@ -249,13 +243,15 @@ NNUE_convert_position(const BoardPosition& pos, T (&pieces)[33], T (&squares)[33
 
     int i = 2;
 
-    for (auto color : { BLACK, WHITE })
-        for_each_square(pos.occupied_co(color) & ~pos.kings, [&](Square s) {
-            pieces[i] = NNUE::piece(pos.piece_type_at(s), color);
-            squares[i] = s;
-            ++i;
-        });
-
+    if constexpr(Full)
+    {
+        for (auto color : { BLACK, WHITE })
+            for_each_square(pos.occupied_co(color) & ~pos.kings, [&](Square s) {
+                pieces[i] = NNUE::piece(pos.piece_type_at(s), color);
+                squares[i] = s;
+                ++i;
+            });
+    }
     ASSERT(i < 33);
 
     pieces[i] = 0;
@@ -263,7 +259,8 @@ NNUE_convert_position(const BoardPosition& pos, T (&pieces)[33], T (&squares)[33
 }
 
 
-int NNUE::eval(const chess::BoardPosition& pos, int tid)
+/* Testing */
+int NNUE::eval(const chess::BoardPosition& pos)
 {
     int pieces[33];
     int squares[33];
@@ -273,6 +270,12 @@ int NNUE::eval(const chess::BoardPosition& pos, int tid)
     const int turn = (pos.turn == WHITE) ? white : black;
 
     return nnue_evaluate(turn, pieces, squares);
+}
+
+
+int NNUE::eval_fen(const std::string& fen)
+{
+    return nnue_evaluate_fen(fen.c_str());
 }
 
 
@@ -334,13 +337,12 @@ void search::Context::eval_incremental()
     int8_t pieces[33];
     int8_t squares[33];
 
-    NNUE_convert_position(state(), pieces, squares);
+    NNUE_convert_position<int8_t, false>(state(), pieces, squares);
     NNUEdata* nnue_data[3] = { nullptr, nullptr, nullptr };
     auto& acc = NNUE_accumulator_data[tid()];
     nnue_data[0] = &acc[_ply];
     nnue_data[0]->accumulator.computedAccumulation = 0;
 
-    const auto turn = this->turn();
     if (_parent)
     {
         if (is_null_move())
@@ -353,17 +355,27 @@ void search::Context::eval_incremental()
         {
             nnue_data[1] = &acc[_parent->_ply];
             auto& dp = nnue_data[0]->dirtyPiece;
-            NNUE_update_dirty_pieces(_parent->state(), state(), _move, !turn, dp);
+            NNUE_update_dirty_pieces(_parent->state(), state(), _move, !turn(), dp);
         }
-        if (_parent->_parent /* && !_parent->is_null_move() */)
+        if (_parent->_parent)
         {
             nnue_data[2] = &acc[_parent->_parent->_ply];
         }
     }
-    auto eval = nnue::evaluate(!turn, pieces, squares, nnue_data);
+    const nnue::Position pos{
+        bool(!turn()),
+        pieces,
+        squares,
+        nnue_data,
+        _state,
+        [](const void* board, int8_t (&pcs)[33], int8_t (&sqrs)[33]) {
+            NNUE_convert_position(*reinterpret_cast<const State*>(board), pcs, sqrs);
+        }
+    };
+    auto eval = nnue::evaluate(pos);
 
     /* Verify incremental result againt full eval. */
-    ASSERT(eval == nnue::evaluate(!turn, pieces, squares));
+    ASSERT(eval == NNUE::eval(state()));
 
     eval += eval_fuzz();
 

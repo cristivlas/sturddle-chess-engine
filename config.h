@@ -161,7 +161,7 @@ DECLARE_VALUE(  HISTORY_FAIL_LOW_PENALTY,            62,    0,     100)
 DECLARE_VALUE(  HISTORY_HIGH,                        92,    0,     100)
 DECLARE_VALUE(  HISTORY_LOW,                         59,    0, HISTORY_HIGH)
 DECLARE_VALUE(  HISTORY_MIN_DEPTH,                    3,    0,     100)
-DECLARE_VALUE(  HISTORY_PRUNE,                       48,    0,     100)
+DECLARE_VALUE(  HISTORY_PRUNE,                       98,    0,     100)
 
 GROUP(Eval)
 DECLARE_VALUE(  BISHOP_PAIR,                         68,    0,     100)
