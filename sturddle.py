@@ -389,12 +389,17 @@ class UCI:
                 logging.warning(f'not understood: {cmd_args}')
                 continue
 
+            # dispatch cmd and arguments to command handler
             try:
                 if not cmd_handler(cmd_args):
                     logging.debug(f'{cmd_args}: good bye.')
                     break
             except:
                 logging.exception(f'exception in command handler, cmd="{cmd}", args: {cmd_args}')
+
+                # fail hard and fast when in tuning mode
+                if args.tweak:
+                    raise
 
 
     def show_thinking(self, algorithm, node, score, node_count, knps, ms):
