@@ -233,7 +233,7 @@ void NNUE::init(const std::string& data_dir)
 
 
 /*
- * Convert from bitboard representation to format expected by nnue_eval.
+ * Convert from bitboard representation to the format expected by nnue.
  */
 template<typename T, bool Full=true> static INLINE void
 NNUE_convert_position(const BoardPosition& pos, T (&pieces)[33], T (&squares)[33])
