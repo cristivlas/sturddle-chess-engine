@@ -920,7 +920,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             }
 
             /*
-             * If the 1st move fails low at root it maybe unlikely for the
+             * If the 1st move fails low at root it may be unlikely for the
              * subsequent moves to improve things much (assuming reasonable
              * move ordering); readjust the aspiration window and retry.
              *

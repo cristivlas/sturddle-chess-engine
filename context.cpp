@@ -332,6 +332,13 @@ NNUE_update_dirty_pieces(
 }
 
 
+/*
+ * Incremental position evaluation using (a fork of) nnue-probe.
+ *
+ * https://github.com/dshawul/nnue-probe
+ * https://github.com/cristivlas/nnue-probe
+ * https://www.chessprogramming.org/NNUE
+ */
 void search::Context::eval_incremental()
 {
     int8_t pieces[33];
