@@ -305,7 +305,7 @@ cdef class BoardState:
         b.kings = self._state.kings
         b.castling_rights = self._state.castling_rights
 
-        if self._state.en_passant_square >= 0:
+        if self._state.en_passant_square != UNDEFINED:
             b.ep_square = self._state.en_passant_square
         else:
             b.ep_square = None

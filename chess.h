@@ -42,7 +42,10 @@
 #include "common.h"
 
 #include "attack_tables.h"
+
+#if USE_LIBPOPCOUNT
 #include "libpopcnt.h"
+#endif
 
 #if USE_MAGIC_BITS
 #include "magic_bits.hpp"
@@ -251,8 +254,15 @@ namespace chess
 
     INLINE int popcount(uint64_t u)
     {
+    #if USE_LIBPOPCOUNT
         /* Evals break if results are converted to unsigned! */
         return int(popcnt64(u));
+    #elif _MSC_VER
+        return int(__popcnt64(u));
+    #else
+        static_assert(std::is_same<decltype(__builtin_popcount(0)), int>::value);
+        return __builtin_popcount(u);
+    #endif
     }
 
 

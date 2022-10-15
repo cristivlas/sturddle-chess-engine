@@ -228,7 +228,7 @@ namespace chess
 
         INLINE std::uint64_t en_passant_key(const State& board)
         {
-            if (board.en_passant_square >= 0)
+            if (board.en_passant_square != Square::UNDEFINED)
             {
                 Bitboard ep_mask = board.turn
                     ? shift_down(BB_SQUARES[board.en_passant_square])

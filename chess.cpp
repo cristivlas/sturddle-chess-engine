@@ -454,7 +454,7 @@ namespace chess
                 add_move(moves_list, from_square, to_square);
             });
 
-            if (en_passant_square != -1)
+            if (en_passant_square != Square::UNDEFINED)
                 ep_moves(moves_list, to_mask);
         }
 
