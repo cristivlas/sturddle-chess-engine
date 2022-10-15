@@ -261,7 +261,7 @@ namespace chess
         return int(__popcnt64(u));
     #else
         static_assert(std::is_same<decltype(__builtin_popcount(0)), int>::value);
-        return __builtin_popcount(u);
+        return __builtin_popcountll(u);
     #endif
     }
 
