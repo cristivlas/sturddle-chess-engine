@@ -235,6 +235,7 @@ namespace chess
 
 //#define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 2, 1, 3, 2 }
 //#define DEFAULT_MOBILITY_WEIGHTS { 0, 5, 1, 8, 7, 4, 1 }
+
 #define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 0, 7, 6, 5, 0 }
 
 
@@ -372,9 +373,7 @@ namespace chess
     }
 
 
-    struct State;
-
-    uint64_t zobrist_hash(const State& state);
+    uint64_t zobrist_hash(const struct State& state);
 
 
     /* Move representation */

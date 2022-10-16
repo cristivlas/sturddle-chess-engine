@@ -311,15 +311,15 @@ namespace search
         bool        is_last_move();
         bool        is_leftmost() const { return _ply == 0 || _leftmost; }
         bool        is_leaf(); /* treat as terminal node ? */
-        bool        is_qsearch() const { return _ply > _max_depth; }
         bool        is_mate_bound() const;
         bool        is_null_move_ok(); /* ok to generate null move? */
         bool        is_null_move() const { return _is_null_move; }
         bool        is_promotion() const { return state().promotion; }
         bool        is_pv_node() const { return _is_pv; }
+        bool        is_pvs_ok() const;
+        bool        is_qsearch() const { return _ply > _max_depth; }
         bool        is_recapture() const;
         bool        is_reduced() const;
-        bool        is_pvs_ok() const;
         int         is_repeated() const;
         bool        is_retry() const { return _is_retry; }
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
@@ -343,7 +343,6 @@ namespace search
 
         void        set_counter_move(const BaseMove& move) { _counter_move = move; }
         void        set_search_window(score_t score, score_t& prev_score);
-
         static void set_time_limit_ms(int milliseconds);
         void        set_time_info(int time_left /* millisec */, int moves_left);
         void        set_tt(TranspositionTable* tt) { _tt = tt; }
@@ -378,6 +377,11 @@ namespace search
 
         const ContextStack& stack() const { return _context_stacks[tid()]; }
 
+        static void set_syzygy_path(const std::string& path) { _syzygy_path = path; }
+        static const std::string& syzygy_path() { return _syzygy_path; }
+        static void set_tb_cardinality(int n) { _tb_cardinality = n; }
+        static int tb_cardinality() { return _tb_cardinality.load(std::memory_order_relaxed); }
+
         /*
          * Python callbacks
          */
@@ -390,6 +394,7 @@ namespace search
         static std::string  (*_pgn)(Context*);
         static void         (*_print_state)(const State&);
         static void         (*_report)(PyObject*, std::vector<Context*>&);
+        static bool         (*_tb_probe_wdl)(const State&, int*);
         static size_t       (*_vmem_avail)();
 
         static HistoryPtr   _history;
@@ -415,6 +420,8 @@ namespace search
         static size_t       _callback_count;
         static atomic_int   _time_limit; /* milliseconds */
         static atomic_time  _time_start;
+        static std::string  _syzygy_path;
+        static atomic_int   _tb_cardinality;
 
         static std::vector<ContextStack>    _context_stacks;
         static std::vector<MoveStack>       _move_stacks;
@@ -511,7 +518,6 @@ namespace search
             ASSERT(state.is_check());
             return true;
         }
-
         return false;
     }
 
@@ -681,7 +687,6 @@ namespace search
             return 0;
 
         static const auto fp_margins = margins(std::make_index_sequence<PLY_MAX>{});
-
         return fp_margins[depth()] * can_forward_prune();
     }
 
@@ -694,7 +699,6 @@ namespace search
         {
             move = _move_maker.get_next_move(*this, futility);
         }
-
         return move;
     }
 
@@ -940,7 +944,6 @@ namespace search
             ctxt->_null_move_allowed[side] = _null_move_allowed[side] && (NULL_MOVE_REDUCTION > 0);
 
         ctxt->_tt = _tt;
-
         ctxt->_alpha = -_beta;
 
         if (ctxt->is_null_move())
@@ -1387,7 +1390,6 @@ namespace search
             ASSERT(move._group >= MoveOrder::PRUNED_MOVES);
             return false;
         }
-
         ASSERT(move._group == MoveOrder::UNORDERED_MOVES);
         move._group = group;
         move._score = score;
@@ -1399,7 +1401,6 @@ namespace search
     INLINE void MoveMaker::mark_as_illegal(Move& move)
     {
         move._group = MoveOrder::ILLEGAL_MOVES;
-
         ASSERT(_count > 0);
         --_count;
     }

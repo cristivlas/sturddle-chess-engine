@@ -408,7 +408,7 @@ namespace search
      * Context
      *---------------------------------------------------------------------*/
     atomic_bool Context::_cancel(false);
-
+    atomic_int  Context::_tb_cardinality(6);
     atomic_int  Context::_time_limit(-1); /* milliseconds */
     atomic_time Context::_time_start;
     size_t Context::_callback_count(0);
@@ -432,8 +432,10 @@ namespace search
     void (*Context::_print_state)(const State&) = nullptr;
     void (*Context::_report)(PyObject*, std::vector<Context*>&) = nullptr;
 
+    bool (*Context::_tb_probe_wdl)(const State&, int*) = nullptr;
     size_t (*Context::_vmem_avail)() = nullptr;
 
+    std::string Context::_syzygy_path = "syzygy/3-4-5";
 
     /* Init attack masks and other magic bitboards in chess.cpp */
     /* static */ void Context::init()
@@ -2076,7 +2078,6 @@ namespace search
             else if (make_move<true>(ctxt, move, futility)) /* Phase == 4 */
             {
                 move._group = MoveOrder::LATE_MOVES;
-
                 move._score =
                     ctxt.history_score(move) / (1 + HISTORY_LOW)
                     + eval_material_and_piece_squares(*move._state);
