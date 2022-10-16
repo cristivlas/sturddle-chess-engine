@@ -70,6 +70,7 @@ else:
         '-Wno-unused-parameter',
         '-Wno-unused-variable',
         '-DCYTHON_WITHOUT_ASSERTIONS',
+        '-fno-stack-protector',
         '-fvisibility=hidden',
         '-DPyMODINIT_FUNC=__attribute__((visibility("default"))) extern "C" PyObject*',
         '-DWITH_NNUE',
