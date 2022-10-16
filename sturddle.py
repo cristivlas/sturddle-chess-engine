@@ -286,6 +286,8 @@ class UCI:
         elif name == 'Algorithm':
             self.args.algorithm = value
             self.init_algo()
+        elif name == 'SyzygyPath':
+            engine.set_syzygy_path(value)
         else:
             if value in ['true', 'false']:
                 engine.set_param(name, value == 'true')
@@ -326,6 +328,7 @@ class UCI:
         if self.book:
             self.output('option name OwnBook type check default true')
         self.output('option name Ponder type check')
+        self.output('option name SyzygyPath type string')
 
         if self.args.tweak:
             whitelist = engine.get_param_info().keys()

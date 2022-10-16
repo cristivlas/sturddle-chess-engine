@@ -582,7 +582,6 @@ static INLINE bool endgame_tables_probe(Context& ctxt)
         else
             ctxt._score = v;
 
-        // Context::log_message(LogLevel::DEBUG, "syzygy: " + std::to_string(v));
         return true;
     }
     return false;
@@ -671,7 +670,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         return ctxt._score;
 #endif /* !CACHE_HEURISTIC_CUTOFFS */
     }
-    else if (endgame_tables_probe(ctxt))
+    else if (!Context::syzygy_path().empty() && endgame_tables_probe(ctxt))
     {
         table.store(ctxt, alpha, ctxt.depth() + Context::tb_cardinality());
         return ctxt._score;

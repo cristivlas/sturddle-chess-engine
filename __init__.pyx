@@ -1226,6 +1226,8 @@ def _tb_init():
             _tb_paths.append(syzygy_path)
         except:
             pass
+    if _tb_paths:
+        print(_tb_paths)
 
 
 cdef bool tb_probe_wdl(const State& state, int* result) except* :
@@ -1252,7 +1254,6 @@ def set_syzygy_path(path):
     _tb = chess.syzygy.Tablebase()
     _tb_paths = []
     _tb_init()
-    logging.info(f'syzygy path={_tb_paths}')
 
 
 # ---------------------------------------------------------------------
