@@ -95,7 +95,7 @@ using score_t = int;
   #define USE_PIECE_SQUARE_TABLES           true
 #endif
 
-#define USE_LIBPOPCOUNT                     false
+#define USE_LIBPOPCOUNT                     true
 
 #if SMP
   #if __GNUC__
