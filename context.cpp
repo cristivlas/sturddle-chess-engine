@@ -288,7 +288,6 @@ NNUE_update_dirty_pieces(
     DirtyPiece& dp)
 {
     dp.dirtyNum = 1;
-
     dp.to[0] = move.to_square();
 
     if (to_pos.promotion)
@@ -575,7 +574,6 @@ namespace search
                         }
                     }
                 }
-
                 _alpha = score;
             }
 
@@ -925,7 +923,6 @@ namespace search
                 Context::log_message(LogLevel::DEBUG, out.str());
             }
         }
-
         return score;
     }
 
@@ -1040,7 +1037,6 @@ namespace search
             const auto king = state.king(color);
             const auto ranks = color ? square_rank(king) : 7 - square_rank(king);
             const auto area = king_area(state, king);
-
             const auto color_mask = state.occupied_co(color);
 
             if (ranks > 1)
@@ -1147,7 +1143,6 @@ namespace search
         for (auto color : { BLACK, WHITE })
         {
             const auto s = SIGN[color];
-
             const auto own_color_mask = state.occupied_co(color);
 
             for (const auto file_mask : BB_FILES)
@@ -1166,7 +1161,6 @@ namespace search
                 }
             }
         }
-
         return half_open_score * interpolate(piece_count, MIDGAME_HALF_OPEN_FILE, 0)
              + open_score * interpolate(piece_count, MIDGAME_OPEN_FILE, 0);
     }
@@ -1263,7 +1257,6 @@ namespace search
                     * interpolate(piece_count, MIDGAME_DEFENDED_PASSED, ENDGAME_DEFENDED_PASSED);
             });
         }
-
         return score;
     }
 
@@ -1391,9 +1384,7 @@ namespace search
 
     static INLINE int eval_tactical(const State& state, score_t mat_eval, int piece_count)
     {
-        score_t eval = 0;
-
-        eval += eval_center(state, piece_count);
+        score_t eval = eval_center(state, piece_count);
 
         if (abs(mat_eval) < WEIGHT[PAWN])
         {
@@ -1404,7 +1395,6 @@ namespace search
         eval += eval_open_files(state, piece_count);
         eval += eval_pawn_structure(state, piece_count);
         eval += eval_piece_grading(state, piece_count);
-
         eval += state.diff_connected_rooks()
              * interpolate(piece_count, MIDGAME_CONNECTED_ROOKS, ENDGAME_CONNECTED_ROOKS);
 

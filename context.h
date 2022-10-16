@@ -261,8 +261,6 @@ namespace search
 
         static void cancel() { _cancel.store(true, std::memory_order_relaxed); }
 
-        Context*    clone(ContextBuffer&, int ply = 0) const;
-
         bool        can_forward_prune() const;
 
         template<bool PruneCaptures = false> bool can_prune() const;
@@ -271,6 +269,7 @@ namespace search
         bool        can_reduce() const;
 
         int64_t     check_time_and_update_nps(); /* return elapsed milliseconds */
+        Context*    clone(ContextBuffer&, int ply = 0) const;
 
         int         depth() const { return _max_depth - _ply; }
         static int  elapsed_milliseconds();
@@ -664,6 +663,9 @@ namespace search
     }
 
 
+    /*
+     * Futility pruning margins.
+     */
     static constexpr double PHI = 1.61803398875;
 
     template<std::size_t... I>
@@ -741,7 +743,6 @@ namespace search
                 }
             }
         }
-
         return _improvement;
     }
 
