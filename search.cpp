@@ -572,6 +572,7 @@ static INLINE bool endgame_tables_probe(Context& ctxt)
     if (ctxt._ply != 0 /* do not probe at root */
         && ctxt._fifty == 0
         && Context::tb_cardinality()
+        && ctxt.state().is_endgame()
         && popcount(ctxt.state().occupied()) <= Context::tb_cardinality()
         && cython_wrapper::call(Context::_tb_probe_wdl, ctxt.state(), &v))
     {
@@ -663,17 +664,16 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
         return *p;
     }
+    else if (endgame_tables_probe(ctxt))
+    {
+        return ctxt._score;
+    }
     else if (multicut(ctxt, table))
     {
         ASSERT(ctxt._score < SCORE_MAX);
 #if !CACHE_HEURISTIC_CUTOFFS
         return ctxt._score;
 #endif /* !CACHE_HEURISTIC_CUTOFFS */
-    }
-    else if (!Context::syzygy_path().empty() && endgame_tables_probe(ctxt))
-    {
-        table.store(ctxt, alpha, ctxt.depth() + Context::tb_cardinality());
-        return ctxt._score;
     }
     else
     {

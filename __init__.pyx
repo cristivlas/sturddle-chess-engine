@@ -1226,8 +1226,11 @@ def _tb_init():
             _tb_paths.append(syzygy_path)
         except:
             pass
+
     if _tb_paths:
         print(_tb_paths)
+    else:
+        Context.set_tb_cardinality(0)
 
 
 cdef bool tb_probe_wdl(const State& state, int* result) except* :

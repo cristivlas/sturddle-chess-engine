@@ -13,4 +13,3 @@ the name Sturddle (as in the hybrid Sturddlefish).
 Currently the bulk of the implementation is in C++, with "entry-points" exposed to Python via the \_\_init\_\_.pyx 
 Cython "glue". The UCI protocol is written in Python (sturddle.py).
 
-As of now, there is no endgame tables support, and time management is minimal and sketchy.
