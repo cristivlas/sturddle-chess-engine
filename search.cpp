@@ -604,7 +604,8 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
          * (the root of the search may already be in the tables).
          */
         table._probe_endtables =
-            Context::tb_cardinality() > 0
+            table._iteration > 3
+            && Context::tb_cardinality() > 0
             && popcount(ctxt.state().occupied()) > Context::tb_cardinality();
     }
     else
