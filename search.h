@@ -262,7 +262,7 @@ namespace search
         score_t _w_alpha = SCORE_MIN;
         score_t _w_beta = SCORE_MAX;
         bool _reset_window = false;
-
+        bool _probe_endtables = false;
         /* Stats for current thread */
         size_t _check_nodes = 0;
         size_t _eval_count = 0;

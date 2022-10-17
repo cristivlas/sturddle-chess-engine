@@ -565,14 +565,14 @@ static INLINE void update_pruned(Context& ctxt, const Context& next, size_t& cou
 
 
 /* syzygy tablebase probing */
-static INLINE bool endgame_tables_probe(Context& ctxt)
+static INLINE bool probe_endtables(Context& ctxt)
 {
     int v;
 
     if (ctxt._ply != 0 /* do not probe at root */
         && ctxt._fifty == 0
-        && Context::tb_cardinality()
         && ctxt.state().is_endgame()
+        && Context::tb_cardinality() > 0
         && popcount(ctxt.state().occupied()) <= Context::tb_cardinality()
         && cython_wrapper::call(Context::_tb_probe_wdl, ctxt.state(), &v))
     {
@@ -582,7 +582,6 @@ static INLINE bool endgame_tables_probe(Context& ctxt)
             ctxt._score = MATE_HIGH - ctxt._ply;
         else
             ctxt._score = v;
-
         return true;
     }
     return false;
@@ -598,10 +597,20 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
     ctxt.set_tt(&table);
 
-    if (ctxt._ply != 0)
+    if (ctxt._ply == 0) /* root? */
+    {
+        /* Do not probe end tables if the number of pieces at root
+         * position has dropped below the end tables cardinality
+         * (the root of the search may already be in the tables).
+         */
+        table._probe_endtables =
+            Context::tb_cardinality() > 0
+            && popcount(ctxt.state().occupied()) > Context::tb_cardinality();
+    }
+    else
     {
         if (ctxt._fifty >= 100)
-            return 0;
+            return 0; /* draw by fifty moves rule */
 
         zobrist_update(ctxt._parent->state(), ctxt._move, *ctxt._state);
 
@@ -664,7 +673,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 
         return *p;
     }
-    else if (endgame_tables_probe(ctxt))
+    else if (table._probe_endtables && probe_endtables(ctxt))
     {
         return ctxt._score;
     }
