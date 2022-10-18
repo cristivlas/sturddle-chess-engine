@@ -676,6 +676,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     }
     else if (table._probe_endtables && probe_endtables(ctxt))
     {
+        table.store<TT_Type::EXACT>(ctxt, alpha, ctxt.depth() + 2 * ctxt.tb_cardinality());
         return ctxt._score;
     }
     else if (multicut(ctxt, table))
@@ -768,7 +769,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     * does not beat beta, it means the move is singular (the only cutoff
                     * in the current position).
                     */
-                    if (ctxt.depth() >= 7
+                    if (ctxt.depth() >= (ctxt.is_pv_node() ? 7 : 5)
                         && ctxt._tt_entry.is_lower()
                         && abs(ctxt._tt_entry._value) < MATE_HIGH
                         && next_ctxt->_move == ctxt._tt_entry._hash_move
@@ -777,7 +778,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         ASSERT(!ctxt._excluded);
                         ASSERT(ctxt._tt_entry.is_valid());
 
-                        auto s_beta = std::max(ctxt._tt_entry._value - ctxt.singular_margin(), SCORE_MIN + 1);
+                        const auto s_beta = std::max(ctxt._tt_entry._value - ctxt.singular_margin(), MATE_LOW);
                         /*
                          * Hack: use ply + 2 for the singular search to avoid clobbering
                          * _move_maker's _moves / _states stacks for the current context.
