@@ -374,7 +374,6 @@ class UCI:
                     self.output(f'bestmove {uci}')
             finally:
                 self.output_expected = False
-                # engine.clear_hashtable()
 
 
     def run(self):

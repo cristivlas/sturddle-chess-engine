@@ -39,11 +39,10 @@ constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
 
 /* Configuration API */
 struct Param { int val = 0; int min_val; int max_val; std::string group; };
-
 extern std::map<std::string, Param> _get_param_info();
 extern void _set_param(const std::string&, int value, bool echo=false);
 extern std::map<std::string, int> _get_params();
-
+extern void assert_param_ref();
 
 struct NNUE
 {
@@ -871,7 +870,7 @@ namespace search
     {
         return NULL_MOVE_REDUCTION
             + ctxt.depth() / NULL_MOVE_DEPTH_DIV
-            + std::min(NULL_MOVE_MIN, (ctxt.static_eval() - ctxt._beta) / NULL_MOVE_DIV);
+            + std::min(int(NULL_MOVE_MIN), (ctxt.static_eval() - ctxt._beta) / NULL_MOVE_DIV);
     }
 
 

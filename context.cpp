@@ -157,6 +157,24 @@ std::map<std::string, int> _get_params()
 }
 
 
+void assert_param_ref()
+{
+#if REFCOUNT_PARAM
+    for (auto& p : Config::_namespace)
+    {
+        if (p.second._val->_refcount == 0)
+            search::Context::log_message(LogLevel::ERROR, p.first + ": unreferenced");
+
+        ASSERT_ALWAYS(p.second._val->_refcount);
+        p.second._val->_refcount = 0;
+    }
+#endif /* REFCOUNT_PARAM */
+}
+
+
+/*---------------------------------------------------------------------------
+ * Evaluation
+ *--------------------------------------------------------------------------*/
 template<typename F>
 static INLINE score_t eval_insufficient_material(const State& state, score_t eval, F f)
 {
@@ -384,10 +402,10 @@ void search::Context::eval_incremental()
     ASSERT(eval == NNUE::eval(state()));
 
     eval += eval_fuzz();
-
+#if 0
     /* Make sure that insufficient material conditions are detected. */
     eval = eval_insufficient_material(state(), eval, [eval](){ return eval; });
-
+#endif
     _eval = std::max(-CHECKMATE, std::min(CHECKMATE, eval));
 }
 
@@ -468,16 +486,15 @@ namespace search
         ctxt->_parent = _parent;
         ctxt->_ply = ply;
         ctxt->_prev = _prev;
-
         ctxt->_state = &buffer._state;
         *ctxt->_state = this->state();
-
         ctxt->_move = _move;
         ctxt->_excluded = _excluded;
         ctxt->_tt_entry = _tt_entry;
         ctxt->_counter_move = _counter_move;
-
         ctxt->_is_null_move = _is_null_move;
+        ctxt->_double_ext = _double_ext;
+        ctxt->_extension = _extension;
         return ctxt;
     }
 

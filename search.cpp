@@ -197,6 +197,7 @@ void TranspositionTable::clear()
 
 /* static */ void TranspositionTable::clear_shared_hashtable()
 {
+    assert_param_ref();
     _table.clear();
 }
 
@@ -510,14 +511,16 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
      * regardless, but lower the count of cutoffs required to "succeed" if the position has
      * produced cutoffs before.
      */
-    const auto min_cutoffs = MULTICUT_C - (ctxt.depth() > 5 && ctxt._tt_entry.is_lower());
+    const auto min_cutoffs = MULTICUT_C - (ctxt.depth() > 5
+        && ctxt._tt_entry.is_lower()
+        && ctxt._tt_entry._value + MULTICUT_MARGIN >= ctxt._beta);
 
     while (auto next_ctxt = ctxt.next(false, 0, move_count))
     {
         next_ctxt->_multicut_allowed = false;
         next_ctxt->_max_depth -= reduction;
 
-        auto score = -negamax(*next_ctxt, table);
+        const auto score = -negamax(*next_ctxt, table);
 
         if (ctxt.is_cancelled())
             return false;
@@ -564,7 +567,10 @@ static INLINE void update_pruned(Context& ctxt, const Context& next, size_t& cou
 }
 
 
-/* syzygy tablebase probing */
+/*
+ * Syzygy endgame tablebase probing (https://www.chessprogramming.org/Syzygy_Bases).
+ * This implementation simply calls back into the python-chess library.
+ */
 static INLINE bool probe_endtables(Context& ctxt)
 {
     int v;
@@ -772,13 +778,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     if (ctxt.depth() >= (ctxt.is_pv_node() ? 7 : 5)
                         && ctxt._tt_entry.is_lower()
                         && abs(ctxt._tt_entry._value) < MATE_HIGH
+                        && !ctxt._excluded
                         && next_ctxt->_move == ctxt._tt_entry._hash_move
                         && ctxt._tt_entry._depth >= ctxt.depth() - 3)
                     {
-                        ASSERT(!ctxt._excluded);
-                        ASSERT(ctxt._tt_entry.is_valid());
-
-                        const auto s_beta = std::max(ctxt._tt_entry._value - ctxt.singular_margin(), MATE_LOW);
+                        const auto s_beta = std::max(int(ctxt._tt_entry._value) - ctxt.singular_margin(), MATE_LOW);
                         /*
                          * Hack: use ply + 2 for the singular search to avoid clobbering
                          * _move_maker's _moves / _states stacks for the current context.
@@ -794,18 +798,16 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         s_ctxt->_beta = s_beta;
                         s_ctxt->_score = SCORE_MIN;
 
-                        const auto value = negamax(*s_ctxt, table);
+                        const auto eval = negamax(*s_ctxt, table);
+                        /* if eval == SCORE_MIN: either the search got cancelled, or there's only one legal move */
 
-                        if (value < s_beta && value > SCORE_MIN)
+                        if (eval < s_beta)
                         {
                             next_ctxt->_extension += ONE_PLY;
 
-                            if (ctxt._double_ext <= DOUBLE_EXT_MAX
-                                && !ctxt.is_pv_node()
-                                && value + DOUBLE_EXT_MARGIN < s_beta)
+                            if (!ctxt.is_pv_node() && eval + DOUBLE_EXT_MARGIN < s_beta)
                             {
-                                ++next_ctxt->_max_depth;
-                                ++next_ctxt->_double_ext;
+                                next_ctxt->_extension += ONE_PLY;
                             }
                         }
                         /*

@@ -18,6 +18,22 @@
  * and licensed as stated in their respective header notes.
  *--------------------------------------------------------------------------
  */
+#include "common.h"
+
+#if REFCOUNT_PARAM
+struct Val
+{
+    int _v;
+    mutable count_t _refcount = 0;
+
+    explicit Val(int v) : _v(v) {}
+    Val& operator=(int v) { _v = v; return *this; }
+    INLINE operator int() const { ++_refcount; return _v; }
+};
+#else
+using Val = int;
+#endif /* REFCOUNT_PARAM */
+
 #if defined(CONFIG_IMPL)
 #include <map>
 #include <string>
@@ -32,12 +48,11 @@
  *
  * To cherry-pick, replace DECLARE_VALUE with DECLARE_PARAM
  */
-
 struct Config
 {
-    struct Param
+    struct Param /* meta param info */
     {
-        int* const  _val = nullptr;
+        Val* const  _val = nullptr;
         const int   _min = 0;
         const int   _max = 0;
         std::string _group;
@@ -49,7 +64,7 @@ struct Config
     static std::string _group;
 
     /* Register parameter names with Config::_namespace */
-    Config(const char* n, int* v, int v_min, int v_max)
+    Config(const char* n, Val* v, int v_min, int v_max)
     {
         _namespace.emplace(n, Config::Param{ v, v_min, v_max, Config::_group });
     }
@@ -75,7 +90,6 @@ Config::Namespace Config::_namespace = {
     { "MOBILITY_KING", Config::Param{ &chess::MOBILITY[chess::PieceType::KING], 0, 50, "Eval" } },
 #endif /* MOBILITY_TUNING_ENABLED */
 };
-
 #else
 
   #define GROUP(x)
@@ -86,9 +100,9 @@ Config::Namespace Config::_namespace = {
  * Runtime params that are always visible (regardless of TUNING_ENABLED).
  */
 #if !defined(CONFIG_IMPL)
-  #define DECLARE_ALIAS(n, a, v, v_min, v_max) extern int n;
+  #define DECLARE_ALIAS(n, a, v, v_min, v_max) extern Val n;
 #else
-  #define DECLARE_ALIAS(n, a, v, v_min, v_max) int n(v); Config p_##n(_TOSTR(a), &n, v_min, v_max);
+  #define DECLARE_ALIAS(n, a, v, v_min, v_max) Val n(v); Config p_##n(_TOSTR(a), &n, v_min, v_max);
 #endif /* CONFIG_IMPL */
 
 #define DECLARE_CONST(n, v, v_min, v_max) static constexpr int n = v; static_assert(v >= v_min && v <= v_max);
@@ -137,10 +151,11 @@ DECLARE_CONST(  STATIC_EXCHANGES,                     0,    0,       1)
 DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
 
 GROUP(Search)
-DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  330,    0,     500)
+DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  853,    0,    1000)
 DECLARE_VALUE(  DOUBLE_EXT_MAX,                       6,    0,     100)
 DECLARE_VALUE(  LMP_BASE,                             2,    2,     100)
 DECLARE_VALUE(  LATE_MOVE_REDUCTION_COUNT,            4,    0,     100)
+DECLARE_VALUE(  MULTICUT_MARGIN,                    827,    0,    1000)
 DECLARE_VALUE(  NULL_MOVE_DEPTH_WEIGHT,              16,    0,     100)
 DECLARE_VALUE(  NULL_MOVE_DEPTH_DIV,                  3,    1,     100)
 DECLARE_VALUE(  NULL_MOVE_DIV,                      272,    1,    1000)
@@ -153,11 +168,11 @@ DECLARE_VALUE(  REVERSE_FUTILITY_MARGIN,             85,    0,    1000)
 DECLARE_VALUE(  SINGULAR_MARGIN,                      6,    0,     100)
 
 GROUP(MoveOrdering)
-DECLARE_VALUE(  COUNTER_MOVE_BONUS,                 123,    0,     500)
+DECLARE_VALUE(  COUNTER_MOVE_BONUS,                 127,    0,     500)
 DECLARE_VALUE(  COUNTER_MOVE_MIN_DEPTH,               3,    0,      20)
 DECLARE_VALUE(  HISTORY_COUNT_HIGH,               88415,    1,  100000)
 DECLARE_VALUE(  HISTORY_SCORE_DIV,                   43,    1,     100)
-DECLARE_VALUE(  HISTORY_FAIL_LOW_MARGIN,            918,    0,    2000)
+DECLARE_VALUE(  HISTORY_FAIL_LOW_MARGIN,           1175,    0,    2000)
 DECLARE_VALUE(  HISTORY_FAIL_LOW_PENALTY,            62,    0,     100)
 DECLARE_VALUE(  HISTORY_HIGH,                        92,    0,     100)
 DECLARE_VALUE(  HISTORY_LOW,                         65,    0, HISTORY_HIGH)
