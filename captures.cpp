@@ -284,30 +284,5 @@ namespace chess
 
         return value > 0 ? value : 0;
     }
-
-
-    score_t estimate_captures(const State& board)
-    {
-        score_t value = 0;
-
-        const auto color = board.turn;
-
-        for (auto piece_type : {QUEEN, ROOK, BISHOP, KNIGHT, PAWN})
-        {
-            if (value >= board.weight(piece_type))
-                break;
-
-            const auto victims = board.pieces_mask(piece_type, Color(color ^ 1));
-
-            for_each_square(victims, [&](Square square)
-            {
-                auto v = estimate_static_exchanges(board, color, square, piece_type);
-                value = std::max(value, v);
-            });
-        }
-
-        return value;
-    }
-
 } /* namespace chess */
 

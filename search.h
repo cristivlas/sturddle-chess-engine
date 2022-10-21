@@ -153,21 +153,20 @@ namespace search
         UPPER,
     };
 
+
+#pragma pack(push, 4)
     class TT_Entry
     {
-        template<typename T, int> friend class SharedHashTable;
-        uint64_t    _lock = 0;
+        template<typename T> friend class SharedHashTable;
+        key_t       _lock = 0;
 
     public:
-        uint64_t    _hash = 0;
+        TT_Type     _type = TT_Type::NONE;
         uint8_t     _age = 0;
         int8_t      _depth = std::numeric_limits<int8_t>::min();
-        uint8_t     _version = 0;
-        TT_Type     _type = TT_Type::NONE;
-        int16_t     _capt = SCORE_MIN;
-        int16_t     _value = SCORE_MIN;
-        int16_t     _eval = SCORE_MIN;
         BaseMove    _hash_move;
+        int16_t     _value = SCORE_MIN;
+        uint64_t    _hash = 0;
 
     #if !NO_ASSERT
         void*       _owner = nullptr;
@@ -212,7 +211,7 @@ namespace search
             return nullptr;
         }
     };
-
+#pragma pack(pop)
 
     /*
      * Hash table, counter moves, historical counts.
@@ -263,7 +262,7 @@ namespace search
         score_t _w_alpha = SCORE_MIN;
         score_t _w_beta = SCORE_MAX;
         bool _reset_window = false;
-
+        bool _probe_endtables = false;
         /* Stats for current thread */
         size_t _check_nodes = 0;
         size_t _eval_count = 0;
@@ -297,7 +296,9 @@ namespace search
         template<bool Debug=false> void get_pv_from_table(Context&, const Context&, PV&);
 
         template<typename C> const int16_t* lookup(C& ctxt);
-        template<typename C> void store(C& ctxt, score_t alpha, int depth);
+
+        template<TT_Type=TT_Type::NONE, typename C=struct Context>
+        void store(C& ctxt, score_t alpha, int depth);
 
         void store(Context&, TT_Entry&, score_t, int depth);
 
@@ -470,7 +471,7 @@ namespace search
     }
 
 
-    template<typename C>
+    template<TT_Type type, typename C>
     INLINE void TranspositionTable::store(C& ctxt, score_t alpha, int depth)
     {
         ASSERT(ctxt._score > SCORE_MIN);
@@ -480,7 +481,12 @@ namespace search
             update_stats(ctxt);
 
         if (auto p = _table.lookup_write(ctxt.state(), depth))
-            store(ctxt, *p, alpha, depth);
+        {
+            auto& entry = *p;
+            store(ctxt, entry, alpha, depth);
+            if constexpr(type != TT_Type::NONE)
+                entry._type = type;
+        }
     }
 
 

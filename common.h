@@ -91,6 +91,12 @@ using score_t = int;
 
 #define SMP                                 true
 
+#if !WITH_NNUE && !defined(USE_PIECE_SQUARE_TABLES)
+  #define USE_PIECE_SQUARE_TABLES           true
+#endif
+
+#define USE_LIBPOPCOUNT                     true
+
 #if SMP
   #if __GNUC__
     /* For visibility("hidden"), see:

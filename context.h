@@ -39,18 +39,17 @@ constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
 
 /* Configuration API */
 struct Param { int val = 0; int min_val; int max_val; std::string group; };
-
 extern std::map<std::string, Param> _get_param_info();
 extern void _set_param(const std::string&, int value, bool echo=false);
 extern std::map<std::string, int> _get_params();
-
+extern void assert_param_ref();
 
 struct NNUE
 {
     static constexpr int NO_SQUARE = 64;
 
     static void init(const std::string& data_dir);
-    static int eval(const chess::BoardPosition&, int tid); /* test */
+    static int eval(const chess::BoardPosition&); /* test */
     static int eval_fen(const std::string& fen); /* test */
 
     static INLINE constexpr int piece(chess::PieceType ptype, chess::Color color)
@@ -59,9 +58,6 @@ struct NNUE
     }
 
     static void log_init_message();
-
-    int pieces[33];
-    int squares[33];
 };
 
 
@@ -245,6 +241,7 @@ namespace search
         bool        _retry_next = false;
 
         int         _double_ext = 0;
+        score_t     _eval = SCORE_MIN; /* static eval */
         int         _extension = 0; /* count pending fractional extensions */
         int         _fifty = 0;
         int         _full_depth_count = late_move_reduction_count();
@@ -263,8 +260,6 @@ namespace search
 
         static void cancel() { _cancel.store(true, std::memory_order_relaxed); }
 
-        Context*    clone(ContextBuffer&, int ply = 0) const;
-
         bool        can_forward_prune() const;
 
         template<bool PruneCaptures = false> bool can_prune() const;
@@ -273,6 +268,7 @@ namespace search
         bool        can_reduce() const;
 
         int64_t     check_time_and_update_nps(); /* return elapsed milliseconds */
+        Context*    clone(ContextBuffer&, int ply = 0) const;
 
         int         depth() const { return _max_depth - _ply; }
         static int  elapsed_milliseconds();
@@ -314,15 +310,15 @@ namespace search
         bool        is_last_move();
         bool        is_leftmost() const { return _ply == 0 || _leftmost; }
         bool        is_leaf(); /* treat as terminal node ? */
-        bool        is_qsearch() const { return _ply > _max_depth; }
         bool        is_mate_bound() const;
         bool        is_null_move_ok(); /* ok to generate null move? */
         bool        is_null_move() const { return _is_null_move; }
         bool        is_promotion() const { return state().promotion; }
         bool        is_pv_node() const { return _is_pv; }
+        bool        is_pvs_ok() const;
+        bool        is_qsearch() const { return _ply > _max_depth; }
         bool        is_recapture() const;
         bool        is_reduced() const;
-        bool        is_pvs_ok() const;
         int         is_repeated() const;
         bool        is_retry() const { return _is_retry; }
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
@@ -345,8 +341,7 @@ namespace search
         int         rewind(int where = 0, bool reorder = false);
 
         void        set_counter_move(const BaseMove& move) { _counter_move = move; }
-        void        set_search_window(score_t);
-
+        void        set_search_window(score_t score, score_t& prev_score);
         static void set_time_limit_ms(int milliseconds);
         void        set_time_info(int time_left /* millisec */, int moves_left);
         void        set_tt(TranspositionTable* tt) { _tt = tt; }
@@ -381,6 +376,11 @@ namespace search
 
         const ContextStack& stack() const { return _context_stacks[tid()]; }
 
+        static void set_syzygy_path(const std::string& path) { _syzygy_path = path; }
+        static const std::string& syzygy_path() { return _syzygy_path; }
+        static void set_tb_cardinality(int n) { _tb_cardinality = n; }
+        static int tb_cardinality() { return _tb_cardinality.load(std::memory_order_relaxed); }
+
         /*
          * Python callbacks
          */
@@ -393,11 +393,10 @@ namespace search
         static std::string  (*_pgn)(Context*);
         static void         (*_print_state)(const State&);
         static void         (*_report)(PyObject*, std::vector<Context*>&);
+        static bool         (*_tb_probe_wdl)(const State&, int*);
         static size_t       (*_vmem_avail)();
 
         static HistoryPtr   _history;
-
-        static NNUE& nnue(int tid) { return _nnue[tid]; }
 
     private:
         const Move* get_next_move(score_t);
@@ -420,11 +419,12 @@ namespace search
         static size_t       _callback_count;
         static atomic_int   _time_limit; /* milliseconds */
         static atomic_time  _time_start;
+        static std::string  _syzygy_path;
+        static atomic_int   _tb_cardinality;
 
         static std::vector<ContextStack>    _context_stacks;
         static std::vector<MoveStack>       _move_stacks;
         static std::vector<StateStack>      _state_stacks;
-        static std::vector<NNUE>            _nnue;
     };
 
 
@@ -517,7 +517,6 @@ namespace search
             ASSERT(state.is_check());
             return true;
         }
-
         return false;
     }
 
@@ -614,7 +613,7 @@ namespace search
      */
     INLINE score_t Context::static_eval()
     {
-        return _tt_entry._eval == SCORE_MIN ? evaluate_material() : _tt_entry._eval;
+        return _eval == SCORE_MIN ? evaluate_material() : _eval;
     }
 
 
@@ -669,6 +668,9 @@ namespace search
     }
 
 
+    /*
+     * Futility pruning margins.
+     */
     static constexpr double PHI = 1.61803398875;
 
     template<std::size_t... I>
@@ -684,7 +686,6 @@ namespace search
             return 0;
 
         static const auto fp_margins = margins(std::make_index_sequence<PLY_MAX>{});
-
         return fp_margins[depth()] * can_forward_prune();
     }
 
@@ -697,7 +698,6 @@ namespace search
         {
             move = _move_maker.get_next_move(*this, futility);
         }
-
         return move;
     }
 
@@ -734,9 +734,9 @@ namespace search
             {
                 const auto prev = _parent->_parent;
 
-                if (abs(_tt_entry._eval) < MATE_HIGH && abs(prev->_tt_entry._eval) < MATE_HIGH)
+                if (abs(_eval) < MATE_HIGH && abs(prev->_eval) < MATE_HIGH)
                 {
-                    _improvement = std::max(0, prev->_tt_entry._eval - _tt_entry._eval);
+                    _improvement = std::max(0, prev->_eval - _eval);
                 }
                 else
                 {
@@ -746,7 +746,6 @@ namespace search
                 }
             }
         }
-
         return _improvement;
     }
 
@@ -798,7 +797,7 @@ namespace search
 
         return static_eval() >= _beta
             - NULL_MOVE_DEPTH_WEIGHT * depth()
-            + improvement() / NULL_MOVE_IMPROVEMENT_DIV
+            - improvement() / NULL_MOVE_IMPROVEMENT_DIV
             + NULL_MOVE_MARGIN;
     }
 
@@ -871,7 +870,7 @@ namespace search
     {
         return NULL_MOVE_REDUCTION
             + ctxt.depth() / NULL_MOVE_DEPTH_DIV
-            + std::min(3, (ctxt.static_eval() - ctxt._beta) / NULL_MOVE_DIV);
+            + std::min(int(NULL_MOVE_MIN), (ctxt.static_eval() - ctxt._beta) / NULL_MOVE_DIV);
     }
 
 
@@ -944,7 +943,6 @@ namespace search
             ctxt->_null_move_allowed[side] = _null_move_allowed[side] && (NULL_MOVE_REDUCTION > 0);
 
         ctxt->_tt = _tt;
-
         ctxt->_alpha = -_beta;
 
         if (ctxt->is_null_move())
@@ -1315,11 +1313,23 @@ namespace search
 
         /* Late-move prune before making the move. */
         if constexpr(LateMovePrune)
+        {
             if (can_late_move_prune(ctxt))
             {
                 mark_as_pruned(ctxt, move);
                 return false;
             }
+
+            /* History-based pruning. */
+            if (ctxt.depth() > 0
+                && ctxt.history_count(move) >= HISTORY_PRUNE * pow2(ctxt.depth())
+                && ctxt.history_score(move) < HISTORY_LOW
+                && ctxt.can_prune_move(move))
+            {
+                mark_as_pruned(ctxt, move);
+                return false;
+            }
+        }
 
         ctxt.state().clone_into(*move._state);
         ASSERT(move._state->capture_value == 0);
@@ -1347,11 +1357,8 @@ namespace search
 
             if ((val < ctxt._alpha || val < ctxt._score) && ctxt.can_prune_move<true>(move))
             {
-            #if EXTRA_STATS
-
-                ++ctxt.get_tt()->_futility_prune_count;
-
-            #endif /* EXTRA_STATS */
+                if constexpr(EXTRA_STATS)
+                    ++ctxt.get_tt()->_futility_prune_count;
 
                 mark_as_pruned(ctxt, move);
                 return false;
@@ -1382,7 +1389,6 @@ namespace search
             ASSERT(move._group >= MoveOrder::PRUNED_MOVES);
             return false;
         }
-
         ASSERT(move._group == MoveOrder::UNORDERED_MOVES);
         move._group = group;
         move._score = score;
@@ -1394,7 +1400,6 @@ namespace search
     INLINE void MoveMaker::mark_as_illegal(Move& move)
     {
         move._group = MoveOrder::ILLEGAL_MOVES;
-
         ASSERT(_count > 0);
         --_count;
     }

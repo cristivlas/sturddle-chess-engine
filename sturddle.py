@@ -183,15 +183,14 @@ class UCI:
             self.worker.send_message(self.search_async, max_count = 1)
             return True
 
-        # synchronous search
         self.algorithm.time_limit_ms = movetime
 
         move, _ = self.algorithm.search(
             self.board,
             time_info = None if explicit_movetime else (time_remaining[turn], movestogo)
         )
-
-        self.output_best(move)
+        # Do not ponder below 1s / move.
+        self.output_best(move, request_ponder=(self.ponder_enabled and movetime >= 1000))
         return True
 
 
@@ -221,7 +220,7 @@ class UCI:
         if self.extended_time:
             self.extended_time = 0
         else:
-            self.output_best(move, request_ponder = True)
+            self.output_best(move, request_ponder=False)
 
         self.pondering = False
 
@@ -287,6 +286,8 @@ class UCI:
         elif name == 'Algorithm':
             self.args.algorithm = value
             self.init_algo()
+        elif name == 'SyzygyPath':
+            engine.set_syzygy_path(value)
         else:
             if value in ['true', 'false']:
                 engine.set_param(name, value == 'true')
@@ -327,6 +328,7 @@ class UCI:
         if self.book:
             self.output('option name OwnBook type check default true')
         self.output('option name Ponder type check')
+        self.output('option name SyzygyPath type string')
 
         if self.args.tweak:
             whitelist = engine.get_param_info().keys()
@@ -372,7 +374,6 @@ class UCI:
                     self.output(f'bestmove {uci}')
             finally:
                 self.output_expected = False
-                # engine.clear_hashtable()
 
 
     def run(self):
@@ -390,12 +391,17 @@ class UCI:
                 logging.warning(f'not understood: {cmd_args}')
                 continue
 
+            # dispatch cmd and arguments to command handler
             try:
                 if not cmd_handler(cmd_args):
                     logging.debug(f'{cmd_args}: good bye.')
                     break
             except:
                 logging.exception(f'exception in command handler, cmd="{cmd}", args: {cmd_args}')
+
+                # fail hard and fast when in tuning mode
+                if args.tweak:
+                    raise
 
 
     def show_thinking(self, algorithm, node, score, node_count, knps, ms):

@@ -45,6 +45,7 @@ from datetime import datetime
 
 import chess
 import chess.pgn
+import chess.syzygy
 import logging
 import platform
 import os
@@ -82,15 +83,10 @@ cdef extern from 'common.h':
     score_t SCORE_MIN
     const int MOBILITY_TUNING_ENABLED
     const int USE_NNUE
-
-    cdef enum MoveOrder 'search::MoveOrder':
-        UNORDERED_MOVES 'search::MoveOrder::UNORDERED_MOVES'
-
     string timestamp() nogil
 
 
 MOBILITY_TUNING = MOBILITY_TUNING_ENABLED
-MOVE_GROUP_MAX = int(MoveOrder.UNORDERED_MOVES)
 
 
 # ---------------------------------------------------------------------
@@ -305,7 +301,7 @@ cdef class BoardState:
         b.kings = self._state.kings
         b.castling_rights = self._state.castling_rights
 
-        if self._state.en_passant_square >= 0:
+        if self._state.en_passant_square != UNDEFINED:
             b.ep_square = self._state.en_passant_square
         else:
             b.ep_square = None
@@ -382,8 +378,8 @@ cdef class BoardState:
         return zobrist_hash(self._state)
 
 
-    cpdef int nnue(self, int tid = 0):
-        return NNUE.eval(self._state, tid)
+    cpdef int nnue(self):
+        return NNUE.eval(self._state)
 
 
 # ---------------------------------------------------------------------
@@ -410,7 +406,7 @@ cdef extern from 'context.h':
         int piece(PieceType, Color)
 
         @staticmethod
-        int eval(const BoardPosition&, int tid)
+        int eval(const BoardPosition&)
 
         @staticmethod
         int eval_fen(const string& fen)
@@ -487,6 +483,7 @@ cdef extern from 'context.h' namespace 'search':
         string          (*_pgn)(Context*)
         void            (*_print_state)(const State&)
         void            (*_report)(PyObject*, vector[Context*]&)
+        bool            (*_tb_probe_wdl)(const State&, int*)
         size_t          (*_vmem_avail)()
 
         int64_t         nanosleep(int) nogil
@@ -495,29 +492,35 @@ cdef extern from 'context.h' namespace 'search':
         void            cancel() nogil
 
         int64_t         check_time_and_update_nps()
-
         const Move*     first_valid_move() nogil
 
         @staticmethod
         void            init()
-
         bool            is_repeated() const
         int             iteration() const
-
         int             rewind(int where, bool reorder)
 
         @staticmethod
         void            set_time_limit_ms(int millisec) nogil
-
         void            set_time_info(int millisec, int moves)
 
         void            set_tt(TranspositionTable*) nogil
         TranspositionTable* get_tt() const
-
         const PV&       get_pv() nogil const
-
         Context*        next(bool, score_t, int)
         int             tid() const
+
+        @staticmethod
+        const string& syzygy_path()
+
+        @staticmethod
+        void set_syzygy_path(const string&)
+
+        @staticmethod
+        void set_tb_cardinality(int)
+
+        @staticmethod
+        int tb_cardinality()
 
 
 cpdef board_from_state(state: BoardState):
@@ -632,6 +635,7 @@ cdef class NodeContext:
         self._ctxt._pgn = <string (*)(Context*)> pgn
         self._ctxt._print_state = <void (*)(const State&)> print_state
         self._ctxt._vmem_avail = <size_t (*)()> vmem_avail
+        self._ctxt._tb_probe_wdl = <bool (*)(const State&, int*)> tb_probe_wdl
 
         self._ctxt._history.reset(new History())
         self.sync_to_board(board)
@@ -776,7 +780,6 @@ cdef extern from 'search.h' namespace 'search':
         const   size_t _qsnodes
         const   size_t _reductions
         const   size_t _retry_reductions
-
         const   score_t _w_alpha
         const   score_t _w_beta
         const   int _eval_depth
@@ -1207,20 +1210,68 @@ def nnue_ok():
 
 
 # ---------------------------------------------------------------------
+# syzygy tablebases
+# ---------------------------------------------------------------------
+_tb = chess.syzygy.Tablebase()
+_tb_paths = []
+
+def _tb_init():
+    for syzygy_path in Context.syzygy_path().decode().split(os.pathsep):
+        if not os.path.isabs(syzygy_path):
+            syzygy_path = os.path.realpath(
+                os.path.join(os.path.dirname(__file__), syzygy_path)
+            )
+        try:
+            _tb.add_directory(syzygy_path)
+            _tb_paths.append(syzygy_path)
+        except:
+            pass
+
+    if _tb_paths:
+        print(_tb_paths)
+    else:
+        Context.set_tb_cardinality(0)
+
+
+cdef bool tb_probe_wdl(const State& state, int* result) except* :
+    board = board_from_cxx_state(state)
+    try:
+        result[0] = _tb.probe_wdl(board)
+        return True
+    except KeyError as e:
+        logging.error(f'tb_probe_wdl: {e}, path={_tb_paths}')
+
+    piece_count = chess.popcount(board.occupied)
+    Context.set_tb_cardinality(0 if piece_count <= 3 else piece_count - 1)
+
+    logging.info(f'tb_probe_wdl: cardinality={Context.tb_cardinality()}')
+    return False
+
+
+def set_syzygy_path(path):
+    global _tb
+    global _tb_paths
+
+    Context.set_syzygy_path(path.encode())
+    _tb.close()
+    _tb = chess.syzygy.Tablebase()
+    _tb_paths = []
+    _tb_init()
+
+
+# ---------------------------------------------------------------------
 # initialize c++ global data structures
 # ---------------------------------------------------------------------
 Context.init()
 
 NodeContext(chess.Board()) # dummy context initializes static cpython methods
 nnue_init(os.path.dirname(os.path.realpath(__file__)))
-
+_tb_init()
 
 __major__   = 0
 __minor__   = 99
-__smp__     = get_param_info()['Threads'][2] > 1
-__version__ = '.'.join([str(__major__), str(__minor__), timestamp().decode()])
+__build__   = [str(x) for x in ['NNUE', __major__, __minor__, timestamp().decode()]]
 
 
 def version():
-    return __version__ + ('.NNUE' if USE_NNUE else '')
-
+    return '.'.join(__build__[not USE_NNUE:])

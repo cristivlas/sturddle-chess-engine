@@ -56,7 +56,11 @@ if environ.get('BUILD_WITH_NNUE', None):
 
 
 if platform.startswith('win'):
-    args.append('/std:c++17')
+    args += [
+        '/std:c++17',
+        '/DWITH_NNUE',
+        '/DCALLBACK_PERIOD=8192',
+    ]
 else:
     if '-O0' not in args:
         args.append('-O3')
@@ -69,8 +73,11 @@ else:
         '-Wno-unused-parameter',
         '-Wno-unused-variable',
         '-DCYTHON_WITHOUT_ASSERTIONS',
+        '-DCALLBACK_PERIOD=8192',
+        '-fno-stack-protector',
         '-fvisibility=hidden',
         '-DPyMODINIT_FUNC=__attribute__((visibility("default"))) extern "C" PyObject*',
+        '-DWITH_NNUE',
     ]
 
     # Silence off Py_DEPRECATED warnings for clang

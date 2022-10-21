@@ -42,7 +42,10 @@
 #include "common.h"
 
 #include "attack_tables.h"
+
+#if USE_LIBPOPCOUNT
 #include "libpopcnt.h"
+#endif
 
 #if USE_MAGIC_BITS
 #include "magic_bits.hpp"
@@ -56,6 +59,9 @@ static constexpr auto M_E = 2.718281828459045;
 #endif
 
 constexpr int SIGN[] = { -1, 1 };
+
+
+template<typename T> INLINE T constexpr pow2(T x) { return x * x; }
 
 namespace chess
 {
@@ -229,6 +235,7 @@ namespace chess
 
 //#define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 2, 1, 3, 2 }
 //#define DEFAULT_MOBILITY_WEIGHTS { 0, 5, 1, 8, 7, 4, 1 }
+
 #define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 0, 7, 6, 5, 0 }
 
 
@@ -248,8 +255,15 @@ namespace chess
 
     INLINE int popcount(uint64_t u)
     {
+    #if USE_LIBPOPCOUNT
         /* Evals break if results are converted to unsigned! */
         return int(popcnt64(u));
+    #elif _MSC_VER
+        return int(__popcnt64(u));
+    #else
+        static_assert(std::is_same<decltype(__builtin_popcount(0)), int>::value);
+        return __builtin_popcountll(u);
+    #endif
     }
 
 
@@ -359,9 +373,7 @@ namespace chess
     }
 
 
-    struct State;
-
-    uint64_t zobrist_hash(const State& state);
+    uint64_t zobrist_hash(const struct State& state);
 
 
     /* Move representation */
@@ -486,6 +498,7 @@ namespace chess
     using MovesList = std::vector<Move>;
 
 
+#if USE_PIECE_SQUARE_TABLES
     INLINE constexpr int square_index(int i, chess::Color color)
     {
         return square_indices[color][i];
@@ -499,6 +512,7 @@ namespace chess
 
         return SQUARE_TABLE[pt];
     }
+#endif /* USE_PIECE_SQUARE_TABLES */
 
 
     /* A position on the chessboard represented as a collection of bitboards. */
@@ -802,8 +816,6 @@ namespace chess
         return !lhs.equals(rhs);
     }
 
-
-    template<typename T> INLINE T constexpr pow2(T x) { return x * x; }
 
     namespace
     {
@@ -1206,6 +1218,7 @@ namespace chess
 
         ASSERT(color == piece_color_at(move.from_square()));
 
+    #if USE_PIECE_SQUARE_TABLES
         const auto i = square_index(move.from_square(), color);
         const auto j = square_index(move.to_square(), color);
 
@@ -1222,6 +1235,16 @@ namespace chess
         {
             delta = table_i[j] - table_i[i];
         }
+    #else
+        if (move.promotion())
+        {
+            delta = weight(move.promotion()) - weight(PieceType::PAWN);
+        }
+        else
+        {
+            delta = 0;
+        }
+    #endif /* USE_PIECE_SQUARE_TABLES */
 
         /*
          * Capture?
@@ -1242,6 +1265,7 @@ namespace chess
 
             delta += weight(type);
 
+        #if USE_PIECE_SQUARE_TABLES
             /*
              * Can't capture the king, no need to check for king's endgame table;
              * the only alternate endgame table for now is ENDGAME_KING_SQUARE_TABLE
@@ -1276,6 +1300,7 @@ namespace chess
                     delta += SIGN[c == color] * d;
                 }
             }
+        #endif /* USE_PIECE_SQUARE_TABLES */
         }
 
         return delta * SIGN[color];
@@ -1320,11 +1345,13 @@ namespace chess
                 const auto mask = pieces_mask(piece_type, color);
                 score += sign * weight(piece_type) * popcount(mask);
 
+            #if USE_PIECE_SQUARE_TABLES
                 const auto& table = select_piece_square_table(endgame, piece_type);
 
                 for_each_square(mask, [&](Square square) {
                     score += sign * table[square_index(square, color)];
                 });
+            #endif /* USE_PIECE_SQUARE_TABLES */
             }
         }
 
@@ -1619,7 +1646,27 @@ namespace chess
 
     /* SEE captures.cpp */
     score_t estimate_static_exchanges(const State&, Color, Square, PieceType = PieceType::NONE);
-    score_t estimate_captures(const State&);
+
+    INLINE score_t estimate_captures(const State& board)
+    {
+        score_t value = 0;
+        const auto color = board.turn;
+
+        for (auto piece_type : {QUEEN, ROOK, BISHOP, KNIGHT, PAWN})
+        {
+            if (value >= board.weight(piece_type))
+                break;
+
+            const auto victims = board.pieces_mask(piece_type, Color(color ^ 1));
+
+            for_each_square(victims, [&](Square square)
+            {
+                auto v = estimate_static_exchanges(board, color, square, piece_type);
+                value = std::max(value, v);
+            });
+        }
+        return value;
+    }
 
 
     /*

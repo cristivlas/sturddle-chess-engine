@@ -38,7 +38,7 @@
   #include "auto.h" /* for NNUE_CONFIG */
   #include "nnue.h"
 
-  constexpr auto NNUE_file = "nn-cb26f10b1fd9.nnue";
+  constexpr auto NNUE_file = "nn-03744f8d56d8.nnue";
 #endif
 
 #if USE_VECTOR
@@ -157,6 +157,24 @@ std::map<std::string, int> _get_params()
 }
 
 
+void assert_param_ref()
+{
+#if REFCOUNT_PARAM
+    for (auto& p : Config::_namespace)
+    {
+        if (p.second._val->_refcount == 0)
+            search::Context::log_message(LogLevel::ERROR, p.first + ": unreferenced");
+
+        ASSERT_ALWAYS(p.second._val->_refcount);
+        p.second._val->_refcount = 0;
+    }
+#endif /* REFCOUNT_PARAM */
+}
+
+
+/*---------------------------------------------------------------------------
+ * Evaluation
+ *--------------------------------------------------------------------------*/
 template<typename F>
 static INLINE score_t eval_insufficient_material(const State& state, score_t eval, F f)
 {
@@ -232,30 +250,26 @@ void NNUE::init(const std::string& data_dir)
 }
 
 
-int NNUE::eval_fen(const std::string& fen)
-{
-    return nnue_evaluate_fen(fen.c_str());
-}
-
-
 /*
- * Convert from bitboard representation to format expected by nnue_eval.
+ * Convert from bitboard representation to the format expected by nnue.
  */
-static INLINE void
-NNUE_convert_position(const BoardPosition& pos, int (&pieces)[33], int (&squares)[33])
+template<typename T, bool Full=true> static INLINE void
+NNUE_convert_position(const BoardPosition& pos, T (&pieces)[33], T (&squares)[33])
 {
     pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
     pieces[1] = NNUE::piece(KING, BLACK); squares[1] = pos.king(BLACK);
 
     int i = 2;
 
-    for (auto color : { BLACK, WHITE })
-        for_each_square(pos.occupied_co(color) & ~pos.kings, [&](Square s) {
-            pieces[i] = NNUE::piece(pos.piece_type_at(s), color);
-            squares[i] = s;
-            ++i;
-        });
-
+    if constexpr(Full)
+    {
+        for (auto color : { BLACK, WHITE })
+            for_each_square(pos.occupied_co(color) & ~pos.kings, [&](Square s) {
+                pieces[i] = NNUE::piece(pos.piece_type_at(s), color);
+                squares[i] = s;
+                ++i;
+            });
+    }
     ASSERT(i < 33);
 
     pieces[i] = 0;
@@ -263,15 +277,23 @@ NNUE_convert_position(const BoardPosition& pos, int (&pieces)[33], int (&squares
 }
 
 
-int NNUE::eval(const chess::BoardPosition& pos, int tid)
+/* Testing */
+int NNUE::eval(const chess::BoardPosition& pos)
 {
-    auto& n = search::Context::nnue(tid);
-    NNUE_convert_position(pos, n.pieces, n.squares);
+    int pieces[33];
+    int squares[33];
+    NNUE_convert_position(pos, pieces, squares);
 
     /* nnue-probe colors are inverted */
     const int turn = (pos.turn == WHITE) ? white : black;
 
-    return nnue_evaluate(turn, n.pieces, n.squares);
+    return nnue_evaluate(turn, pieces, squares);
+}
+
+
+int NNUE::eval_fen(const std::string& fen)
+{
+    return nnue_evaluate_fen(fen.c_str());
 }
 
 
@@ -284,7 +306,6 @@ NNUE_update_dirty_pieces(
     DirtyPiece& dp)
 {
     dp.dirtyNum = 1;
-
     dp.to[0] = move.to_square();
 
     if (to_pos.promotion)
@@ -328,17 +349,21 @@ NNUE_update_dirty_pieces(
 }
 
 
+/*
+ * Incremental position evaluation using (a fork of) nnue-probe.
+ *
+ * https://github.com/dshawul/nnue-probe
+ * https://github.com/cristivlas/nnue-probe
+ * https://www.chessprogramming.org/NNUE
+ */
 void search::Context::eval_incremental()
 {
-    const auto turn = this->turn();
+    int8_t pieces[33];
+    int8_t squares[33];
 
-    auto& pieces = _nnue[tid()].pieces;
-    auto& squares = _nnue[tid()].squares;
-    NNUE_convert_position(state(), pieces, squares);
-
+    NNUE_convert_position<int8_t, false>(state(), pieces, squares);
     NNUEdata* nnue_data[3] = { nullptr, nullptr, nullptr };
     auto& acc = NNUE_accumulator_data[tid()];
-
     nnue_data[0] = &acc[_ply];
     nnue_data[0]->accumulator.computedAccumulation = 0;
 
@@ -354,37 +379,43 @@ void search::Context::eval_incremental()
         {
             nnue_data[1] = &acc[_parent->_ply];
             auto& dp = nnue_data[0]->dirtyPiece;
-            NNUE_update_dirty_pieces(_parent->state(), state(), _move, !turn, dp);
+            NNUE_update_dirty_pieces(_parent->state(), state(), _move, !turn(), dp);
         }
-        if (_parent->_parent && !_parent->is_null_move())
+        if (_parent->_parent)
         {
             nnue_data[2] = &acc[_parent->_parent->_ply];
         }
     }
-
-    auto eval = nnue_evaluate_incremental(!turn, pieces, squares, nnue_data);
+    const nnue::Position pos{
+        bool(!turn()),
+        pieces,
+        squares,
+        nnue_data,
+        _state,
+        [](const void* board, int8_t (&pcs)[33], int8_t (&sqrs)[33]) {
+            NNUE_convert_position(*reinterpret_cast<const State*>(board), pcs, sqrs);
+        }
+    };
+    auto eval = nnue::evaluate(pos);
 
     /* Verify incremental result againt full eval. */
-    ASSERT(eval == nnue_evaluate(!turn, pieces, squares));
+    ASSERT(eval == NNUE::eval(state()));
 
     eval += eval_fuzz();
-
+#if 0
     /* Make sure that insufficient material conditions are detected. */
     eval = eval_insufficient_material(state(), eval, [eval](){ return eval; });
-
-    _tt_entry._eval = std::max(-CHECKMATE, std::min(CHECKMATE, eval));
+#endif
+    _eval = std::max(-CHECKMATE, std::min(CHECKMATE, eval));
 }
 
-
 #else
-
 
 bool USE_NNUE = false;
 void NNUE::init(const std::string&) {}
 void NNUE::log_init_message() {}
 int NNUE::eval_fen(const std::string&) { return 0; }
 int NNUE::eval(const chess::BoardPosition&, int) { return 0; }
-
 
 #endif /* WITH_NNUE */
 
@@ -395,8 +426,8 @@ namespace search
      * Context
      *---------------------------------------------------------------------*/
     atomic_bool Context::_cancel(false);
-
-    atomic_int  Context::_time_limit = -1; /* milliseconds */
+    atomic_int  Context::_tb_cardinality(6);
+    atomic_int  Context::_time_limit(-1); /* milliseconds */
     atomic_time Context::_time_start;
     size_t Context::_callback_count(0);
 
@@ -405,7 +436,6 @@ namespace search
     std::vector<Context::ContextStack> Context::_context_stacks(SMP_CORES);
     std::vector<Context::MoveStack> Context::_move_stacks(SMP_CORES);
     std::vector<Context::StateStack> Context::_state_stacks(SMP_CORES);
-    std::vector<NNUE> Context::_nnue(SMP_CORES);
 
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
@@ -420,8 +450,10 @@ namespace search
     void (*Context::_print_state)(const State&) = nullptr;
     void (*Context::_report)(PyObject*, std::vector<Context*>&) = nullptr;
 
+    bool (*Context::_tb_probe_wdl)(const State&, int*) = nullptr;
     size_t (*Context::_vmem_avail)() = nullptr;
 
+    std::string Context::_syzygy_path = "syzygy/3-4-5";
 
     /* Init attack masks and other magic bitboards in chess.cpp */
     /* static */ void Context::init()
@@ -454,16 +486,15 @@ namespace search
         ctxt->_parent = _parent;
         ctxt->_ply = ply;
         ctxt->_prev = _prev;
-
         ctxt->_state = &buffer._state;
         *ctxt->_state = this->state();
-
         ctxt->_move = _move;
         ctxt->_excluded = _excluded;
         ctxt->_tt_entry = _tt_entry;
         ctxt->_counter_move = _counter_move;
-
         ctxt->_is_null_move = _is_null_move;
+        ctxt->_double_ext = _double_ext;
+        ctxt->_extension = _extension;
         return ctxt;
     }
 
@@ -477,7 +508,7 @@ namespace search
             _context_stacks.resize(n_threads);
             _move_stacks.resize(n_threads);
             _state_stacks.resize(n_threads);
-            _nnue.resize(n_threads);
+
         #if WITH_NNUE
             NNUE_accumulator_data.resize(n_threads);
         #endif
@@ -562,7 +593,6 @@ namespace search
                         }
                     }
                 }
-
                 _alpha = score;
             }
 
@@ -912,7 +942,6 @@ namespace search
                 Context::log_message(LogLevel::DEBUG, out.str());
             }
         }
-
         return score;
     }
 
@@ -923,11 +952,6 @@ namespace search
             ctxt.log_message(LogLevel::DEBUG, "eval_captures");
 
         auto state = ctxt._state;
-
-    #if NO_ASSERT
-        if (ctxt._tt_entry._capt != SCORE_MIN)
-            return ctxt._tt_entry._capt;
-    #endif /* NO_ASSERT */
 
         score_t result;
 
@@ -940,9 +964,6 @@ namespace search
 
         if constexpr(DEBUG_CAPTURES)
             ctxt.log_message(LogLevel::DEBUG, "captures: " + std::to_string(result));
-
-        ASSERT(ctxt._tt_entry._capt == SCORE_MIN || ctxt._tt_entry._capt == result);
-        ctxt._tt_entry._capt = result;
 
         return result;
     }
@@ -1035,7 +1056,6 @@ namespace search
             const auto king = state.king(color);
             const auto ranks = color ? square_rank(king) : 7 - square_rank(king);
             const auto area = king_area(state, king);
-
             const auto color_mask = state.occupied_co(color);
 
             if (ranks > 1)
@@ -1142,7 +1162,6 @@ namespace search
         for (auto color : { BLACK, WHITE })
         {
             const auto s = SIGN[color];
-
             const auto own_color_mask = state.occupied_co(color);
 
             for (const auto file_mask : BB_FILES)
@@ -1161,7 +1180,6 @@ namespace search
                 }
             }
         }
-
         return half_open_score * interpolate(piece_count, MIDGAME_HALF_OPEN_FILE, 0)
              + open_score * interpolate(piece_count, MIDGAME_OPEN_FILE, 0);
     }
@@ -1258,7 +1276,6 @@ namespace search
                     * interpolate(piece_count, MIDGAME_DEFENDED_PASSED, ENDGAME_DEFENDED_PASSED);
             });
         }
-
         return score;
     }
 
@@ -1386,9 +1403,7 @@ namespace search
 
     static INLINE int eval_tactical(const State& state, score_t mat_eval, int piece_count)
     {
-        score_t eval = 0;
-
-        eval += eval_center(state, piece_count);
+        score_t eval = eval_center(state, piece_count);
 
         if (abs(mat_eval) < WEIGHT[PAWN])
         {
@@ -1399,7 +1414,6 @@ namespace search
         eval += eval_open_files(state, piece_count);
         eval += eval_pawn_structure(state, piece_count);
         eval += eval_piece_grading(state, piece_count);
-
         eval += state.diff_connected_rooks()
              * interpolate(piece_count, MIDGAME_CONNECTED_ROOKS, ENDGAME_CONNECTED_ROOKS);
 
@@ -1454,35 +1468,31 @@ namespace search
     {
         _tt->_eval_depth = _ply;
 
-        auto eval = _tt_entry._eval;
-
-        if (eval == SCORE_MIN)
+        if (_eval == SCORE_MIN)
         {
             ASSERT(!USE_NNUE);
             /*
              * 1. Material + piece-squares + mobility
              */
-            eval = state().eval();
+            _eval = state().eval();
 
-            ASSERT(eval > SCORE_MIN);
-            ASSERT(eval < SCORE_MAX);
+            ASSERT(_eval > SCORE_MIN);
+            ASSERT(_eval < SCORE_MAX);
 
-            eval += eval_fuzz();
+            _eval += eval_fuzz();
 
             /*
              * 2. Tactical (positional) evaluation.
              */
-            eval += eval_insufficient_material(state(), eval, [&]() {
-                return eval_tactical(*this, eval);
+            _eval += eval_insufficient_material(state(), _eval, [this]() {
+                return eval_tactical(*this, _eval);
             });
-
-            _tt_entry._eval = eval;
         }
 
-        ASSERT(eval > SCORE_MIN);
-        ASSERT(eval < SCORE_MAX);
+        ASSERT(_eval > SCORE_MIN);
+        ASSERT(_eval < SCORE_MAX);
 
-        return eval;
+        return _eval;
     }
 
 
@@ -1572,40 +1582,40 @@ namespace search
     }
 
 
-    void Context::set_search_window(score_t score)
+    void Context::set_search_window(score_t score, score_t& prev_score)
     {
         if (!ASPIRATION_WINDOW || iteration() == 1)
         {
             _alpha = SCORE_MIN;
             _beta = SCORE_MAX;
         }
+        else if (_mate_detected % 2)
+        {
+            _alpha = _tt->_w_alpha;
+            _beta = SCORE_MAX;
+        }
+        else if (_mate_detected)
+        {
+            _alpha = SCORE_MIN;
+            _beta = _tt->_w_beta;
+        }
+        else if (score <= _tt->_w_alpha)
+        {
+            _alpha = std::max<score_t>(SCORE_MIN, score - HALF_WINDOW * pow2(iteration()));
+            _beta = _tt->_w_beta;
+        }
+        else if (score >= _tt->_w_beta)
+        {
+            _alpha = _tt->_w_alpha;
+            _beta = std::min<score_t>(SCORE_MAX, score + HALF_WINDOW * pow2(iteration()));
+        }
         else
         {
-            if (_mate_detected % 2)
-            {
-                _alpha = _tt->_w_alpha;
-                _beta = SCORE_MAX;
-            }
-            else if (_mate_detected)
-            {
-                _alpha = SCORE_MIN;
-                _beta = _tt->_w_beta;
-            }
-            else if (score <= _tt->_w_alpha)
-            {
-                _alpha = std::max<score_t>(SCORE_MIN, score - HALF_WINDOW * pow2(iteration()));
-                _beta = _tt->_w_beta;
-            }
-            else if (score >= _tt->_w_beta)
-            {
-                _alpha = _tt->_w_alpha;
-                _beta = std::min<score_t>(SCORE_MAX, score + HALF_WINDOW * pow2(iteration()));
-            }
-            else
-            {
-                _alpha = std::max<score_t>(SCORE_MIN, score - HALF_WINDOW);
-                _beta = std::min<score_t>(SCORE_MAX, score + HALF_WINDOW);
-            }
+            const score_t delta = score - prev_score;
+            prev_score = score;
+
+            _alpha = std::max<score_t>(SCORE_MIN, score - std::max(HALF_WINDOW, delta));
+            _beta = std::min<score_t>(SCORE_MAX, score + std::max(HALF_WINDOW, -delta));
         }
 
         /* save iteration bounds */
@@ -1964,15 +1974,13 @@ namespace search
         return ctxt.state().pawns & BB_PASSED[ctxt.turn()] & BB_SQUARES[move.from_square()];
     }
 
-
-/*
+#if 0
     static INLINE bool is_attack_on_king(const Context& ctxt, const Move& move)
     {
         const auto king = ctxt.state().king(!ctxt.turn());
         return square_distance(king, move.to_square()) <= 2;
     }
- */
-
+#endif
 
     template<std::size_t... I>
     static constexpr std::array<double, sizeof ... (I)> thresholds(std::index_sequence<I...>)
@@ -2068,7 +2076,10 @@ namespace search
                 else if (ctxt.is_counter_move(move)
                     || move.from_square() == ctxt._capture_square
                     || is_pawn_push(ctxt, move)
-                 /* || is_attack_on_king(ctxt, move) */)
+                #if 0
+                    || is_attack_on_king(ctxt, move)
+                #endif
+                    )
                 {
                     if (make_move<true>(ctxt, move, MoveOrder::TACTICAL_MOVES, hist_score))
                         ASSERT(move._score == hist_score);
@@ -2084,7 +2095,6 @@ namespace search
             else if (make_move<true>(ctxt, move, futility)) /* Phase == 4 */
             {
                 move._group = MoveOrder::LATE_MOVES;
-
                 move._score =
                     ctxt.history_score(move) / (1 + HISTORY_LOW)
                     + eval_material_and_piece_squares(*move._state);

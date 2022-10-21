@@ -89,7 +89,7 @@ public:
 private:
     void work(size_t index)
     {
-        _tid = index;
+        _tid = static_cast<thread_id_type>(index);
 
         while (_running)
         {
