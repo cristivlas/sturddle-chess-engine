@@ -20,7 +20,17 @@
  */
 #include "common.h"
 
+/*
+ * This file contains parameters that control the behavior of the
+ * search and evaluation functions, and infrastructure for exposing
+ * them to Python scripts for the purpose of tuning the engine.
+ *
+ * To expose ALL settings, compile with -DTUNING_ENABLED -DMOBILITY_TUNING_ENABLED
+ *
+ * To cherry-pick, replace DECLARE_VALUE with DECLARE_PARAM
+ */
 #if REFCOUNT_PARAM
+/* Instrumentation & debug: count parameter usage */
 struct Val
 {
     int _v;
@@ -39,15 +49,6 @@ using Val = int;
 #include <string>
 #include <thread>
 
-/*
- * This file contains parameters that control the behavior of the
- * search and evaluation functions, and infrastructure for exposing
- * them to Python scripts for the purpose of tuning the engine.
- *
- * To expose ALL settings, compile with -DTUNING_ENABLED -DMOBILITY_TUNING_ENABLED
- *
- * To cherry-pick, replace DECLARE_VALUE with DECLARE_PARAM
- */
 struct Config
 {
     struct Param /* meta param info */
@@ -142,6 +143,8 @@ DECLARE_CONST(  FIFTY_MOVES_RULE,                     1,    0,       1)
 DECLARE_VALUE(  FUTILITY_PRUNING,                     1,    0,       1)
 DECLARE_VALUE(  MANAGE_TIME,                          1,    0,       1)
 DECLARE_VALUE(  MULTICUT,                             1,    0,       1)
+DECLARE_VALUE(  NNUE_EVAL_SCALE,                    522,    0,    1000)
+DECLARE_CONST(  PREALLOCATE_MOVE_COUNT,             192,    0,     512)
 
 /* SEE */
 /* -1 disables pin awareness */

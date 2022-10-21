@@ -274,9 +274,13 @@ class UCI:
 
 
     def _setoption(self, cmd_args):
-        assert len(cmd_args) >= 5
+        assert len(cmd_args) >= 3
         assert cmd_args[1] == 'name'
-        assert cmd_args[3] == 'value'
+        if len(cmd_args) < 4:
+            cmd_args.append('value')
+        if len(cmd_args) < 5:
+            assert cmd_args[3] == 'value'
+            cmd_args.append('')
 
         name, value = cmd_args[2], cmd_args[4]
         if name == 'OwnBook':
