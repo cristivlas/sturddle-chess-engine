@@ -419,7 +419,7 @@ bool USE_NNUE = false;
 void NNUE::init(const std::string&) {}
 void NNUE::log_init_message() {}
 int NNUE::eval_fen(const std::string&) { return 0; }
-int NNUE::eval(const chess::BoardPosition&, int) { return 0; }
+int NNUE::eval(const chess::BoardPosition&) { return 0; }
 
 #endif /* WITH_NNUE */
 
