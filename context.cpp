@@ -402,10 +402,9 @@ void search::Context::eval_incremental()
     ASSERT(eval == NNUE::eval(state()));
 
     eval += eval_fuzz();
-#if 0
+
     /* Make sure that insufficient material conditions are detected. */
     eval = eval_insufficient_material(state(), eval, [eval](){ return eval; });
-#endif
 
     eval *= NNUE_EVAL_SCALE + evaluate_material() / 32;
     eval /= 1024;
