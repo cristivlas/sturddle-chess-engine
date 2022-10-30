@@ -717,6 +717,16 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         }
     #endif /* REVERSE_FUTILITY_PRUNING */
 
+    #if RAZORING
+        if (ctxt.depth() > 0
+            && ctxt.depth() <= 7
+            && ctxt._eval < alpha - RAZOR_INTERCEPT - RAZOR_DEPTH_COEFF * pow2(ctxt.depth())
+            && ctxt._eval + eval_captures(ctxt) < alpha)
+        {
+            return alpha;
+        }
+    #endif /* RAZORING */
+
         /* Reduce depth by 2 if PV node not found in the TT (idea from SF). */
         if (ctxt._ply
             && ctxt.is_pv_node()

@@ -64,7 +64,6 @@ using score_t = int;
  */
 #define COUNT_VALID_MOVES_AS_NODES          true
 
-
 /* NOTE: this setting has no effect when using SEE */
 #define EXCHANGES_DETECT_CHECKMATE          false
 
@@ -81,6 +80,8 @@ using score_t = int;
 #define MTDF_CSTAR_BISECT                   true
 
 #define MTDF_REORDER_MOVES                  true
+
+#define RAZORING                            true
 
 #define REVERSE_FUTILITY_PRUNING            true
 

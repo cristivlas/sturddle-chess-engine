@@ -953,7 +953,7 @@ namespace search
         if constexpr(DEBUG_CAPTURES)
             ctxt.log_message(LogLevel::DEBUG, "eval_captures");
 
-        auto state = ctxt._state;
+        const auto* const state = ctxt._state;
 
         score_t result;
 
