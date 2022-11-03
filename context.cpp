@@ -1465,6 +1465,7 @@ namespace search
      * 1. base = material + pst + mobility
      * 2. tactical (positional)
      * 3. capture estimates (in Context::evaluate)
+     * NOTE: when using NNUE for evaluation (default), 1 and 2 do not apply.
      */
     score_t Context::_evaluate()
     {

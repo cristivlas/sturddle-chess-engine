@@ -332,7 +332,10 @@ class UCI:
         if self.book:
             self.output('option name OwnBook type check default true')
         self.output('option name Ponder type check')
-        self.output(f'option name SyzygyPath type string default {engine.syzygy_path()}')
+        if syzygy_path := engine.syzygy_path():
+            self.output(f'option name SyzygyPath type string default {syzygy_path}')
+        else:
+            self.output('option name SyzygyPath type string')
 
         if self.args.tweak:
             whitelist = engine.get_param_info().keys()

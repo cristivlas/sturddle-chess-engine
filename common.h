@@ -70,6 +70,8 @@ using score_t = int;
 /* Collect extra stats for troubleshooting */
 #define EXTRA_STATS                         false
 
+#define FAVOR_SACRIFICES                    false
+
 #define KILLER_MOVE_HEURISTIC               true
 
 #if !defined(LOW_MEMORY_PROFILE) && (__arm__ || __aarch64__)

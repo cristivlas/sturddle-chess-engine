@@ -1224,6 +1224,7 @@ def _tb_init():
         except:
             pass
 
+    Context.set_syzygy_path(os.pathsep.join(_tb_paths).encode())
     if _tb_paths:
         print(_tb_paths)
     else:
