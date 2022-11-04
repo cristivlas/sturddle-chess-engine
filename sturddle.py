@@ -427,9 +427,9 @@ class UCI:
                 logging.debug(f'score={score}, pv={len(pv)}, mate={mate}')
                 score_info += f' mate {mate}'
             elif score < engine.SCORE_MATE_LOW:
-                mate = -(max(engine.SCORE_CHECKMATE + score, len(pv)) + 1) // 2
-                logging.debug(f'score={score}, pv={len(pv)}, mate={mate}')
-                score_info += f' mate {mate}'
+                mate = (max(engine.SCORE_CHECKMATE + score, len(pv)) + 1) // 2
+                logging.debug(f'score={score}, pv={len(pv)}, mate=-{mate}')
+                score_info += f' mate -{mate}'
 
             if pv := ' '.join(pv):
                 pv = 'pv ' + pv

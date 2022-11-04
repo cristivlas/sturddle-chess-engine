@@ -1785,28 +1785,27 @@ namespace search
     /*
      * How much time and how many moves left till the next time control?
      */
-    void Context::set_time_info(int millisec, int moves)
+    void Context::set_time_info(int millisec, int moves, score_t eval)
     {
         ASSERT(_ply == 0);
 
-        if (MANAGE_TIME && _time_limit)
+        if (MANAGE_TIME && _time_limit.load(std::memory_order_relaxed) > 0)
         {
-            const auto val = evaluate_material();
-
-            if (val < -100)
+            if (eval > 100)
+            {
+                _time_limit = std::max(1, millisec / std::min(250, eval / 2));
+            }
+            else if (eval < -100)
             {
                 _time_limit = millisec / 10;
             }
-            else if (val < 0)
-            {
-                _time_limit = millisec / 15;
-            }
+        #if 0
             else
             {
                 auto estimated_moves_left = (state().is_endgame() || is_check()) ? 15 : 20;
-
                 _time_limit = millisec / std::max(moves, estimated_moves_left);
             }
+        #endif
         }
     }
 

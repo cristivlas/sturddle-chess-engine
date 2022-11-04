@@ -343,7 +343,7 @@ namespace search
         void        set_counter_move(const BaseMove& move) { _counter_move = move; }
         void        set_search_window(score_t score, score_t& prev_score);
         static void set_time_limit_ms(int milliseconds);
-        void        set_time_info(int time_left /* millisec */, int moves_left);
+        void        set_time_info(int time_left /* millisec */, int moves_left, score_t eval);
         void        set_tt(TranspositionTable* tt) { _tt = tt; }
 
         bool        should_verify_null_move() const;

@@ -29,6 +29,7 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <immintrin.h>
 #include <utility>
 #include <string>
 #include <type_traits>
@@ -442,7 +443,7 @@ namespace chess
     }
 
 
-    struct Move : public BaseMove
+    struct alignas(16) Move : public BaseMove
     {
     public:
         Move() = default;
@@ -476,13 +477,11 @@ namespace chess
         return !lhs.is_equal(rhs);
     }
 
-
+    static_assert(sizeof(Move) == 16);
 #if HAVE_INT128
-
     INLINE void swap(Move& lhs, Move& rhs)
     {
         using int128_t = __int128;
-        static_assert(sizeof(Move) == sizeof(int128_t), "expect sizeof(Move)==16");
 
         int128_t* x = reinterpret_cast<int128_t*>(&lhs);
         int128_t* y = reinterpret_cast<int128_t*>(&rhs);
@@ -491,7 +490,14 @@ namespace chess
         *y = *x ^ *y;
         *x = *x ^ *y;
     }
-
+#elif (__x86_64__ || _M_X64)
+    INLINE void swap(Move& lhs, Move& rhs)
+    {
+        const auto lm = _mm_load_si128(reinterpret_cast<const __m128i*>(&lhs));
+        const auto rm = _mm_load_si128(reinterpret_cast<const __m128i*>(&rhs));
+        _mm_store_si128(reinterpret_cast<__m128i*>(&lhs), rm);
+        _mm_store_si128(reinterpret_cast<__m128i*>(&rhs), lm);
+    }
 #endif /* HAVE_INT128 */
 
 
