@@ -38,7 +38,7 @@
   #include "auto.h" /* for NNUE_CONFIG */
   #include "nnue.h"
 
-  constexpr auto NNUE_file = "nn-03744f8d56d8.nnue";
+  constexpr auto NNUE_file = "nn-62ef826d1a6d.nnue";
 #endif
 
 #if USE_VECTOR
@@ -402,10 +402,13 @@ void search::Context::eval_incremental()
     ASSERT(eval == NNUE::eval(state()));
 
     eval += eval_fuzz();
-#if 0
+
     /* Make sure that insufficient material conditions are detected. */
     eval = eval_insufficient_material(state(), eval, [eval](){ return eval; });
-#endif
+
+    eval *= NNUE_EVAL_SCALE + evaluate_material() / 32;
+    eval /= 1024;
+
     _eval = std::max(-CHECKMATE, std::min(CHECKMATE, eval));
 }
 
@@ -415,7 +418,7 @@ bool USE_NNUE = false;
 void NNUE::init(const std::string&) {}
 void NNUE::log_init_message() {}
 int NNUE::eval_fen(const std::string&) { return 0; }
-int NNUE::eval(const chess::BoardPosition&, int) { return 0; }
+int NNUE::eval(const chess::BoardPosition&) { return 0; }
 
 #endif /* WITH_NNUE */
 
@@ -518,8 +521,8 @@ namespace search
                 /* pre-allocate memory */
                 for (size_t ply = 0; ply < PLY_MAX; ++ply)
                 {
-                    _move_stacks[n][ply].reserve(64);
-                    _state_stacks[n][ply].reserve(64);
+                    _move_stacks[n][ply].reserve(PREALLOCATE_MOVE_COUNT);
+                    _state_stacks[n][ply].reserve(PREALLOCATE_MOVE_COUNT);
                 }
             }
         }
@@ -808,9 +811,8 @@ namespace search
         const auto mask = to_mask & state.occupied_co(!state.turn) & ~state.kings;
 
         /*
-         * Generate all pseudo-legal captures. NOTE: (re) use the static (thread local)
-         * buffers declared in the MoveMaker class to keep memory allocations down to a
-         * minimum. NOTE: generate... function takes masks in reverse: to, from.
+         * Generate all pseudo-legal captures.
+         * NOTE: generate... function takes mask args in reverse: to, from.
          */
         auto& moves = Context::moves(tid, ply);
         if (state.generate_pseudo_legal_moves(moves, mask, from_mask).empty())
@@ -951,7 +953,7 @@ namespace search
         if constexpr(DEBUG_CAPTURES)
             ctxt.log_message(LogLevel::DEBUG, "eval_captures");
 
-        auto state = ctxt._state;
+        const auto* const state = ctxt._state;
 
         score_t result;
 
@@ -1463,6 +1465,7 @@ namespace search
      * 1. base = material + pst + mobility
      * 2. tactical (positional)
      * 3. capture estimates (in Context::evaluate)
+     * NOTE: when using NNUE for evaluation (default), 1 and 2 do not apply.
      */
     score_t Context::_evaluate()
     {
@@ -1749,7 +1752,7 @@ namespace search
         const auto millisec = elapsed_milliseconds();
 
         /*
-         * Update nodes-per-second for the this thread.
+         * Update nodes-per-second for this thread.
          */
         if (millisec)
             _tt->set_nps((1000 * _tt->nodes()) / millisec);

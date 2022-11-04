@@ -116,11 +116,12 @@ class UCI:
         self.cancel() # in case there's anything lingering in the background
         self.start_time = time.time()
         self.node_count = 0
-        time_remaining = [0, 0]
-        movetime = 0
         explicit_movetime = False
+        infinite = False
         movestogo = 40
+        movetime = 0
         ponder = False
+        time_remaining = [0, 0]
         turn = self.board.turn
 
         params = iter(cmd_args[1:])
@@ -139,14 +140,11 @@ class UCI:
             elif a == 'ponder':
                 ponder = self.ponder_enabled
             elif a == 'infinite':
-                movetime = 0
+                movetime = -1
+                infinite = True
 
         if not movetime:
             movetime = time_remaining[turn] / max(movestogo, 40)
-
-        # < 1 ms? go async and expect the GUI to tell when to stop
-        if movetime < 1:
-            movetime = 0
 
         if self.use_opening_book:
             try:
@@ -167,7 +165,7 @@ class UCI:
         if ponder:
             assert not self.pondering
             self.extended_time = max(1, int(movetime))
-            self.algorithm.time_limit_ms = 0
+            self.algorithm.time_limit_ms = -1
             self.pondering = True
             self.worker.send_message(self._ponder, max_count = 1)
             return True
@@ -177,8 +175,10 @@ class UCI:
         # Support 'go infinite' commands (analysis mode):
         # run in background if no time limit, and expect
         # the GUI to send a 'stop' command later.
-        if movetime == 0 and self.args.analysis:
+        if movetime < 0:
+            assert infinite
             logging.debug('starting infinite search')
+            self.algorithm.time_limit_ms = -1
             self.pondering = True
             self.worker.send_message(self.search_async, max_count = 1)
             return True
@@ -274,9 +274,13 @@ class UCI:
 
 
     def _setoption(self, cmd_args):
-        assert len(cmd_args) >= 5
+        assert len(cmd_args) >= 3
         assert cmd_args[1] == 'name'
-        assert cmd_args[3] == 'value'
+        if len(cmd_args) < 4:
+            cmd_args.append('value')
+        if len(cmd_args) < 5:
+            assert cmd_args[3] == 'value'
+            cmd_args.append('')
 
         name, value = cmd_args[2], cmd_args[4]
         if name == 'OwnBook':
@@ -328,7 +332,10 @@ class UCI:
         if self.book:
             self.output('option name OwnBook type check default true')
         self.output('option name Ponder type check')
-        self.output('option name SyzygyPath type string')
+        if syzygy_path := engine.syzygy_path():
+            self.output(f'option name SyzygyPath type string default {syzygy_path}')
+        else:
+            self.output('option name SyzygyPath type string')
 
         if self.args.tweak:
             whitelist = engine.get_param_info().keys()
@@ -476,7 +483,6 @@ def configure_logging(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--algorithm', choices=ALGORITHM.keys(), default='mtdf')
-    parser.add_argument('--analysis', action='store_true')
     parser.add_argument('-b', '--book', default='book.bin')
     parser.add_argument('-c', '--config')
     parser.add_argument('-d', '--debug', action='store_true') # enable verbose logging

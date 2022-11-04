@@ -985,9 +985,7 @@ cdef class SearchAlgorithm:
             self.context.create_from(board)
 
         self._table.init()
-
         self.set_context_callbacks()
-
         self.context._ctxt.set_tt(address(self._table))
         self.context._ctxt._max_depth = self.depth
         self.context._ctxt._prev = BaseMove()
@@ -999,7 +997,6 @@ cdef class SearchAlgorithm:
         score = self._search(self._table)
 
         self.best_move = self.context.best_move()
-
         return (self.best_move, score)
 
 
@@ -1227,6 +1224,7 @@ def _tb_init():
         except:
             pass
 
+    Context.set_syzygy_path(os.pathsep.join(_tb_paths).encode())
     if _tb_paths:
         print(_tb_paths)
     else:
@@ -1257,6 +1255,10 @@ def set_syzygy_path(path):
     _tb = chess.syzygy.Tablebase()
     _tb_paths = []
     _tb_init()
+
+
+def syzygy_path():
+    return Context.syzygy_path().decode()
 
 
 # ---------------------------------------------------------------------

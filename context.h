@@ -1270,6 +1270,15 @@ namespace search
             if (capture_gain < 0)
             {
                 move._group = MoveOrder::LOSING_CAPTURES;
+            #if FAVOR_SACRIFICES
+                const auto eval = NNUE::eval(*move._state);
+                /* if the neural net thinks the position is good for the side that moved... */
+                if (eval < 0 && capture_gain - eval > SACRIFICE_MARGIN)
+                {
+                    move._group = MoveOrder::WINNING_CAPTURES;
+                    move._score = -eval;
+                }
+            #endif /* FAVOR_SACRIFICES */
             }
             else
             {

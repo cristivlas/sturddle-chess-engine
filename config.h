@@ -20,7 +20,17 @@
  */
 #include "common.h"
 
+/*
+ * This file contains parameters that control the behavior of the
+ * search and evaluation functions, and infrastructure for exposing
+ * them to Python scripts for the purpose of tuning the engine.
+ *
+ * To expose ALL settings, compile with -DTUNING_ENABLED -DMOBILITY_TUNING_ENABLED
+ *
+ * To cherry-pick, replace DECLARE_VALUE with DECLARE_PARAM
+ */
 #if REFCOUNT_PARAM
+/* Instrumentation & debug: count parameter usage */
 struct Val
 {
     int _v;
@@ -39,15 +49,6 @@ using Val = int;
 #include <string>
 #include <thread>
 
-/*
- * This file contains parameters that control the behavior of the
- * search and evaluation functions, and infrastructure for exposing
- * them to Python scripts for the purpose of tuning the engine.
- *
- * To expose ALL settings, compile with -DTUNING_ENABLED -DMOBILITY_TUNING_ENABLED
- *
- * To cherry-pick, replace DECLARE_VALUE with DECLARE_PARAM
- */
 struct Config
 {
     struct Param /* meta param info */
@@ -142,6 +143,7 @@ DECLARE_CONST(  FIFTY_MOVES_RULE,                     1,    0,       1)
 DECLARE_VALUE(  FUTILITY_PRUNING,                     1,    0,       1)
 DECLARE_VALUE(  MANAGE_TIME,                          1,    0,       1)
 DECLARE_VALUE(  MULTICUT,                             1,    0,       1)
+DECLARE_CONST(  PREALLOCATE_MOVE_COUNT,             192,    0,     512)
 
 /* SEE */
 /* -1 disables pin awareness */
@@ -156,6 +158,7 @@ DECLARE_VALUE(  DOUBLE_EXT_MAX,                       6,    0,     100)
 DECLARE_VALUE(  LMP_BASE,                             2,    2,     100)
 DECLARE_VALUE(  LATE_MOVE_REDUCTION_COUNT,            4,    0,     100)
 DECLARE_VALUE(  MULTICUT_MARGIN,                    827,    0,    1000)
+DECLARE_VALUE(  NNUE_EVAL_SCALE,                    397,    0,    1000)
 DECLARE_VALUE(  NULL_MOVE_DEPTH_WEIGHT,              16,    0,     100)
 DECLARE_VALUE(  NULL_MOVE_DEPTH_DIV,                  3,    1,     100)
 DECLARE_VALUE(  NULL_MOVE_DIV,                      272,    1,    1000)
@@ -164,7 +167,9 @@ DECLARE_VALUE(  NULL_MOVE_IMPROVEMENT_DIV,           15,    1,    1000)
 DECLARE_VALUE(  NULL_MOVE_MARGIN,                   105,    0,    1000)
 DECLARE_VALUE(  NULL_MOVE_MIN,                        5,    0,      10)
 DECLARE_VALUE(  NULL_MOVE_MIN_VERIFICATION_DEPTH,    14,    0,     100)
-DECLARE_VALUE(  REVERSE_FUTILITY_MARGIN,             85,    0,    1000)
+DECLARE_VALUE(  RAZOR_DEPTH_COEFF,                  316,    0,    1000)
+DECLARE_VALUE(  RAZOR_INTERCEPT,                    510,    0,    1000)
+DECLARE_VALUE(  REVERSE_FUTILITY_MARGIN,             23,    0,    1000)
 DECLARE_VALUE(  SINGULAR_MARGIN,                      6,    0,     100)
 
 GROUP(MoveOrdering)
@@ -178,6 +183,9 @@ DECLARE_VALUE(  HISTORY_HIGH,                        92,    0,     100)
 DECLARE_VALUE(  HISTORY_LOW,                         65,    0, HISTORY_HIGH)
 DECLARE_VALUE(  HISTORY_MIN_DEPTH,                    3,    0,     100)
 DECLARE_VALUE(  HISTORY_PRUNE,                       56,    0,     100)
+#if FAVOR_SACRIFICES
+DECLARE_VALUE(  SACRIFICE_MARGIN,                  1444,    0,    5000)
+#endif
 
 GROUP(Eval)
 DECLARE_VALUE(  BISHOP_PAIR,                         68,    0,     100)

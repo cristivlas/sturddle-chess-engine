@@ -122,7 +122,7 @@ namespace search
             }
     #else
             INLINE void blocking_lock(const entry_t*) { _locked = true; }
-            INLINE bool non_blocking_lock(const entry_t* e, uint64_t key) { return e->_hash == key; }
+            INLINE void non_blocking_lock(const entry_t* e, uint64_t key) { _locked = (e->_hash == key); }
             INLINE void release() { _locked = false; }
     #endif /* !SMP */
 

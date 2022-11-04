@@ -717,6 +717,16 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
         }
     #endif /* REVERSE_FUTILITY_PRUNING */
 
+    #if RAZORING
+        if (ctxt.depth() > 0
+            && ctxt.depth() <= 7
+            && ctxt._eval < alpha - RAZOR_INTERCEPT - RAZOR_DEPTH_COEFF * pow2(ctxt.depth())
+            && ctxt._eval + eval_captures(ctxt) < alpha)
+        {
+            return alpha;
+        }
+    #endif /* RAZORING */
+
         /* Reduce depth by 2 if PV node not found in the TT (idea from SF). */
         if (ctxt._ply
             && ctxt.is_pv_node()
@@ -1245,23 +1255,38 @@ public:
                     ASSERT(ctxts.back()->get_tt() == &table._tt);
                 }
             }
-
             cython_wrapper::call(Context::_report, Context::_engine, ctxts);
         }
     }
 };
 
+#else
+
+/* dummy structs */
+struct TaskData
+{
+    TranspositionTable _tt;
+};
+struct SMPTasks
+{
+    static std::vector<TaskData> _tables;
+    Context* _ctxt = nullptr;
+    SMPTasks(Context& ctxt, TranspositionTable&, score_t) : _ctxt(&ctxt)
+    {}
+    void do_report()
+    {
+        if (Context::_report)
+        {
+            static std::vector<Context*> ctxts;
+            ctxts.clear();
+            ctxts.emplace_back(_ctxt);
+            cython_wrapper::call(Context::_report, Context::_engine, ctxts);
+        }
+    }
+};
+#endif /* SMP */
 
 std::vector<TaskData> SMPTasks::_tables;
-
-
-#else
-struct SMPTasks /* dummy */
-{
-    SMPTasks(const Context&, TranspositionTable&, score_t) {}
-};
-
-#endif /* SMP */
 
 
 /*
