@@ -1783,7 +1783,8 @@ namespace search
 
 
     /*
-     * How much time and how many moves left till the next time control?
+     * Use the time and number of moves left till the next time control,
+     * and the eval from the previous move to tweak the time limit.
      */
     void Context::set_time_info(int millisec, int moves, score_t eval)
     {
@@ -1793,19 +1794,12 @@ namespace search
         {
             if (eval > 100)
             {
-                _time_limit = std::max(1, millisec / std::min(250, eval / 2));
+                _time_limit = std::max(1, millisec / std::max(std::min(250, eval / 2), moves));
             }
             else if (eval < -100)
             {
-                _time_limit = millisec / 10;
+                _time_limit = std::max(1, millisec / std::min(10, moves)); /* take more time */
             }
-        #if 0
-            else
-            {
-                auto estimated_moves_left = (state().is_endgame() || is_check()) ? 15 : 20;
-                _time_limit = millisec / std::max(moves, estimated_moves_left);
-            }
-        #endif
         }
     }
 
