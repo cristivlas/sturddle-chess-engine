@@ -502,7 +502,7 @@ cdef extern from 'context.h' namespace 'search':
 
         @staticmethod
         void            set_time_limit_ms(int millisec) nogil
-        void            set_time_info(int millisec, int moves)
+        void            set_time_info(int millisec, int moves, score_t eval)
 
         void            set_tt(TranspositionTable*) nogil
         TranspositionTable* get_tt() const
@@ -842,17 +842,18 @@ def clear_hashtable():
 
 cdef class SearchAlgorithm:
     cdef TranspositionTable _table
+    cdef score_t score
     cdef public iteration_cb, node_cb, report_cb
     cdef public best_move
     cdef public NodeContext context # important to use the type here
     cdef public depth, is_cancelled, time_info
-
 
     def __init__(self, board: chess.Board, depth=100, **kwargs):
         NNUE.log_init_message()
         self.best_move = None
         self.depth = depth
         self.is_cancelled = False
+        self.score = 0
         self.context = NodeContext(board)
         self.node_cb = kwargs.get('callback', None)
         self.report_cb = kwargs.get('threads_report', None)
@@ -905,6 +906,7 @@ cdef class SearchAlgorithm:
     @property
     def eval_count(self):
         return self._table._eval_count
+
 
     @property
     def eval_depth(self):
@@ -994,10 +996,10 @@ cdef class SearchAlgorithm:
         self.time_info = kwargs.get('time_info', None)
 
         # call algorithm-specific implementation (Template Method design pattern)
-        score = self._search(self._table)
+        self.score = self._search(self._table)
 
         self.best_move = self.context.best_move()
-        return (self.best_move, score)
+        return (self.best_move, self.score)
 
 
 cdef class IterativeDeepening(SearchAlgorithm):
@@ -1024,7 +1026,7 @@ cdef class IterativeDeepening(SearchAlgorithm):
 
         # Provide additional info so the engine can do its own time management.
         if self.time_info:
-            self.context._ctxt.set_time_info(self.time_info[0], self.time_info[1])
+            self.context._ctxt.set_time_info(self.time_info[0], self.time_info[1], self.score)
 
         with nogil:
             score = iterative(deref(self.context._ctxt), table, max_iter)
