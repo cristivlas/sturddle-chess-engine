@@ -51,10 +51,6 @@ if environ.get('BUILD_DEBUG', None):
 args.append('-DBUILD_STAMP=' + build_stamp)
 
 
-if environ.get('BUILD_WITH_NNUE', None):
-    args.append('-DWITH_NNUE')
-
-
 if platform.startswith('win'):
     args += [
         '/std:c++17',

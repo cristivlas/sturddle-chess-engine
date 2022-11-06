@@ -85,6 +85,8 @@ using score_t = int;
 
 #define RAZORING                            true
 
+#define REPORT_CURRENT_MOVE                 false
+
 #define REVERSE_FUTILITY_PRUNING            true
 
 /*

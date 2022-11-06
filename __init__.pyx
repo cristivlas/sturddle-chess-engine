@@ -479,6 +479,7 @@ cdef extern from 'context.h' namespace 'search':
         string          (*_epd)(const State&)
         void            (*_log_message)(int, const string&, bool)
         void            (*_on_iter)(PyObject*, Context*, const IterationInfo*)
+        void            (*_on_move)(PyObject*, const string&, int)
         void            (*_on_next)(PyObject*, int64_t)
         string          (*_pgn)(Context*)
         void            (*_print_state)(const State&)
@@ -843,7 +844,7 @@ def clear_hashtable():
 cdef class SearchAlgorithm:
     cdef TranspositionTable _table
     cdef score_t score
-    cdef public iteration_cb, node_cb, report_cb
+    cdef public iteration_cb, move_cb, node_cb, report_cb
     cdef public best_move
     cdef public NodeContext context # important to use the type here
     cdef public depth, is_cancelled, time_info
@@ -868,6 +869,12 @@ cdef class SearchAlgorithm:
                 self.context._ctxt._on_iter = <void (*)(PyObject*, Context*, const IterationInfo*)> self.on_iter
             else:
                 self.context._ctxt._on_iter = NULL
+
+            # callback for reporting currmove and currmovenumber via UCI
+            if self.move_cb:
+                self.context._ctxt._on_move = <void (*)(PyObject*, const string&, int)> self.on_move
+            else:
+                self.context._ctxt._on_move = NULL
 
             # search callback (checks timer, calls user-defined callback)
             if self.node_cb:
@@ -960,18 +967,24 @@ cdef class SearchAlgorithm:
     #
     # Callback wrappers
     #
-    cdef void on_iter(self, Context* ctxt, const IterationInfo* i) except* :
-        if self.iteration_cb:
-           self.iteration_cb(
-                self,
-                NodeContext.from_cxx_context(ctxt),
-                deref(i).score,
-                deref(i).nodes,
-                deref(i).knps,
-                deref(i).milliseconds)
+    cdef void on_iter(self, Context* ctxt, const IterationInfo* i) except*:
+        self.iteration_cb(
+            self,
+            NodeContext.from_cxx_context(ctxt),
+            deref(i).score,
+            deref(i).nodes,
+            deref(i).knps,
+            deref(i).milliseconds)
 
 
-    cdef void on_next(self, int64_t milliseconds) except* :
+    '''
+    Support for communicating currmove and currmovenumber via UCI script.
+    '''
+    cdef void on_move(self, const string& move, int move_count) except* with gil:
+        self.move_cb(move.decode(), move_count)
+
+
+    cdef void on_next(self, int64_t milliseconds) except*:
         self.node_cb(self, milliseconds)
 
 
@@ -1012,6 +1025,7 @@ cdef class IterativeDeepening(SearchAlgorithm):
         self.algorithm = algorithm
         self.time_limit_ms = kwargs.get('time_limit_ms', None) or kwargs.get('time_limit', 5) * 1000
         self.iteration_cb = kwargs.get('iteration_cb', None) or kwargs.get('on_iteration', None)
+        self.move_cb = kwargs.get('on_move', None)
 
 
     cdef score_t _search(self, TranspositionTable& table):
