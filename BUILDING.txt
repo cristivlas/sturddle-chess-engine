@@ -1,0 +1,77 @@
+Sturddle Engine Components
+==========================
+1) Python extension module written in C++,
+2) sturddle.py script, implementing the UCI protocol,
+3) worker.py script for running a background thread when thinking on the opponents' time (Ponder).
+4) nnue binary file (provided)
+
+GUI Integration
+===============
+XBoard, Cutechess and Arena 3.5.1 (probably others, untested) have settings where
+the command line for an engine can be specified (check the respective docs);
+the command for running Sturddle is:
+
+python3 <directory-where-built>/sturddle.py
+
+On Linux the python3 part can be omitted if the script is made executable:
+chmod +x sturddle.py
+
+Some GUIs such as Shredder expect the command to be an EXE file, and do not
+accept scripts and command line arguments. For a workardound see the optional last step
+below for building a one-file executable.
+
+Prerequisite Steps
+==================
+A working C++ compiler.
+On Linux and Mac clang-15 is recommended for best performance (GCC may work, not tested).
+Visual Studio is a good choice for Windows: https://visualstudio.microsoft.com/vs/community/
+
+Clone the git repository. Building from ZIP source archives from releases DOES NOT WORK.
+This is because github does not recursively include submodules in release ZIPs.
+
+git clone --recursive https://github.com/cristivlas/sturddle-chess-engine.git
+
+
+The following sections assume your Python interpreter executable is called python3,
+but on some systems (Windows?) it could be simply called python.
+
+Dependencies
+============
+python chess, psutil, Cython (Cython is needed for building only, not at runtime)
+Install with:
+python3 -m pip install chess
+python3 -m pip install psutil
+python3 -m pip install Cython
+
+Other requirements
+==================
+Python development libraries.
+
+On Linux (Ubuntu, Mint) install with:
+
+apt-get install python-dev
+
+Under Windows, follow the instructions for developers at:
+https://docs.python.org/3/using/windows.html
+
+Build
+=====
+cd sturddle-sturddle-engine
+python3 setup.py build_ext --inplace
+
+
+Optional: One File Executable
+=============================
+PyInstaller can be used to bundle all the components into all-in-one, self-extracting executable.
+(https://pyinstaller.org/en/stable/)
+
+Asumming the python extension module is built for Python 3.10 on a 64-bit Window system, the command
+for creating the one-file executable will look something like this:
+
+pyinstaller sturddle.py --add-binary=chess_engine.cp310-win_amd64.pyd;. --hidden-import chess.pgn --hidden-import chess.syzygy -p . --onefile --add-data=nn-62ef826d1a6d.nnue;.
+
+It is recommended to run pyinstaller from a Python virtual environment, please see the pyinstaller documentation.
+
+Under some GUIs, a window may pop up when activating the engine. The workaround is to add --noconsole to the pyinstaller command:
+pyinstaller sturddle.py --add-binary=chess_engine.cp310-win_amd64.pyd;. --hidden-import chess.pgn --hidden-import chess.syzygy -p . --noconsole --onefile --add-data=nn-62ef826d1a6d.nnue;.
+
