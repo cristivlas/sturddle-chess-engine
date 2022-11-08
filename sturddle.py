@@ -32,12 +32,14 @@ by researchers in 2019 and announced in 2020
 
 import argparse
 import logging
+import sysconfig
 import time
 from math import copysign
 
 import chess
 import chess.polyglot
 import chess_engine as engine
+from os import environ
 from psutil import virtual_memory
 
 from worker import WorkerThread
@@ -113,12 +115,14 @@ class UCI:
     Runs on the background worker thread (supports infinite analysis mode).
     """
     def search_async(self):
-        self.algorithm.search(self.board)
+        move, _ = self.algorithm.search(self.board)
         self.pondering = False
+        self.output_best(move, request_ponder=self.ponder_enabled)
 
 
     def _go(self, cmd_args):
         self.cancel() # in case there's anything lingering in the background
+        self.depth = 100
         self.start_time = time.time()
         self.node_count = 0
         explicit_movetime = False
@@ -499,7 +503,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--algorithm', choices=ALGORITHM.keys(), default='mtdf')
     parser.add_argument('-b', '--book', default='book.bin')
-    parser.add_argument('-c', '--config')
     parser.add_argument('-d', '--debug', action='store_true') # enable verbose logging
     parser.add_argument('-l', '--logfile', default='uci.log')
     parser.add_argument('--tweak', action='store_true')
@@ -511,10 +514,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     configure_logging(args)
 
-    print (f'{NAME}-{engine.version()} UCI')
+    print(f'{NAME}-{engine.version()} UCI')
 
-    if args.config:
-        engine.read_config(args.config)
-        logging.info(f'Read configuration file {args.config}')
+    # Workaround for onefile executable built with PyInstaller:
+    # hide the console if not running from a CMD prompt.
+    if sysconfig.get_platform().startswith('win') and 'PROMPT' not in environ:
+        import ctypes
+        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
     main(args)

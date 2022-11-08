@@ -1232,7 +1232,7 @@ def _tb_init():
     for syzygy_path in Context.syzygy_path().decode().split(os.pathsep):
         if not os.path.isabs(syzygy_path):
             syzygy_path = os.path.realpath(
-                os.path.join(os.path.dirname(__file__), syzygy_path)
+                os.path.join(os.path.dirname(sys.argv[0]), syzygy_path)
             )
         try:
             _tb.add_directory(syzygy_path)
