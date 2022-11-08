@@ -517,8 +517,9 @@ if __name__ == '__main__':
     print(f'{NAME}-{engine.version()} UCI')
 
     # Workaround for onefile executable built with PyInstaller:
-    # hide the console if not running from a CMD prompt.
-    if sysconfig.get_platform().startswith('win') and 'PROMPT' not in environ:
+    # hide the console if not running from a CMD prompt or Windows Terminal
+    if sysconfig.get_platform().startswith('win') and all(
+        (v not in environ) for v in ['PROMPT', 'WT_SESSION']):
         import ctypes
         ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
