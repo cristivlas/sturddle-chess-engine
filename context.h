@@ -336,20 +336,17 @@ namespace search
 
         int         next_move_index() { return _move_maker.current(*this); }
         bool        on_next();
-
         void        reinitialize();
         int         rewind(int where = 0, bool reorder = false);
-
         void        set_counter_move(const BaseMove& move) { _counter_move = move; }
         void        set_search_window(score_t score, score_t& prev_score);
         static void set_time_limit_ms(int milliseconds);
         void        set_time_info(int time_left /* millisec */, int moves_left, score_t eval);
         void        set_tt(TranspositionTable* tt) { _tt = tt; }
-
         bool        should_verify_null_move() const;
         int         singular_margin() const;
-
         int         tid() const { return _tt->_tid; }
+        static int  time_limit() { return _time_limit.load(std::memory_order_relaxed); }
         Color       turn() const { return state().turn; }
 
         const State& state() const { ASSERT(_state); return *_state; }
@@ -389,6 +386,7 @@ namespace search
         static std::string  (*_epd)(const State&);
         static void         (*_log_message)(int, const std::string&, bool);
         static void         (*_on_iter)(PyObject*, Context*, const IterationInfo*);
+        static void         (*_on_move)(PyObject*, const std::string&, int);
         static void         (*_on_next)(PyObject*, int64_t);
         static std::string  (*_pgn)(Context*);
         static void         (*_print_state)(const State&);
@@ -908,20 +906,27 @@ namespace search
         {
             ASSERT(move->_state);
             ASSERT(ctxt->_is_null_move == false);
-
             ctxt->_move = *move;
             ctxt->_state = move->_state;
-
             ctxt->_leftmost = is_leftmost() && next_move_index() == 1;
+
+        #if REPORT_CURRENT_MOVE
+            /* Report (main thread only) the move being searched from the root. */
+            if (_ply == 0
+                && tid() == 0
+                && _on_move
+                && (_tt->_nodes % 1000) <= move_count
+                && time_limit() > 250
+               )
+                (*_on_move)(_engine, move->uci(), move_count + 1);
+        #endif /* REPORT_CURRENT_MOVE */
         }
         else
         {
             ASSERT(null_move);
             ASSERT(!ctxt->_move);
-
             ASSERT(ctxt->_state);
             state().clone_into(*ctxt->_state);
-
             ctxt->_state->_check = { 0, 0 };
             flip(ctxt->_state->turn);
             ctxt->_is_null_move = true;
@@ -1017,7 +1022,6 @@ namespace search
         if (tid() == 0 && ++_callback_count >= CALLBACK_PERIOD)
         {
             _callback_count = 0; /* reset */
-
             const auto millisec = check_time_and_update_nps();
 
             if (millisec < 0) /* time is up? */

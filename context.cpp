@@ -433,9 +433,7 @@ namespace search
     atomic_int  Context::_time_limit(-1); /* milliseconds */
     atomic_time Context::_time_start;
     size_t Context::_callback_count(0);
-
     HistoryPtr Context::_history; /* moves played so far */
-
     std::vector<Context::ContextStack> Context::_context_stacks(SMP_CORES);
     std::vector<Context::MoveStack> Context::_move_stacks(SMP_CORES);
     std::vector<Context::StateStack> Context::_state_stacks(SMP_CORES);
@@ -447,6 +445,7 @@ namespace search
     void (*Context::_log_message)(int, const std::string&, bool) = nullptr;
 
     void (*Context::_on_iter)(PyObject*, Context*, const IterationInfo*) = nullptr;
+    void (*Context::_on_move)(PyObject*, const std::string&, int) = nullptr;
     void (*Context::_on_next)(PyObject*, int64_t) = nullptr;
 
     std::string(*Context::_pgn)(Context*) = nullptr;

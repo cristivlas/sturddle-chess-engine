@@ -32,15 +32,17 @@ by researchers in 2019 and announced in 2020
 
 import argparse
 import logging
+import sysconfig
 import time
+from math import copysign
 
 import chess
 import chess.polyglot
+import chess_engine as engine
+from os import environ
 from psutil import virtual_memory
 
-import chess_engine as engine
 from worker import WorkerThread
-
 
 NAME = 'Sturddle'
 
@@ -81,7 +83,12 @@ class UCI:
 
     def init_algo(self):
         name = self.args.algorithm
-        self.algorithm = ALGORITHM[name](self.board, self.depth, on_iteration=self.i_cb)
+        self.algorithm = ALGORITHM[name](
+            self.board,
+            self.depth,
+            on_iteration=self.i_cb,
+            on_move=self.report_current_move,
+        )
         logging.debug(f'algorithm set to: {self.algorithm}')
 
     # Possible improvements: support a folder of opening books rather
@@ -108,12 +115,14 @@ class UCI:
     Runs on the background worker thread (supports infinite analysis mode).
     """
     def search_async(self):
-        self.algorithm.search(self.board)
+        move, _ = self.algorithm.search(self.board)
         self.pondering = False
+        self.output_best(move, request_ponder=self.ponder_enabled)
 
 
     def _go(self, cmd_args):
         self.cancel() # in case there's anything lingering in the background
+        self.depth = 100
         self.start_time = time.time()
         self.node_count = 0
         explicit_movetime = False
@@ -138,7 +147,8 @@ class UCI:
             elif a == 'btime':
                 time_remaining[chess.BLACK] = int(next(params))
             elif a == 'ponder':
-                ponder = self.ponder_enabled
+                ponder = True
+                assert self.ponder_enabled
             elif a == 'infinite':
                 movetime = -1
                 infinite = True
@@ -276,6 +286,7 @@ class UCI:
     def _setoption(self, cmd_args):
         assert len(cmd_args) >= 3
         assert cmd_args[1] == 'name'
+        # logging.debug(cmd_args)
         if len(cmd_args) < 4:
             cmd_args.append('value')
         if len(cmd_args) < 5:
@@ -295,7 +306,7 @@ class UCI:
         else:
             if value in ['true', 'false']:
                 engine.set_param(name, value == 'true')
-            else:
+            elif value:
                 engine.set_param(name, int(value))
             logging.debug(f'{name}={engine.get_param_info()[name]}')
         return True
@@ -318,7 +329,7 @@ class UCI:
 
         if self.output_expected:
             move = self.algorithm.best_move
-            self.output_best(move, request_ponder = False)
+            self.output_best(move, request_ponder=False)
 
         return True
 
@@ -366,7 +377,7 @@ class UCI:
         logging.debug(f'<<< {message}')
 
 
-    def output_best(self, move, request_ponder=True):
+    def output_best(self, move, request_ponder):
         if self.output_expected:
             try:
                 if move is None:
@@ -411,6 +422,20 @@ class UCI:
                     raise
 
 
+    @staticmethod
+    def mate_distance(score, pv):
+        '''
+        Return estimated number of moves (not plies!) to mate.
+        '''
+        mate = int(copysign((max(engine.SCORE_CHECKMATE - abs(score), len(pv)) + 1) // 2, score))
+        logging.debug(f'score={score}, pv={len(pv)}, mate={mate}')
+        return mate
+
+
+    def report_current_move(self, curr_move, curr_move_num):
+        self.output(f'info currmove {curr_move} currmovenumber {curr_move_num}')
+
+
     def show_thinking(self, algorithm, node, score, node_count, knps, ms):
         if node.task_id:
             return
@@ -421,15 +446,9 @@ class UCI:
             pv = self.validate_pv(node.get_pv())
             seldepth = max(len(pv), algorithm.current_depth)
 
-            # mate in moves, NOT plies
-            if score > engine.SCORE_MATE_HIGH:
-                mate = (max(engine.SCORE_CHECKMATE - score, len(pv)) + 1) // 2
-                logging.debug(f'score={score}, pv={len(pv)}, mate={mate}')
+            if score > engine.SCORE_MATE_HIGH or score < engine.SCORE_MATE_LOW:
+                mate = self.mate_distance(score, pv)
                 score_info += f' mate {mate}'
-            elif score < engine.SCORE_MATE_LOW:
-                mate = (max(engine.SCORE_CHECKMATE + score, len(pv)) + 1) // 2
-                logging.debug(f'score={score}, pv={len(pv)}, mate=-{mate}')
-                score_info += f' mate -{mate}'
 
             if pv := ' '.join(pv):
                 pv = 'pv ' + pv
@@ -484,7 +503,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--algorithm', choices=ALGORITHM.keys(), default='mtdf')
     parser.add_argument('-b', '--book', default='book.bin')
-    parser.add_argument('-c', '--config')
     parser.add_argument('-d', '--debug', action='store_true') # enable verbose logging
     parser.add_argument('-l', '--logfile', default='uci.log')
     parser.add_argument('--tweak', action='store_true')
@@ -496,10 +514,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
     configure_logging(args)
 
-    print (f'{NAME}-{engine.version()} UCI')
+    print(f'{NAME}-{engine.version()} UCI')
 
-    if args.config:
-        engine.read_config(args.config)
-        logging.info(f'Read configuration file {args.config}')
+    # Workaround for onefile executable built with PyInstaller:
+    # hide the console if not running from a CMD prompt or Windows Terminal
+    if sysconfig.get_platform().startswith('win') and all(
+        (v not in environ) for v in ['PROMPT', 'WT_SESSION']):
+        import ctypes
+        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
     main(args)
