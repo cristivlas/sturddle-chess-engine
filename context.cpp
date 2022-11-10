@@ -37,8 +37,6 @@
 #if WITH_NNUE
   #include "auto.h" /* for NNUE_CONFIG */
   #include "nnue.h"
-
-  constexpr auto NNUE_file = "nn-62ef826d1a6d.nnue";
 #endif
 
 #if USE_VECTOR
@@ -235,18 +233,19 @@ void NNUE::log_init_message()
 }
 
 
-void NNUE::init(const std::string& data_dir)
+bool NNUE::init(const std::string& data_dir, const std::string& eval_file)
 {
-    if (nnue_init((data_dir + NNUE_file).c_str()))
+    if (nnue_init((data_dir + eval_file).c_str()))
     {
         USE_NNUE = true;
-        NNUE_init_msg = std::string(NNUE_CONFIG) + " " + NNUE_file;
+        NNUE_init_msg = std::string(NNUE_CONFIG) + " " + eval_file;
     }
     else
     {
         USE_NNUE = false;
         NNUE_init_msg = "nnue_init errno=" + std::to_string(errno);
     }
+    return USE_NNUE;
 }
 
 

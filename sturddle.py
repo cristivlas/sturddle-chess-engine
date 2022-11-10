@@ -39,7 +39,7 @@ from math import copysign
 import chess
 import chess.polyglot
 import chess_engine as engine
-from os import environ
+from os import environ, path
 from psutil import virtual_memory
 
 from worker import WorkerThread
@@ -50,6 +50,16 @@ ALGORITHM = { 'mtdf': engine.MTDf_i,
     'negamax': engine.Negamax_i,
     'negascout': engine.Negascout_i,
 }
+
+
+def _set_eval_file(eval_file):
+    if engine.nnue_init(*path.split(eval_file)):
+        return True
+    error = f'nnue_init: {eval_file} ' + (
+        'is not valid' if path.exists(eval_file) else 'file not found'
+    )
+    logging.error(error)
+    print(f'info string {error}')
 
 
 class UCI:
@@ -303,6 +313,9 @@ class UCI:
             self.init_algo()
         elif name == 'SyzygyPath':
             engine.set_syzygy_path(value)
+        elif name == 'EvalFile':
+            if not _set_eval_file(value):
+                return False
         else:
             if value in ['true', 'false']:
                 engine.set_param(name, value == 'true')
@@ -340,6 +353,8 @@ class UCI:
 
         self.output(f'option name Algorithm type combo default {self.args.algorithm} ' + \
             ' '.join([f'var {k}' for k in ALGORITHM.keys()]))
+        if engine.nnue_ok():
+            self.output(f'option name EvalFile type string default {engine.NNUE_FILE}')
         if self.book:
             self.output('option name OwnBook type check default true')
         self.output('option name Ponder type check')

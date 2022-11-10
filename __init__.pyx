@@ -52,11 +52,13 @@ import os
 import sys
 import time
 
-
 ctypedef int score_t
 ctypedef stdint.uint64_t Bitboard
 ctypedef stdint.int64_t int64_t
 ctypedef stdint.uint64_t uint64_t
+
+
+NNUE_FILE = 'nn-62ef826d1a6d.nnue'
 
 
 # ostream placeholder
@@ -412,7 +414,7 @@ cdef extern from 'context.h':
         int eval_fen(const string& fen)
 
         @staticmethod
-        void init(const string& data_dir)
+        bool init(const string& data_dir, const string& eval_file)
 
         @staticmethod
         void log_init_message()
@@ -1214,8 +1216,8 @@ def test_incremental_updates(fen):
             raise AssertionError((fen, move, eval_full, eval_incr))
 
 
-def nnue_init(data_dir):
-    NNUE.init(os.path.join(data_dir, '').encode())
+def nnue_init(data_dir, eval_file = NNUE_FILE):
+    return NNUE.init(os.path.join(data_dir, '').encode(), eval_file.encode())
 
 
 def nnue_ok():
@@ -1286,8 +1288,8 @@ NodeContext(chess.Board()) # dummy context initializes static cpython methods
 nnue_init(os.path.dirname(os.path.realpath(__file__)))
 _tb_init()
 
-__major__   = 0
-__minor__   = 99
+__major__   = 1
+__minor__   = 0
 __build__   = [str(x) for x in ['NNUE', __major__, __minor__, timestamp().decode()]]
 
 
