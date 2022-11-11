@@ -1217,7 +1217,12 @@ def test_incremental_updates(fen):
 
 
 def nnue_init(data_dir, eval_file = NNUE_FILE):
-    return NNUE.init(os.path.join(data_dir, '').encode(), eval_file.encode())
+    data_dir = os.path.realpath(data_dir)
+    if NNUE.init(os.path.join(data_dir, '').encode(), eval_file.encode()):
+        global NNUE_FILE
+        if eval_file != NNUE_FILE:
+            NNUE_FILE = eval_file
+        return True
 
 
 def nnue_ok():
@@ -1285,7 +1290,7 @@ def syzygy_path():
 Context.init()
 
 NodeContext(chess.Board()) # dummy context initializes static cpython methods
-nnue_init(os.path.dirname(os.path.realpath(__file__)))
+nnue_init(os.path.dirname(__file__))
 _tb_init()
 
 __major__   = 1
