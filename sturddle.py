@@ -518,8 +518,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--algorithm', choices=ALGORITHM.keys(), default='mtdf')
     parser.add_argument('-b', '--book', default='book.bin')
-    parser.add_argument('-d', '--debug', action='store_true') # enable verbose logging
-    parser.add_argument('-l', '--logfile', default='uci.log')
+    parser.add_argument('-d', '--debug', action='store_true', help='enable verbose logging')
+    parser.add_argument('-l', '--logfile', default='sturddle.log')
     parser.add_argument('--tweak', action='store_true')
     parser.add_argument('--show-thinking', dest='show_thinking', action='store_true')
     parser.add_argument('--no-show-thinking', dest='show_thinking', action='store_false')

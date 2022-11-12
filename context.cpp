@@ -414,7 +414,7 @@ void search::Context::eval_incremental()
 #else
 
 bool USE_NNUE = false;
-void NNUE::init(const std::string&) {}
+bool NNUE::init(const std::string&, const std::string&) { return false; }
 void NNUE::log_init_message() {}
 int NNUE::eval_fen(const std::string&) { return 0; }
 int NNUE::eval(const chess::BoardPosition&) { return 0; }
