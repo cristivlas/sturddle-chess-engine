@@ -1217,6 +1217,8 @@ def test_incremental_updates(fen):
 
 
 def nnue_init(data_dir, eval_file = NNUE_FILE):
+    if not data_dir:
+        data_dir = os.path.dirname(__file__)
     data_dir = os.path.realpath(data_dir)
     if NNUE.init(os.path.join(data_dir, '').encode(), eval_file.encode()):
         global NNUE_FILE
