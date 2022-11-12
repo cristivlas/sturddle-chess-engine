@@ -1217,6 +1217,7 @@ def test_incremental_updates(fen):
 
 
 def nnue_init(data_dir, eval_file = NNUE_FILE):
+    logging.info(f'data_dir={data_dir}, eval_file={eval_file}')
     if not data_dir:
         data_dir = os.path.dirname(__file__)
     data_dir = os.path.realpath(data_dir)
