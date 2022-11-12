@@ -42,10 +42,10 @@ platform = sysconfig.get_platform()
 # Debug build
 if environ.get('BUILD_DEBUG', None):
     if platform.startswith('win'):
-         args = [ '/Od', '/Zi' ]
-         link = ['/DEBUG']
+        args = [ '/Od', '/Zi' ]
+        link = ['/DEBUG']
     else:
-         args = [ '-O0', '-D_DEBUG', '-DTUNING_ENABLED' ]
+        args = [ '-O0', '-D_DEBUG', '-DTUNING_ENABLED' ]
 
 
 args.append('-DBUILD_STAMP=' + build_stamp)
@@ -57,6 +57,13 @@ if platform.startswith('win'):
         '/DWITH_NNUE',
         '/DCALLBACK_PERIOD=8192',
     ]
+    if environ.get('CL_EXE', '')=='clang-cl.exe':
+        args += [
+            '-arch:AVX2',
+            '-Ofast',
+            '-Wno-unused-command-line-argument',
+            '-Wno-unused-variable',
+        ]
 else:
     if '-O0' not in args:
         args.append('-O3')
@@ -76,7 +83,8 @@ else:
         '-DWITH_NNUE',
     ]
 
-    # Silence off Py_DEPRECATED warnings for clang
+    # Silence off Py_DEPRECATED warnings for clang;
+    # clang is the default compiler on macosx.
     cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
     if cc and cc.startswith('clang'):
          args.append('-Wno-deprecated-declarations')
