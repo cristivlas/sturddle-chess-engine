@@ -27,7 +27,7 @@
 #include <stdexcept>
 
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
   #pragma warning(disable:4244)
   #define _USE_MATH_DEFINES
   #define HAVE_INT128 false

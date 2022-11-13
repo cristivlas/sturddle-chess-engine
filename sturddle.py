@@ -40,7 +40,7 @@ import chess
 import chess.polyglot
 import chess_engine as engine
 from os import environ, path
-from psutil import virtual_memory
+from psutil import Process, virtual_memory
 
 from worker import WorkerThread
 
@@ -496,13 +496,14 @@ class UCI:
 
 
 def main(args):
+    print(f'{NAME}-{engine.version()} UCI')
     try:
         UCI(args).run()
     except:
         logging.exception('exiting main()')
 
 
-def configure_logging(args):
+def _configure_logging(args):
     log = logging.getLogger()
 
     for h in log.handlers[:]:
@@ -512,6 +513,24 @@ def configure_logging(args):
     log_level = logging.DEBUG if args.debug else logging.INFO
 
     logging.basicConfig(level = log_level, filename = args.logfile, format = log_format)
+
+
+'''
+Workaround for --onefile executable built with PyInstaller:
+hide the console if not running from a CMD prompt or Windows Terminal
+'''
+def _hide_console():
+    # Running under Windows, but not from under CMD.EXE or Windows Terminal (PowerShell)?
+    if sysconfig.get_platform().startswith('win') and all(
+        (v not in environ) for v in ['PROMPT', 'WT_SESSION']):
+
+        # Grandparent is None if running under Python interpreter in CMD.
+        p = Process().parent().parent()
+
+        # Make an exception and show the window if started from explorer.exe.
+        if p and p.name().lower() != 'explorer.exe':
+            import ctypes
+            ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
 
 if __name__ == '__main__':
@@ -527,15 +546,8 @@ if __name__ == '__main__':
     parser.set_defaults(show_thinking=True)
 
     args = parser.parse_args()
-    configure_logging(args)
 
-    print(f'{NAME}-{engine.version()} UCI')
-
-    # Workaround for onefile executable built with PyInstaller:
-    # hide the console if not running from a CMD prompt or Windows Terminal
-    if sysconfig.get_platform().startswith('win') and all(
-        (v not in environ) for v in ['PROMPT', 'WT_SESSION']):
-        import ctypes
-        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
+    _configure_logging(args)
+    _hide_console()
 
     main(args)
