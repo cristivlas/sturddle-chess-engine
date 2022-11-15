@@ -1298,7 +1298,7 @@ _tb_init()
 
 __major__   = 1
 __minor__   = 0
-__build__   = [str(x) for x in ['NNUE', __major__, __minor__, timestamp().decode()]]
+__build__   = ['NNUE', str(__major__), f'{int(__minor__):02d}', timestamp().decode()]
 
 
 def version():
