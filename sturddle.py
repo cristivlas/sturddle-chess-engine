@@ -453,7 +453,7 @@ class UCI:
 
     def show_thinking(self, algorithm, node, score, node_count, knps, ms):
         if node.task_id:
-            return
+            return # bail if not invoked on the main search thread
         try:
             score_info = f'score cp {score}'
 
