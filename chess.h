@@ -238,9 +238,6 @@ namespace chess
     };
 
 
-//#define DEFAULT_MOBILITY_WEIGHTS { 0, 3, 2, 2, 1, 3, 2 }
-//#define DEFAULT_MOBILITY_WEIGHTS { 0, 5, 1, 8, 7, 4, 1 }
-
 #define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 0, 7, 6, 5, 0 }
 
 
@@ -447,7 +444,7 @@ namespace chess
     }
 
 
-    struct alignas(16) Move : public BaseMove
+    struct Move : public BaseMove
     {
     public:
         Move() = default;
@@ -1693,8 +1690,9 @@ namespace chess
 
 namespace std
 {
-    static_assert(sizeof(chess::Move) == 16);
 #if HAVE_INT128
+    static_assert(sizeof(chess::Move) == 16);
+
     INLINE void swap(chess::Move& lhs, chess::Move& rhs)
     {
         using int128_t = __int128;
@@ -1707,6 +1705,8 @@ namespace std
         *x = *x ^ *y;
     }
 #elif (__x86_64__ || _M_X64)
+    static_assert(sizeof(chess::Move) == 16);
+
     INLINE void swap(chess::Move& lhs, chess::Move& rhs)
     {
         const auto lm = _mm_load_si128(reinterpret_cast<const __m128i*>(&lhs));
