@@ -62,6 +62,10 @@ def _set_eval_file(eval_file):
     print(f'info string {error}')
 
 
+def _to_int(x):
+    return int(float(x))
+
+
 class UCI:
     def __init__(self, args):
         self.args = args
@@ -127,7 +131,7 @@ class UCI:
     def search_async(self):
         move, _ = self.algorithm.search(self.board)
         self.pondering = False
-        self.output_best(move, request_ponder=self.ponder_enabled)
+        self.output_best(move, request_ponder=True)
 
 
     def _go(self, cmd_args):
@@ -136,7 +140,7 @@ class UCI:
         self.start_time = time.time()
         self.node_count = 0
         explicit_movetime = False
-        infinite = False
+        analysis = False
         movestogo = 40
         movetime = 0
         ponder = False
@@ -146,31 +150,35 @@ class UCI:
         params = iter(cmd_args[1:])
         for a in params:
             if a == 'depth':
-                self.depth = int(next(params))
+                self.depth = _to_int(next(params))
+                analysis = True
             elif a == 'movetime':
-                movetime = int(next(params))
+                movetime = _to_int(next(params))
                 explicit_movetime = True
             elif a == 'movestogo':
-                movestogo = int(next(params))
+                movestogo = _to_int(next(params))
             elif a == 'wtime':
-                time_remaining[chess.WHITE] = int(next(params))
+                time_remaining[chess.WHITE] = _to_int(next(params))
             elif a == 'btime':
-                time_remaining[chess.BLACK] = int(next(params))
+                time_remaining[chess.BLACK] = _to_int(next(params))
             elif a == 'ponder':
                 ponder = True
                 assert self.ponder_enabled
             elif a == 'infinite':
                 movetime = -1
-                infinite = True
+                analysis = True
 
         if not movetime:
             movetime = time_remaining[turn] / max(movestogo, 40)
 
-        if self.use_opening_book:
+        self.output_expected = True # The GUI expects a response
+
+        # Use opening book if enabled, and not in analyis mode.
+        if self.use_opening_book and not analysis:
             try:
                 entry = self.book.weighted_choice(self.board)
                 logging.debug(entry)
-                self.output('bestmove ' + entry.move.uci())
+                self.output_best(entry.move, request_ponder=False)
                 return True
             except IndexError:
                 pass
@@ -180,8 +188,6 @@ class UCI:
         logging.debug(f'movetime={movetime:.1f} movestogo={movestogo} fen={self.board.epd()}')
 
         self.algorithm.depth = self.depth
-        self.output_expected = True # The GUI expects a response
-
         if ponder:
             assert not self.pondering
             self.extended_time = max(1, int(movetime))
@@ -196,7 +202,7 @@ class UCI:
         # run in background if no time limit, and expect
         # the GUI to send a 'stop' command later.
         if movetime < 0:
-            assert infinite
+            assert analysis
             logging.debug('starting infinite search')
             self.algorithm.time_limit_ms = -1
             self.pondering = True
@@ -210,7 +216,7 @@ class UCI:
             time_info = None if explicit_movetime else (time_remaining[turn], movestogo)
         )
         # Do not ponder below 1s / move.
-        self.output_best(move, request_ponder=(self.ponder_enabled and movetime >= 1000))
+        self.output_best(move, request_ponder=(movetime >= 1000))
         return True
 
 
@@ -392,6 +398,9 @@ class UCI:
         logging.debug(f'<<< {message}')
 
 
+    '''
+    Send best move to GUI and request to ponder (request_ponder ignored if not ponder_enabled)
+    '''
     def output_best(self, move, request_ponder):
         if self.output_expected:
             try:
