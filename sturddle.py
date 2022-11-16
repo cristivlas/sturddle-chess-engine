@@ -325,7 +325,7 @@ class UCI:
             if value in ['true', 'false']:
                 engine.set_param(name, value == 'true')
             elif value:
-                engine.set_param(name, int(value))
+                engine.set_param(name, _to_int(value))
             logging.debug(f'{name}={engine.get_param_info()[name]}')
         return True
 
