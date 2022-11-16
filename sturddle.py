@@ -268,7 +268,6 @@ class UCI:
 
 
     def _position(self, cmd_args):
-
         # in case the command arrives while pondering...
         self.output_expected = False
         self._stop()
@@ -345,11 +344,7 @@ class UCI:
     def _stop(self, *_):
         self.cancel()
         self.snooze()
-
-        if self.output_expected:
-            move = self.algorithm.best_move
-            self.output_best(move, request_ponder=False)
-
+        self.output_best(self.algorithm.best_move, request_ponder=False)
         return True
 
 
