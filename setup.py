@@ -52,6 +52,7 @@ args.append('-DBUILD_STAMP=' + build_stamp)
 
 
 if platform.startswith('win'):
+    args += environ.get("CXXFLAGS", '').split()
     args += [
         '/std:c++17',
         '/DWITH_NNUE',
@@ -59,7 +60,6 @@ if platform.startswith('win'):
     ]
     if environ.get('CL_EXE', '')=='clang-cl.exe':
         args += [
-            '-arch:AVX2',
             '-Ofast',
             '-Wno-unused-command-line-argument',
             '-Wno-unused-variable',

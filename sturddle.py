@@ -38,7 +38,7 @@ from math import copysign
 
 import chess
 import chess.polyglot
-import chess_engine as engine
+import engine
 from os import environ, path
 from psutil import Process, virtual_memory
 
@@ -398,19 +398,17 @@ class UCI:
     '''
     def output_best(self, move, request_ponder):
         if self.output_expected:
-            try:
-                if move is None:
-                    self.output('resign')
-                else:
-                    uci = move.uci()
-                    if self.ponder_enabled and request_ponder:
-                        pv = self.algorithm.get_pv()
-                        if len(pv) > 1 and pv[0] == uci:
-                            self.output(f'bestmove {uci} ponder {pv[1]}')
-                            return
-                    self.output(f'bestmove {uci}')
-            finally:
-                self.output_expected = False
+            self.output_expected = False
+            if move is None:
+                self.output('resign')
+            else:
+                uci = move.uci()
+                if self.ponder_enabled and request_ponder:
+                    pv = self.algorithm.get_pv()
+                    if len(pv) > 1 and pv[0] == uci:
+                        self.output(f'bestmove {uci} ponder {pv[1]}')
+                        return
+                self.output(f'bestmove {uci}')
 
 
     def run(self):
