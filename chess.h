@@ -1687,7 +1687,7 @@ namespace chess
 } /* namespace chess */
 
 #include "zobrist.h"
-
+#if 0
 namespace std
 {
 #if HAVE_INT128
@@ -1716,3 +1716,4 @@ namespace std
     }
 #endif /* HAVE_INT128 */
 } /* namespace std */
+#endif /* 0 */

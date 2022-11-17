@@ -94,7 +94,7 @@ end of compiler args.
 
 extensions = [
     Extension(
-        'chess_engine',
+        name=environ.get('TARGET', 'chess_engine'),
         sources=sourcefiles,
         extra_compile_args=args + inc_dirs,
         extra_link_args=link
