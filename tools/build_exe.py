@@ -5,11 +5,11 @@ import os
 import sys
 
 BOOK = 'book.bin'
-NAME = 'sturddle-1.03-clang15.exe'
 NNUE = 'nn-62ef826d1a6d.nnue'
 
 if __name__ == '__main__':
-    os.environ['CL_EXE'] = 'clang-cl.exe'
+    #os.environ['CL_EXE'] = 'clang-cl.exe'
+
     os.system('del *.pyd')
     os.system('del sturddle.spec')
 
@@ -23,6 +23,11 @@ if __name__ == '__main__':
         os.environ['TARGET'] = f'chess_engine_{arch}' if arch else 'chess_engine'
         os.system(f'{sys.executable} setup.py clean --all')
         os.system(f'{sys.executable} setup.py build_ext --inplace')
+
+    sys.path.append('.')
+    import chess_engine
+    NAME = f'sturddle-{".".join(chess_engine.__build__[1:3])}.exe'
+
     # Use virtual environment
     os.system(f'py3.11\\Scripts\\pyinstaller.exe sturddle.py -p . --onefile --add-binary=chess_engine*.pyd;. --hidden-import chess.pgn --hidden-import chess.syzygy --add-data={NNUE};. --add-data={BOOK};.')
 
