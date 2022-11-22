@@ -63,7 +63,7 @@ def _set_eval_file(eval_file):
     print(f'info string {error}')
 
 
-def _to_int(x):
+cdef int _to_int(x):
     return int(float(x))
 
 
@@ -504,7 +504,7 @@ class UCI:
         return pv
 
 
-def _main(args):
+cdef void _main(args):
     print(f'{NAME}-{engine.version()} UCI')
     try:
         UCI(args).run()
@@ -512,7 +512,7 @@ def _main(args):
         logging.exception('exiting main()')
 
 
-def _configure_logging(args):
+cdef void _configure_logging(args):
     log = logging.getLogger()
 
     for h in log.handlers[:]:
@@ -528,7 +528,7 @@ def _configure_logging(args):
 Workaround for --onefile executable built with PyInstaller:
 hide the console if not running from a CMD prompt or Windows Terminal
 '''
-def _hide_console():
+cdef void _hide_console():
     # Running under Windows, but not from under CMD.EXE or Windows Terminal (PowerShell)?
     if sysconfig.get_platform().startswith('win') and all(
         (v not in environ) for v in ['PROMPT', 'WT_SESSION']):
