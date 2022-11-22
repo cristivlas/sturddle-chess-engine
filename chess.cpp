@@ -473,12 +473,7 @@ namespace chess
 
         const auto occupied = this->occupied();
 
-        /* king in check? */
-    #if 0
-        if (attackers_mask(!turn, king_square, occupied))
-    #else
         if (is_check())
-    #endif
             return;
 
         for_each_square((rooks & occupied_co(turn) & castling_rights), [&](Square rook_square)

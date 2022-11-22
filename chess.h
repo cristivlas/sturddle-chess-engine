@@ -1109,22 +1109,9 @@ namespace chess
             const auto king_to_file = square_file(move.to_square());
             ASSERT(king_to_file == 2 || king_to_file == 6);
 
-        #if 0
-            Square rook_from_square = UNDEFINED, rook_to_square = UNDEFINED;
-            if (king_to_file == 2)
-            {
-                rook_from_square = (color == WHITE ? A1 : A8);
-                rook_to_square = (color == WHITE ? D1 : D8);
-            }
-            else
-            {
-                rook_from_square = (color == WHITE ? H1 : H8);
-                rook_to_square = (color == WHITE ? F1 : F8);
-            }
-        #else
             const auto rook_from_square = rook_castle_squares[king_to_file == 2][0][color];
             const auto rook_to_square = rook_castle_squares[king_to_file == 2][1][color];
-        #endif
+
             const auto piece_type = remove_piece_at(rook_from_square);
             ASSERT(piece_type == ROOK);
 
@@ -1687,33 +1674,4 @@ namespace chess
 } /* namespace chess */
 
 #include "zobrist.h"
-#if 0
-namespace std
-{
-#if HAVE_INT128
-    static_assert(sizeof(chess::Move) == 16);
 
-    INLINE void swap(chess::Move& lhs, chess::Move& rhs)
-    {
-        using int128_t = __int128;
-
-        int128_t* x = reinterpret_cast<int128_t*>(&lhs);
-        int128_t* y = reinterpret_cast<int128_t*>(&rhs);
-
-        *x = *x ^ *y;
-        *y = *x ^ *y;
-        *x = *x ^ *y;
-    }
-#elif (__x86_64__ || _M_X64)
-    static_assert(sizeof(chess::Move) == 16);
-
-    INLINE void swap(chess::Move& lhs, chess::Move& rhs)
-    {
-        const auto lm = _mm_load_si128(reinterpret_cast<const __m128i*>(&lhs));
-        const auto rm = _mm_load_si128(reinterpret_cast<const __m128i*>(&rhs));
-        _mm_store_si128(reinterpret_cast<__m128i*>(&lhs), rm);
-        _mm_store_si128(reinterpret_cast<__m128i*>(&rhs), lm);
-    }
-#endif /* HAVE_INT128 */
-} /* namespace std */
-#endif /* 0 */
