@@ -14,6 +14,7 @@ if __name__ == '__main__':
     os.system('del sturddle.spec')
 
     for arch in ['AVX512', 'AVX2', '']:
+        os.system('del uci.cpp')
         os.system('del __init__.cpp')
         print('*********************************************************')
         print(f'Building {arch}')
@@ -29,7 +30,7 @@ if __name__ == '__main__':
     NAME = f'sturddle-{".".join(chess_engine.__build__[1:3])}.exe'
 
     # Use virtual environment
-    os.system(f'py3.11\\Scripts\\pyinstaller.exe sturddle.py -p . --onefile --add-binary=chess_engine*.pyd;. --hidden-import chess.pgn --hidden-import chess.syzygy --add-data={NNUE};. --add-data={BOOK};.')
+    os.system(f'py3.11\\Scripts\\pyinstaller.exe sturddle.py -p . --onefile --add-binary=*.pyd;. --add-data={NNUE};. --add-data={BOOK};.')
 
     while True:
         try:

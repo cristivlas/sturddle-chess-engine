@@ -39,7 +39,23 @@ from math import copysign
 
 import chess
 import chess.polyglot
-import engine
+
+import importlib
+
+flavors = [
+    'chess_engine_avx512',
+    'chess_engine_avx2',
+    'chess_engine'
+]
+
+for f in flavors:
+    try:
+        engine = importlib.import_module(f)
+        globals().update(engine.__dict__)
+        break
+    except:
+        pass
+
 from os import environ, path
 from psutil import Process, virtual_memory
 
