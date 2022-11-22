@@ -69,6 +69,7 @@ def _to_int(x):
 class UCI:
     def __init__(self, args):
         self.args = args
+        self.best_opening = False
         self.depth = 100
         self.ponder_enabled = False
         self.pondering = False
@@ -176,7 +177,10 @@ class UCI:
         # Use opening book if enabled, and not in analyis mode.
         if self.use_opening_book and not analysis:
             try:
-                entry = self.book.weighted_choice(self.board)
+                if self.best_opening:
+                    entry = self.book.find(self.board)
+                else:
+                    entry = self.book.weighted_choice(self.board)
                 logging.debug(entry)
                 self.output_best(entry.move, request_ponder=False)
                 return True
@@ -308,14 +312,16 @@ class UCI:
             assert cmd_args[3] == 'value'
             cmd_args.append('')
 
-        name, value = cmd_args[2], cmd_args[4]
+        name, value = cmd_args[2], cmd_args[-1]
         if name == 'OwnBook':
-            self.use_opening_book = value == 'true'
+            self.use_opening_book = (value == 'true')
         elif name == 'Ponder':
-            self.ponder_enabled = value == 'true'
+            self.ponder_enabled = (value == 'true')
         elif name == 'Algorithm':
             self.args.algorithm = value
             self.init_algo()
+        elif name == 'BestOpening':
+            self.best_opening = (value == 'true')
         elif name == 'SyzygyPath':
             engine.set_syzygy_path(value)
         elif name == 'EvalFile':
@@ -354,11 +360,12 @@ class UCI:
 
         self.output(f'option name Algorithm type combo default {self.args.algorithm} ' + \
             ' '.join([f'var {k}' for k in ALGORITHM.keys()]))
+        self.output(f'option name BestOpening type check default {str(self.best_opening).lower()}')
         if engine.nnue_ok():
             self.output(f'option name EvalFile type string default {engine.NNUE_FILE}')
         if self.book:
             self.output('option name OwnBook type check default true')
-        self.output('option name Ponder type check')
+        self.output(f'option name Ponder type check default {str(self.ponder_enabled).lower()}')
         if syzygy_path := engine.syzygy_path():
             self.output(f'option name SyzygyPath type string default {syzygy_path}')
         else:
