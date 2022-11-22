@@ -1,9 +1,11 @@
 Sturddle Engine Components
 ==========================
 1) Python extension module written in C++,
-2) sturddle.py script, implementing the UCI protocol,
-3) worker.py script for running a background thread when thinking on the opponents' time (Ponder).
-4) nnue binary file (provided)
+2) sturddle.py script
+3) UCI extension module (uci.pyx)
+4) worker.py script for running a background thread when thinking on the opponents' time (Ponder).
+5) nnue binary file (provided)
+
 
 GUI Integration
 ===============
@@ -68,10 +70,9 @@ PyInstaller can be used to bundle all the components into all-in-one, self-extra
 Asumming the python extension module is built for Python 3.10 on a 64-bit Window system, the command
 for creating the one-file executable will look something like this:
 
-pyinstaller sturddle.py --add-binary=chess_engine.cp310-win_amd64.pyd;. --hidden-import chess.pgn --hidden-import chess.syzygy -p . --onefile --add-data=nn-62ef826d1a6d.nnue;.
+pyinstaller sturddle.py --add-binary=*.pyd;. -p . --onefile --add-data=nn-62ef826d1a6d.nnue;.
 
 It is recommended to run pyinstaller from a Python virtual environment, please see the pyinstaller documentation.
 
-Under some GUIs, a window may pop up when activating the engine. The workaround is to add --noconsole to the pyinstaller command:
-pyinstaller sturddle.py --add-binary=chess_engine.cp310-win_amd64.pyd;. --hidden-import chess.pgn --hidden-import chess.syzygy -p . --noconsole --onefile --add-data=nn-62ef826d1a6d.nnue;.
+Under some GUIs, a window may pop up when activating the engine. The workaround is to add --noconsole to the pyinstaller command.
 
