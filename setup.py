@@ -98,6 +98,10 @@ extensions = [
         sources=sourcefiles,
         extra_compile_args=args + inc_dirs,
         extra_link_args=link
+    ),
+    Extension(
+        name='uci',
+        sources=['uci.pyx']
     )
 ]
 
