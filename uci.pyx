@@ -39,27 +39,41 @@ from math import copysign
 
 import chess
 import chess.polyglot
-
+import cpufeature
 import importlib
 
-flavors = [
-    'chess_engine_avx512',
-    'chess_engine_avx2',
-    'chess_engine'
-]
+from os import environ, path
+from psutil import Process, virtual_memory
+from worker import WorkerThread
 
-for f in flavors:
+'''
+Import the chess engine module flavor that best matches the CPU capabilities.
+'''
+def _is_avx512_supported():
+    for f in cpufeature.extension.CPUFeature:
+        if (f.startswith('AVX512') and cpufeature.extension.CPUFeature[f]):
+            return True
+    return False
+
+def _is_avx2_supported():
+    return cpufeature.extension.CPUFeature['AVX2']
+
+flavors = {
+    'chess_engine_avx512': _is_avx512_supported,
+    'chess_engine_avx2': _is_avx2_supported,
+    'chess_engine': lambda *_: True,
+}
+
+for eng in flavors:
+    if not flavors[eng]():
+        continue
     try:
-        engine = importlib.import_module(f)
+        engine = importlib.import_module(eng)
         globals().update(engine.__dict__)
         break
     except:
         pass
 
-from os import environ, path
-from psutil import Process, virtual_memory
-
-from worker import WorkerThread
 
 NAME = 'Sturddle'
 
@@ -77,6 +91,7 @@ def _set_eval_file(eval_file):
     )
     logging.error(error)
     print(f'info string {error}')
+    return False
 
 
 cdef int _to_int(x):

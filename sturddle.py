@@ -13,6 +13,7 @@ import chess
 import chess.pgn
 import chess.polyglot
 import chess.syzygy
+import cpufeature
 import psutil
 
 import uci
