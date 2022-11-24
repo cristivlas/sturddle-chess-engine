@@ -108,7 +108,6 @@ class UCI:
         self.output_expected = False
         self.extended_time = 0
         self.board = chess.Board()
-        self.start_time = time.time()
         self.node_count = 0
         self.i_cb = self.show_thinking if args.show_thinking else None
         self.init_algo()
@@ -170,7 +169,6 @@ class UCI:
     def _go(self, cmd_args):
         self.cancel() # in case there's anything lingering in the background
         self.depth = 100
-        self.start_time = time.time()
         self.node_count = 0
         explicit_movetime = False
         analysis = False
