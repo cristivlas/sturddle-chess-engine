@@ -696,11 +696,11 @@ cdef class NodeContext:
         return self._ctxt._state.turn
 
 
-
     cdef sync_to_board(self, board: chess.Board):
-
-        # set history of played positions
-
+        '''
+        Set history of played positions.
+        Set internal representation of the position to match the board.
+        '''
         # first, unwind the board to the starting position
         # (which may not necessarily be a brand new game!)
         b = board.copy()

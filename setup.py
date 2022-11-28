@@ -54,12 +54,16 @@ args.append('-DBUILD_STAMP=' + build_stamp)
 
 
 if platform.startswith('win'):
+    # Windows build
     args += environ.get("CXXFLAGS", '').split()
     args += [
-        '/std:c++17',
+        '/std:c++20',
         '/DWITH_NNUE',
         '/DCALLBACK_PERIOD=8192',
     ]
+    if FEN_PARSE:
+        args.append('/DFEN_PARSE=true')
+
     if environ.get('CL_EXE', '')=='clang-cl.exe':
         args += [
             '-Ofast',
@@ -67,6 +71,7 @@ if platform.startswith('win'):
             '-Wno-unused-variable',
         ]
 else:
+    # Linux and Mac
     if '-O0' not in args:
         args.append('-O3')
     args += [
