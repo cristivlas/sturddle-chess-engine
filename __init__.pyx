@@ -30,7 +30,6 @@ The sturddlefish is a hybrid of the paddlefish (Polyodon spathula)
 and the sturgeon (Acipenser gueldenstaedtii), accidentally created
 by researchers in 2019 and announced in 2020.
 """
-
 from cpython.ref cimport PyObject
 from cython.operator cimport address, dereference as deref
 
@@ -83,8 +82,8 @@ def print_board(board):
 cdef extern from 'common.h':
     score_t SCORE_MAX
     score_t SCORE_MIN
-    const int MOBILITY_TUNING_ENABLED
-    const int USE_NNUE
+    const bool MOBILITY_TUNING_ENABLED
+    const bool USE_NNUE
     string timestamp() nogil
 
 
@@ -129,15 +128,14 @@ cdef extern from 'chess.h' namespace 'chess':
         Square      from_square() const
         Square      to_square() const
         PieceType   promotion() const
-        bint        is_none() const
+        bool        is_none() const
         string      uci() const
-
-
-    ctypedef vector[BaseMove] PV
 
     cdef cppclass Move(BaseMove):
         Move()
         Move(const BaseMove&)
+
+    ctypedef vector[BaseMove] PV
 
 
     cdef cppclass Position:
@@ -172,21 +170,21 @@ cdef extern from 'chess.h' namespace 'chess':
         int     count_connected_pawns(Color, Bitboard) const
         int     count_isolated_pawns(Color, Bitboard) const
 
-        bint    equals(const State&) const
+        bool    equals(const State&) const
         score_t eval() const
         score_t eval_incremental(const BaseMove&) const
         size_t  hash() const
         void    rehash()
 
-        bint    has_connected_rooks(int) const
-        bint    has_fork(Color) const
+        bool    has_connected_rooks(int) const
+        bool    has_fork(Color) const
 
-        bint    is_castling(const BaseMove&) const
-        bint    is_check() const
-        bint    is_checkmate() const
-        bint    is_endgame() const
-        bint    is_en_passant(const BaseMove&) const
-        bint    is_pinned(Color) const
+        bool    is_castling(const BaseMove&) const
+        bool    is_check() const
+        bool    is_checkmate() const
+        bool    is_endgame() const
+        bool    is_en_passant(const BaseMove&) const
+        bool    is_pinned(Color) const
 
         int     longest_pawn_sequence(Bitboard) const
 
@@ -201,6 +199,8 @@ cdef extern from 'chess.h' namespace 'chess':
 
     cdef score_t estimate_static_exchanges(const State&, Color, int, PieceType)
     cdef void zobrist_update(const State&, const BaseMove&, State&)
+
+    bool parse_fen[T](const string&, T&)
 
 
 cdef extern from 'zobrist.h' namespace 'chess':
@@ -323,23 +323,23 @@ cdef class BoardState:
         return self._state.count_isolated_pawns(color, mask)
 
 
-    cpdef bint has_connected_rooks(self, color):
+    cpdef bool has_connected_rooks(self, color):
         return self._state.has_connected_rooks(WHITE if color else BLACK)
 
 
-    cpdef bint is_check(self):
+    cpdef bool is_check(self):
         return self._state.is_check()
 
 
-    cpdef bint is_checkmate(self):
+    cpdef bool is_checkmate(self):
         return self._state.is_checkmate()
 
 
-    cpdef bint is_endgame(self):
+    cpdef bool is_endgame(self):
         return self._state.is_endgame()
 
 
-    cpdef bint is_pinned(self, Color color):
+    cpdef bool is_pinned(self, Color color):
         return self._state.is_pinned(color)
 
 
@@ -397,7 +397,7 @@ cdef extern from 'context.h':
         int max_val
         string group
 
-    void _set_param(string, int, bint) except+
+    void _set_param(string, int, bool) except+
 
     map[string, int] _get_params() except+
     map[string, Param] _get_param_info() except+
@@ -1104,7 +1104,6 @@ cpdef eval_static_exchanges(board, Color color, Square square):
         state._state, color, square, state._state.piece_type_at(square))
 
 
-
 # ---------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------
@@ -1144,7 +1143,9 @@ def get_hash_size():
 def get_hash_full():
     return int(TranspositionTable.usage() * 10)
 
-
+#
+# Performance tests.
+#
 def perft(fen, repeat=1):
     cdef vector[Move] moves
     cdef size_t count = 0
@@ -1230,6 +1231,15 @@ def nnue_init(data_dir, eval_file = NNUE_FILE):
 
 def nnue_ok():
     return USE_NNUE
+
+
+# ---------------------------------------------------------------------
+# optional / experimental FEN parsing (enable FEN_PARSE at compile-time)
+# ---------------------------------------------------------------------
+def board_from_fen(fen: str):
+    board = BoardState()
+    if parse_fen(fen.encode(), board._state):
+        return board
 
 
 # ---------------------------------------------------------------------

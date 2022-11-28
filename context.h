@@ -371,8 +371,6 @@ namespace search
         static MovesList& moves(int tid, int ply);
         static std::vector<State>& states(int tid, int ply);
 
-        const ContextStack& stack() const { return _context_stacks[tid()]; }
-
         static void set_syzygy_path(const std::string& path) { _syzygy_path = path; }
         static const std::string& syzygy_path() { return _syzygy_path; }
         static void set_tb_cardinality(int n) { _tb_cardinality = n; }

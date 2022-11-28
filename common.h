@@ -70,6 +70,10 @@ using score_t = int;
 /* Collect extra stats for troubleshooting */
 #define EXTRA_STATS                         false
 
+#if !defined(FEN_PARSE)
+  #define FEN_PARSE                         false
+#endif /* FEN_PARSE */
+
 #define FAVOR_SACRIFICES                    false
 
 #define KILLER_MOVE_HEURISTIC               true

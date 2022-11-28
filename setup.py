@@ -36,8 +36,10 @@ args = ['-DNO_ASSERT']
 if environ.get('BUILD_ASSERT', None):
     args = ['-DTUNING_ENABLED=true']
 
-
 platform = sysconfig.get_platform()
+
+# Experimental
+FEN_PARSE = environ.get('FEN_PARSE', '').lower() in ['1', 'true', 'yes']
 
 # Debug build
 if environ.get('BUILD_DEBUG', None):
@@ -82,6 +84,13 @@ else:
         '-DPyMODINIT_FUNC=__attribute__((visibility("default"))) extern "C" PyObject*',
         '-DWITH_NNUE',
     ]
+    if FEN_PARSE:
+        args += [
+            '-std=c++20',
+            '-fexperimental-library',
+            '-DFEN_PARSE=true',
+        ]
+        link += ['-L/usr/local/opt/llvm/lib/c++']
 
     # Silence off Py_DEPRECATED warnings for clang;
     # clang is the default compiler on macosx.
