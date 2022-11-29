@@ -387,7 +387,9 @@ cdef class BoardState:
 # ---------------------------------------------------------------------
 # context.h
 # ---------------------------------------------------------------------
-cdef extern from 'context.h':
+cdef extern from 'context.h' nogil:
+    cdef void run_uci_loop(const char* name, const char* version)
+
     #
     # Get/set engine params via Python
     #
@@ -1143,9 +1145,10 @@ def get_hash_size():
 def get_hash_full():
     return int(TranspositionTable.usage() * 10)
 
-#
-# Performance tests.
-#
+
+# ---------------------------------------------------------------------
+# Ad-hoc move generation performance tests.
+# ---------------------------------------------------------------------
 def perft(fen, repeat=1):
     cdef vector[Move] moves
     cdef size_t count = 0
@@ -1195,6 +1198,9 @@ def read_config(fname='sturddle.cfg', echo=False):
             set_param(name, value, echo)
 
 
+# ---------------------------------------------------------------------
+# NNUE testing, verify that incremental eval matches full eval results.
+# ---------------------------------------------------------------------
 def test_incremental_updates(fen):
     cdef TranspositionTable table
     node = NodeContext(chess.Board(fen=fen))
@@ -1234,7 +1240,7 @@ def nnue_ok():
 
 
 # ---------------------------------------------------------------------
-# optional / experimental FEN parsing (enable FEN_PARSE at compile-time)
+# optional / experimental FEN parsing (needs -DNATIVE_UCI at compile-time)
 # ---------------------------------------------------------------------
 def board_from_fen(fen: str):
     board = BoardState()
@@ -1307,9 +1313,16 @@ nnue_init(os.path.dirname(__file__))
 _tb_init()
 
 __major__   = 1
-__minor__   = 5
+__minor__   = 10
 __build__   = ['NNUE', str(__major__), f'{int(__minor__):02d}', timestamp().decode()]
 
 
 def version():
     return '.'.join(__build__[not USE_NNUE:])
+
+
+# ---------------------------------------------------------------------
+# in progress: native C++ UCI implementation
+# ---------------------------------------------------------------------
+def uci_loop(name: str):
+    run_uci_loop(name.encode(), version().encode())

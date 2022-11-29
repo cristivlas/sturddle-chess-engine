@@ -70,9 +70,9 @@ using score_t = int;
 /* Collect extra stats for troubleshooting */
 #define EXTRA_STATS                         false
 
-#if !defined(FEN_PARSE)
-  #define FEN_PARSE                         false
-#endif /* FEN_PARSE */
+#if !defined(NATIVE_UCI)
+  #define NATIVE_UCI                        false
+#endif /* NATIVE_UCI */
 
 #define FAVOR_SACRIFICES                    false
 
