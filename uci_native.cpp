@@ -113,18 +113,47 @@ namespace
         virtual void set(std::string_view value) = 0;
     };
 
-    class OptionParam : public Option
+    struct OptionBase : public Option
     {
         const std::string _name;
-        const Param _p;
+        explicit OptionBase(const std::string &name) : _name(name) {}
+        void print(std::ostream &out) const override { out << _name << " "; }
+    };
 
-    public:
-        OptionParam(const std::string &name, const Param &param) : _name(name), _p(param) {}
+    struct OptionBool : public OptionBase
+    {
+        bool &_b;
+
+        OptionBool(const std::string &name, bool &b) : OptionBase(name), _b(b)
+        {
+        }
 
         void print(std::ostream &out) const override
         {
-            out << _name << " ";
+            OptionBase::print(out);
+            out << "type check default " << std::boolalpha << _b;
+        }
 
+        void set(std::string_view value) override
+        {
+            if (value == "true")
+                _b = true;
+            else if (value == "false")
+                _b = false;
+        }
+    };
+
+    struct OptionParam : public OptionBase
+    {
+        const Param _p;
+
+        OptionParam(const std::string &name, const Param &param) : OptionBase(name), _p(param)
+        {
+        }
+
+        void print(std::ostream &out) const override
+        {
+            OptionBase::print(out);
             if (_p.min_val == 0 && _p.max_val == 1)
                 out << "type check default " << std::boolalpha << bool(_p.val);
             else
@@ -149,6 +178,14 @@ public:
     {
         _buf.as_context()->_state = &_buf._state;
         _buf.as_context()->_algorithm = search::Algorithm::MTDF;
+
+        _options.emplace("ownbook", std::make_shared<OptionBool>("OwnBook", _use_opening_book));
+        _options.emplace("ponder", std::make_shared<OptionBool>("Ponder", _ponder));
+
+        /** Options TODO: */
+        /* Algorithm */
+        /* EvalFile */
+        /* SyzygyPath */
     }
 
     void run();
@@ -203,6 +240,8 @@ private:
     search::ContextBuffer _buf;
     search::TranspositionTable _tt;
     bool _debug = true;
+    bool _ponder = false;
+    bool _use_opening_book = true;
     EngineOptions _options;
     const std::string _name;
     const std::string _version;
@@ -365,9 +404,12 @@ void UCI::setoption(const Arguments &args)
             acc->emplace_back(a);
     }
 
-    auto iter = _options.find(join(" ", name));
+    const auto opt_name = join(" ", name);
+    auto iter = _options.find(opt_name);
     if (iter != _options.end())
         iter->second->set(join(" ", value));
+    else
+        log_warning(__func__ + (": " + opt_name + ": not found"));
 }
 
 void UCI::search()
@@ -385,12 +427,11 @@ void UCI::uci()
     output<false>(std::format("id name {}-{}", _name, _version));
 
     /* refresh options */
-    _options.clear();
-    /* option names are case insensitive, and can contain _single_ spaces */
     for (auto p : _get_param_info())
     {
         auto name = p.first;
-        _options.emplace(lowercase(name), new OptionParam(p.first, p.second));
+        /* option names are case insensitive, and can contain _single_ spaces */
+        _options[lowercase(name)] = std::make_shared<OptionParam>(p.first, p.second);
     }
     /* show available options */
     std::ostringstream opts;
