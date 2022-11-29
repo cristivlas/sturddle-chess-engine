@@ -24,8 +24,10 @@ static void log_error(T err)
 }
 #if NATIVE_UCI
 #include <format>
+#include <memory>
 #include <ranges>
 #include <string>
+#include <sstream>
 #include <unordered_map>
 #include <vector>
 
@@ -41,6 +43,23 @@ template <typename T>
 static void log_warning(T warn)
 {
     search::Context::log_message(LogLevel::WARN, std::to_string(warn));
+}
+
+template <typename T>
+static INLINE T &lowercase(T &s)
+{
+    std::transform(s.begin(), s.end(), s.begin(), [](auto c)
+                   { return std::tolower(c); });
+    return s;
+}
+
+template <typename T>
+static INLINE std::string join(std::string_view sep, const T &v)
+{
+    std::ostringstream s;
+    for (const auto &elem : v)
+        (s.tellp() ? s << sep : s) << elem;
+    return s.str();
 }
 
 enum class Command
@@ -86,11 +105,43 @@ namespace
     struct arity<R (C::*)(Args...) const> : std::integral_constant<unsigned, sizeof...(Args)>
     {
     };
+
+    struct Option
+    {
+        virtual ~Option() = default;
+        virtual void print(std::ostream &) const = 0;
+        virtual void set(std::string_view value) = 0;
+    };
+
+    class OptionParam : public Option
+    {
+        const std::string _name;
+        const Param _p;
+
+    public:
+        OptionParam(const std::string &name, const Param &param) : _name(name), _p(param) {}
+
+        void print(std::ostream &out) const override
+        {
+            out << _name << " ";
+
+            if (_p.min_val == 0 && _p.max_val == 1)
+                out << "type check default " << std::boolalpha << bool(_p.val);
+            else
+                out << "type spin default " << _p.val << " min " << _p.min_val << " max " << _p.max_val;
+        }
+
+        void set(std::string_view value) override
+        {
+            _set_param(_name, std::stoi(std::string(value)));
+        }
+    };
 }
 
 class UCI
 {
     using Arguments = std::vector<std::string_view>;
+    using EngineOptions = std::unordered_map<std::string, std::shared_ptr<Option>>;
 
 public:
     UCI(const std::string &name, const std::string &version)
@@ -112,15 +163,16 @@ private:
     void position(const Arguments &args);
     void setoption(const Arguments &args);
     void stop();
-    void uci() const;
+    void uci();
     void newgame();
 
 private:
     /** impl details */
+    template <bool debug = true>
     void output(const std::string_view out) const
     {
         std::cout << out << std::endl;
-        if (_debug)
+        if (debug && _debug)
             log_debug(out);
     }
 
@@ -151,6 +203,7 @@ private:
     search::ContextBuffer _buf;
     search::TranspositionTable _tt;
     bool _debug = true;
+    EngineOptions _options;
     const std::string _name;
     const std::string _version;
 };
@@ -161,9 +214,7 @@ void UCI::run()
     while (true)
     {
         std::getline(std::cin, cmd);
-        std::transform(cmd.begin(), cmd.end(), cmd.begin(), [](auto c)
-                       { return std::tolower(c); });
-
+        lowercase(cmd);
         if (cmd == "quit")
             break;
 
@@ -302,7 +353,21 @@ void UCI::position(const Arguments &args)
 
 void UCI::setoption(const Arguments &args)
 {
-    // TODO
+    Arguments name, value, *acc = nullptr;
+
+    for (const auto &a : std::ranges::subrange(args.begin() + 1, args.end()))
+    {
+        if (a == "name")
+            acc = &name;
+        else if (a == "value")
+            acc = &value;
+        else if (acc)
+            acc->emplace_back(a);
+    }
+
+    auto iter = _options.find(join(" ", name));
+    if (iter != _options.end())
+        iter->second->set(join(" ", value));
 }
 
 void UCI::search()
@@ -315,9 +380,23 @@ void UCI::stop()
     // TODO
 }
 
-void UCI::uci() const
+void UCI::uci()
 {
-    output(std::format("id name {}-{}", _name, _version));
+    output<false>(std::format("id name {}-{}", _name, _version));
+
+    /* refresh options */
+    _options.clear();
+    /* option names are case insensitive, and can contain _single_ spaces */
+    for (auto p : _get_param_info())
+    {
+        auto name = p.first;
+        _options.emplace(lowercase(name), new OptionParam(p.first, p.second));
+    }
+    /* show available options */
+    std::ostringstream opts;
+    for (const auto &opt : _options)
+        opt.second->print(opts << "\noption ");
+    output<false>(opts.str());
 }
 
 extern "C" void run_uci_loop(const char *name, const char *version)
