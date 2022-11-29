@@ -120,6 +120,12 @@ namespace
         void print(std::ostream &out) const override { out << _name << " "; }
     };
 
+    template<typename T>
+    INLINE int to_int(T v)
+    {
+        return std::stoi(std::string(v));
+    }
+
     struct OptionBool : public OptionBase
     {
         bool &_b;
@@ -162,7 +168,7 @@ namespace
 
         void set(std::string_view value) override
         {
-            _set_param(_name, std::stoi(std::string(value)));
+            _set_param(_name, to_int(value));
         }
     };
 }
@@ -184,6 +190,7 @@ public:
 
         /** Options TODO: */
         /* Algorithm */
+        /* Best Opening */
         /* EvalFile */
         /* SyzygyPath */
     }
@@ -240,8 +247,10 @@ private:
     search::ContextBuffer _buf;
     search::TranspositionTable _tt;
     bool _debug = true;
+    bool _output_expected = false;
     bool _ponder = false;
     bool _use_opening_book = true;
+    int _depth = 100;
     EngineOptions _options;
     const std::string _name;
     const std::string _version;
@@ -316,7 +325,57 @@ void UCI::dispatch(const std::string &cmd, const Arguments &args)
 
 void UCI::go(const Arguments &args)
 {
-    // TODO
+    bool explicit_movetime = false, analysis = false, ponder = false;
+    int movestogo = 40, movetime = 0;
+    int time_remaining[] = {0, 0};
+    auto turn = _buf._state.turn;
+
+    for (size_t i = 0; i != args.size(); ++i)
+    {
+        const auto& a = args[i];
+        if (a == "depth")
+        {
+            if (++i >= args.size())
+                break;
+            _depth = to_int(args[i]);
+            analysis = true;
+        }
+        else if (a == "movetime")
+        {
+            if (++i >= args.size())
+                break;
+            movetime = to_int(args[i]);
+            explicit_movetime = true;
+        }
+        else if (a == "movestogo")
+        {
+            if (++i >= args.size())
+                break;
+            movestogo = to_int(args[i]);
+        }
+        else if (a == "wtime")
+        {
+            if (++i >= args.size())
+                break;
+            time_remaining[chess::WHITE] = to_int(args[i]);
+        }
+        else if (a == "btime")
+        {
+            if (++i >= args.size())
+                break;
+            time_remaining[chess::BLACK] = to_int(args[i]);
+        }
+        else if (a == "ponder")
+        {
+            ASSERT_ALWAYS(_ponder);
+            ponder = true;
+        }
+        else if (a == "infinite")
+        {
+            movetime = -1;
+            analysis = true;
+        }
+    }
 }
 
 INLINE void UCI::isready() const
