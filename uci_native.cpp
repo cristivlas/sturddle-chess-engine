@@ -380,11 +380,10 @@ void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::Iteratio
     std::ostringstream out;
 
     out << "info depth " << ctxt->iteration() << " seldepth " << ctxt->get_tt()->_eval_depth;
+    out << " score cp " << info->score;
 
     if (std::abs(info->score) > MATE_HIGH)
         out << " mate " << mate_distance(info->score, ctxt->get_pv());
-    else
-        out << " score cp " << info->score;
 
     out << " time " << info->milliseconds;
     out << " nodes " << info->nodes << " knps " << int(info->knps * 1000);
@@ -531,7 +530,7 @@ void UCI::go(const Arguments &args)
     if (!movetime)
         movetime = time_remaining[turn] / std::max(movestogo, 40);
     if (_debug)
-        log_debug("movetime=" + std::to_string(movetime));
+        log_debug(std::format("movetime {}, movestogo {}", movetime, movestogo));
 
     _extended_time = 0;
     _output_expected = true;
@@ -751,23 +750,11 @@ extern "C" void run_uci_loop(const char *name, const char *version)
     }
     catch (const std::exception &e)
     {
-        try
-        {
-            err = e.what();
-        }
-        catch (...)
-        {
-        }
+        err = e.what();
     }
     catch (...)
     {
-        try
-        {
-            err = "unknown exception";
-        }
-        catch (...)
-        {
-        }
+        err = "unknown exception";
     }
     if (!err.empty())
         log_error(err);
