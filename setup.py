@@ -113,11 +113,9 @@ extensions = [
         sources=sourcefiles,
         extra_compile_args=args + inc_dirs,
         extra_link_args=link
-    ),
-    Extension(
-        name='uci',
-        sources=['uci.pyx']
-    )
-]
+    )]
+if not NATIVE_UCI:
+    extensions.append(Extension(name='uci', sources=['uci.pyx']))
+
 
 setup(ext_modules=cythonize(extensions))

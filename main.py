@@ -2,12 +2,21 @@
 '''
 Alternative engine bootloader that uses the native UCI implementation.
 '''
+# import everything for the benefit of pyinstaller
 import argparse
 import importlib
 import logging
+import math
+import os
 import sysconfig
+import time
 
+import chess
+import chess.pgn
+import chess.polyglot
+import chess.syzygy
 import cpufeature
+import psutil
 
 '''
 Import the chess engine module flavor that best matches the CPU capabilities.
@@ -51,10 +60,10 @@ hide the console if not running from a CMD prompt or Windows Terminal
 def _hide_console():
     # Running under Windows, but not from under CMD.EXE or Windows Terminal (PowerShell)?
     if sysconfig.get_platform().startswith('win') and all(
-        (v not in environ) for v in ['PROMPT', 'WT_SESSION']
+        (v not in os.environ) for v in ['PROMPT', 'WT_SESSION']
         ):
         # Grandparent is None if running under Python interpreter in CMD.
-        p = Process().parent().parent()
+        p = psutil.Process().parent().parent()
         # Make an exception and show the window if started from explorer.exe.
         if p and p.name().lower() != 'explorer.exe':
             import ctypes
