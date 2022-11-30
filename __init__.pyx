@@ -44,6 +44,7 @@ from datetime import datetime
 
 import chess
 import chess.pgn
+import chess.polyglot
 import chess.syzygy
 import logging
 import platform
@@ -1237,6 +1238,42 @@ def nnue_init(data_dir, eval_file = NNUE_FILE):
 
 def nnue_ok():
     return USE_NNUE
+
+
+# ---------------------------------------------------------------------
+# Polyglot opening book.
+# ---------------------------------------------------------------------
+_book = [None]
+
+
+def opening_book():
+    return _book[0]
+
+
+def opening_book_init(filepath: str):
+    _book[0] = None
+    try:
+        _book[0] = chess.polyglot.MemoryMappedReader(filepath)
+    except FileNotFoundError as e:
+        pass
+    except:
+        logging.exception(opening_book_init.__name__)
+    logging.debug(f'{filepath}: {_book[0]}')
+    return _book[0] != None
+
+
+def opening_book_lookup(board: chess.Board, best_opening: bool=False):
+    if _book[0] is not None:
+        try:
+            if best_opening:
+                entry = _book[0].find(board)
+            else:
+                entry = _book[0].weighted_choice(board)
+            return entry
+        except IndexError:
+            pass
+        except:
+            logging.exception(opening_book_lookup.__name__)
 
 
 # ---------------------------------------------------------------------

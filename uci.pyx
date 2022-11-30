@@ -38,7 +38,6 @@ import time
 from math import copysign
 
 import chess
-import chess.polyglot
 import cpufeature
 import importlib
 
@@ -94,6 +93,10 @@ def _set_eval_file(eval_file):
     return False
 
 
+def _strbool(b):
+    return str(b).lower()
+
+
 cdef int _to_int(x):
     return int(float(x))
 
@@ -136,20 +139,10 @@ class UCI:
         )
         logging.debug(f'algorithm set to: {self.algorithm}')
 
-    # Possible improvements: support a folder of opening books rather
-    # than one single Polyglot file (that's what the lichess bot does),
-    # and expose the name of the file (or directory) to UCI setoption.
 
     def init_opening_book(self):
-        self.book = None
-        self.use_opening_book = False
-        try:
-            self.book = chess.polyglot.MemoryMappedReader(self.args.book)
-            self.use_opening_book = True
-        except FileNotFoundError as e:
-            pass
-        except:
-            logging.exception('opening book')
+        self.use_opening_book = engine.opening_book_init(self.args.book)
+        logging.debug(f'use_opening_book={self.use_opening_book}')
 
 
     def cancel(self):
@@ -204,18 +197,11 @@ class UCI:
 
         # Use opening book if enabled, and not in analyis mode.
         if self.use_opening_book and not analysis:
-            try:
-                if self.best_opening:
-                    entry = self.book.find(self.board)
-                else:
-                    entry = self.book.weighted_choice(self.board)
+            entry = engine.opening_book_lookup(self.board)
+            if entry:
                 logging.debug(entry)
                 self.output_best(entry.move, request_ponder=False)
                 return True
-            except IndexError:
-                pass
-            except:
-                logging.exception('opening book')
 
         logging.debug(f'movetime={movetime:.1f} movestogo={movestogo} fen={self.board.epd()}')
 
@@ -387,12 +373,12 @@ class UCI:
 
         self.output(f'option name Algorithm type combo default {self.args.algorithm} ' + \
             ' '.join([f'var {k}' for k in ALGORITHM.keys()]))
-        self.output(f'option name BestOpening type check default {str(self.best_opening).lower()}')
+        self.output(f'option name BestOpening type check default {_strbool(self.best_opening)}')
         if engine.nnue_ok():
             self.output(f'option name EvalFile type string default {engine.NNUE_FILE}')
-        if self.book:
-            self.output('option name OwnBook type check default true')
-        self.output(f'option name Ponder type check default {str(self.ponder_enabled).lower()}')
+        if engine.opening_book():
+            self.output(f'option name OwnBook type check default {_strbool(self.use_opening_book)}')
+        self.output(f'option name Ponder type check default {_strbool(self.ponder_enabled)}')
         syzygy_path = engine.syzygy_path()
         if syzygy_path:
             self.output(f'option name SyzygyPath type string default {syzygy_path}')
