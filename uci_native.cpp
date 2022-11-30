@@ -248,6 +248,7 @@ private:
     /** position() helper */
     void apply_moves(const Arguments &moves)
     {
+        _last_move = chess::BaseMove();
         for (const auto &m : moves)
             if (m.size() >= 4)
             {
@@ -262,6 +263,7 @@ private:
                     chess::zobrist_update(prev, move, _buf._state);
                     ASSERT(_buf._state._hash == chess::zobrist_hash(_buf._state));
                     search::Context::_history->insert(_buf._state);
+                    _last_move = move;
                 }
             }
     }
@@ -360,6 +362,7 @@ private:
     bool _ponder = false;
     bool _use_opening_book = false;
     bool _best_book_move = false;
+    chess::BaseMove _last_move;
     static bool _debug;
 };
 
@@ -664,15 +667,18 @@ void UCI::position(const Arguments &args)
 
 score_t UCI::search()
 {
-    _tt.init();
-
     if (!search::Context::_history)
         search::Context::_history = std::make_unique<search::History>();
 
+    _tt.init();
+
     auto& ctxt = context();
+    ctxt.set_tt(&_tt);
+
     ctxt._algorithm = _algorithm;
     ctxt._max_depth = 1;
-    ctxt.set_tt(&_tt);
+    ctxt._move = _last_move;
+    ctxt._prev = chess::BaseMove();
 
     return search::iterative(ctxt, _tt, _depth + 1);
 }
