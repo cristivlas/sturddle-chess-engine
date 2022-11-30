@@ -349,7 +349,6 @@ void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::Iteratio
 {
     std::ostringstream out;
 
-    /* TODO seldepth accuracy */
     out << "info depth " << ctxt->iteration() << " seldepth " << ctxt->get_tt()->_eval_depth;
 
     if (std::abs(info->score) > MATE_HIGH)

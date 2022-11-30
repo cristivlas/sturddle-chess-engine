@@ -1467,7 +1467,7 @@ namespace search
      */
     score_t Context::_evaluate()
     {
-        _tt->_eval_depth = _ply;
+        _tt->_eval_depth = std::max(_ply, _tt->_eval_depth);
 
         if (_eval == SCORE_MIN)
         {
