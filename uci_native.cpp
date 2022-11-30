@@ -302,8 +302,8 @@ private:
                 if (_ponder && request_ponder)
                 {
                     const auto &pv = _tt.get_pv();
-                    if (pv.size() > 1 && pv[0] == move)
-                        out << " ponder " << pv[1].uci();
+                    if (pv.size() > 2 && pv[1] == move)
+                        out << " ponder " << pv[2].uci();
                 }
                 output(out.str());
             }
@@ -365,7 +365,7 @@ private:
     static bool _debug;
 };
 
-bool UCI::_debug = false;
+bool UCI::_debug = true;
 
 /** Estimate number of moves (not plies!) until mate. */
 static INLINE int mate_distance(score_t score, const search::PV &pv)
