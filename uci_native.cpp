@@ -36,14 +36,12 @@ static void log_error(T err)
 
 static constexpr std::string_view START_POS{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
 
-template <typename T>
-static void log_debug(T msg)
+template <typename T> static void log_debug(T msg)
 {
     search::Context::log_message(LogLevel::DEBUG, std::to_string(msg));
 }
 
-template <typename T>
-static void log_warning(T warn)
+template <typename T> static void log_warning(T warn)
 {
     search::Context::log_message(LogLevel::WARN, std::to_string(warn));
 }
@@ -279,12 +277,13 @@ private:
 
     INLINE search::Context &context() { return *_buf.as_context(); }
 
-    template <bool debug = true>
-    static void output(const std::string_view out)
+    template <bool flush=true> static void output(const std::string_view out)
     {
-        std::cout << out << std::endl;
-        if (debug && _debug)
+        std::cout << out << "\n";
+        if (_debug)
             log_debug(std::format("<<< {}", out));
+        if constexpr(flush)
+            std::cout << std::flush;
     }
 
     void output_best(const chess::BaseMove &move, bool request_ponder)
@@ -366,7 +365,7 @@ private:
     static bool _debug;
 };
 
-bool UCI::_debug = true;
+bool UCI::_debug = false;
 
 /** Estimate number of moves (not plies!) until mate. */
 static INLINE int mate_distance(score_t score, const search::PV &pv)
@@ -403,6 +402,11 @@ void UCI::run()
     while (true)
     {
         std::getline(std::cin, cmd);
+        const auto nl = cmd.find_last_not_of("\n\r");
+        if (nl != std::string::npos)
+            cmd.erase(nl + 1);
+        if (cmd.empty())
+            continue;
         if (_debug)
             log_debug(std::format(">>> {}", cmd));
         lowercase(cmd);
@@ -722,10 +726,13 @@ void UCI::uci()
         _options[lowercase(name)] = std::make_shared<OptionParam>(p.first, p.second);
     }
     /* show available options */
-    std::ostringstream opts;
     for (const auto &opt : _options)
-        opt.second->print(opts << "\noption ");
-    output<false>(opts.str());
+    {
+        std::ostringstream opts;
+        opt.second->print(opts << "option name ");
+        output<false>(opts.str());
+    }
+    output("uciok");
 }
 
 extern "C" void run_uci_loop(const char *name, const char *version)
