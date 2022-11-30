@@ -5,6 +5,7 @@ Alternative engine bootloader that uses the native UCI implementation.
 import argparse
 import importlib
 import logging
+import sysconfig
 
 import cpufeature
 
@@ -43,11 +44,28 @@ def _configure_logging(args):
     format = '%(asctime)s %(levelname)-8s %(process)d %(message)s'
     logging.basicConfig(level=logging.INFO, filename=args.logfile, format=format)
 
+'''
+Workaround for --onefile executable built with PyInstaller:
+hide the console if not running from a CMD prompt or Windows Terminal
+'''
+def _hide_console():
+    # Running under Windows, but not from under CMD.EXE or Windows Terminal (PowerShell)?
+    if sysconfig.get_platform().startswith('win') and all(
+        (v not in environ) for v in ['PROMPT', 'WT_SESSION']
+        ):
+        # Grandparent is None if running under Python interpreter in CMD.
+        p = Process().parent().parent()
+        # Make an exception and show the window if started from explorer.exe.
+        if p and p.name().lower() != 'explorer.exe':
+            import ctypes
+            ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sturddle Chess Engine bootloader')
     parser.add_argument('-l', '--logfile', default='sturddle.log')
     args = parser.parse_args()
     _configure_logging(args)
+    _hide_console()
     try:
         engine.uci('Sturddle UCI')
     except KeyboardInterrupt:

@@ -22,7 +22,7 @@ static void log_error(T err)
     {
     }
 }
-#if NATIVE_UCI
+#if NATIVE_UCI /* experimental */
 #include <cmath>
 #include <format>
 #include <memory>
@@ -223,9 +223,7 @@ public:
         _options.emplace("evalfile", std::make_shared<OptionEvalFile>(_eval_file));
         _options.emplace("syzygypath", std::make_shared<OptionSyzygy>());
 
-        /* TODO: */
-        /* Algorithm */
-        /* Opening Book */
+        /* Options TODO: Algorithm, Opening Book */
     }
 
     void run();
@@ -365,7 +363,7 @@ private:
     static bool _debug;
 };
 
-bool UCI::_debug = true;
+bool UCI::_debug = false;
 
 /** Estimate number of moves (not plies!) until mate. */
 static INLINE int mate_distance(score_t score, const search::PV &pv)
