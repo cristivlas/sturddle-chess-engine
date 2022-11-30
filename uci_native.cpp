@@ -530,7 +530,8 @@ void UCI::go(const Arguments &args)
 
     if (!movetime)
         movetime = time_remaining[turn] / std::max(movestogo, 40);
-    log_debug("movetime=" + std::to_string(movetime));
+    if (_debug)
+        log_debug("movetime=" + std::to_string(movetime));
 
     _extended_time = 0;
     _output_expected = true;
@@ -719,6 +720,7 @@ void UCI::stop()
 
 void UCI::uci()
 {
+    std::ios_base::sync_with_stdio(false);
     output<false>(std::format("id name {}-{}", _name, _version));
     output<false>("id author Cristi Vlasceanu");
 
