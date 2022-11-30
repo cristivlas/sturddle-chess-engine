@@ -601,7 +601,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     ASSERT(ctxt._alpha < ctxt._beta);
     ASSERT(ctxt._ply == 0 || !ctxt._move || ctxt._move._group < MoveOrder::UNORDERED_MOVES);
 
-    ctxt.set_tt(&table);
+    ASSERT(ctxt.get_tt() == &table);
 
     if (ctxt._ply == 0) /* root? */
     {

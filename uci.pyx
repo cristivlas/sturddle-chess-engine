@@ -108,7 +108,6 @@ class UCI:
         self.output_expected = False
         self.extended_time = 0
         self.board = chess.Board()
-        self.node_count = 0
         self.i_cb = self.show_thinking if args.show_thinking else None
         self.init_algo()
         self.init_opening_book()
@@ -169,7 +168,6 @@ class UCI:
     def _go(self, cmd_args):
         self.cancel() # in case there's anything lingering in the background
         self.depth = 100
-        self.node_count = 0
         explicit_movetime = False
         analysis = False
         movestogo = 40
@@ -235,8 +233,7 @@ class UCI:
         # Support 'go infinite' commands (analysis mode):
         # run in background if no time limit, and expect
         # the GUI to send a 'stop' command later.
-        if movetime < 0:
-            assert analysis
+        if analysis:
             logging.debug('starting infinite search')
             self.algorithm.time_limit_ms = -1
             self.pondering = True

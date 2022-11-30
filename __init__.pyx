@@ -1324,5 +1324,8 @@ def version():
 # ---------------------------------------------------------------------
 # in progress: native C++ UCI implementation
 # ---------------------------------------------------------------------
-def uci_loop(name: str):
-    run_uci_loop(name.encode(), version().encode())
+def uci(name: str):
+    cdef string n = name.encode()
+    cdef string v = version().encode()
+    with nogil:
+        run_uci_loop(n.c_str(), v.c_str())

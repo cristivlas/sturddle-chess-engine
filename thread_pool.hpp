@@ -86,6 +86,11 @@ public:
             std::this_thread::yield();
     }
 
+    int tasks_pending() const
+    {
+        return _tasks_pending.load(std::memory_order_relaxed);
+    }
+
 private:
     void work(size_t index)
     {
