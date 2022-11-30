@@ -49,6 +49,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     _configure_logging(args)
     try:
-        engine.uci('Sturddle')
+        engine.uci('Sturddle UCI')
     except KeyboardInterrupt:
         pass

@@ -31,6 +31,7 @@ static void log_error(T err)
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+#include "nnue.h"
 #include "thread_pool.hpp" /* pondering, go infinite */
 
 static constexpr std::string_view START_POS{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
@@ -47,16 +48,13 @@ static void log_warning(T warn)
     search::Context::log_message(LogLevel::WARN, std::to_string(warn));
 }
 
-template <typename T>
-static INLINE T &lowercase(T &s)
+template <typename T> static INLINE T &lowercase(T &s)
 {
-    std::transform(s.begin(), s.end(), s.begin(), [](auto c)
-                   { return std::tolower(c); });
+    std::transform(s.begin(), s.end(), s.begin(), [](auto c) { return std::tolower(c); });
     return s;
 }
 
-template <typename T>
-static INLINE std::string join(std::string_view sep, const T &v)
+template <typename T> static INLINE std::string join(std::string_view sep, const T &v)
 {
     std::ostringstream s;
     for (const auto &elem : v)
@@ -93,20 +91,10 @@ namespace
     /*
     https://stackoverflow.com/questions/27866909/get-function-arity-from-template-parameter
     */
-    template <typename T>
-    struct arity
-    {
-    };
+    template <typename T> struct arity {};
 
     template <typename R, typename C, typename... Args>
-    struct arity<R (C::*)(Args...)> : std::integral_constant<unsigned, sizeof...(Args)>
-    {
-    };
-
-    template <typename R, typename C, typename... Args>
-    struct arity<R (C::*)(Args...) const> : std::integral_constant<unsigned, sizeof...(Args)>
-    {
-    };
+    struct arity<R (C::*)(Args...)> : std::integral_constant<unsigned, sizeof...(Args)> {};
 
     struct Option
     {
@@ -122,8 +110,7 @@ namespace
         void print(std::ostream &out) const override { out << _name << " "; }
     };
 
-    template <typename T>
-    INLINE int to_int(T v)
+    template <typename T> INLINE int to_int(T v)
     {
         return std::stoi(std::string(v));
     }
@@ -168,9 +155,47 @@ namespace
                 out << "type spin default " << _p.val << " min " << _p.min_val << " max " << _p.max_val;
         }
 
+        void set(std::string_view value) override { _set_param(_name, to_int(value)); }
+    };
+
+    struct OptionEvalFile : public OptionBase
+    {
+        std::string &_eval_file;
+        OptionEvalFile(std::string& eval_file) : OptionBase("EvalFile"), _eval_file(eval_file) {}
+
+        void print(std::ostream& out) const override
+        {
+            OptionBase::print(out);
+            out << "type string default " << _eval_file;
+        }
+
         void set(std::string_view value) override
         {
-            _set_param(_name, to_int(value));
+            if (nnue_init(std::string(value).c_str()))
+            {
+                _eval_file = value;
+            }
+            else
+            {
+                log_error(std::format("invalid NNUE file: {}", value));
+                _exit(-1); /* refuse to run without valid NNUE */
+            }
+        }
+    };
+
+    struct OptionSyzygy : public OptionBase
+    {
+        OptionSyzygy() : OptionBase("SyzygyPath") {}
+
+        void print(std::ostream& out) const override
+        {
+            OptionBase::print(out);
+            out << "type string default " << search::Context::syzygy_path();
+        }
+
+        void set(std::string_view value) override
+        {
+            search::Context::set_syzygy_path(std::string(value));
         }
     };
 }
@@ -185,22 +210,24 @@ class UCI
 
 public:
     UCI(const std::string &name, const std::string &version)
-        : _name(name), _version(version)
+        : _name(name)
+        , _version(version)
+        , _use_opening_book(search::Context::_book_init(_book))
     {
         set_start_position();
 
-        /* callbacks */
         search::Context::_on_iter = on_iteration;
 
+        _options.emplace("best opening", std::make_shared<OptionBool>("Best Opening", _best_book_move));
         _options.emplace("debug", std::make_shared<OptionBool>("Debug", _debug));
         _options.emplace("ownbook", std::make_shared<OptionBool>("OwnBook", _use_opening_book));
         _options.emplace("ponder", std::make_shared<OptionBool>("Ponder", _ponder));
+        _options.emplace("evalfile", std::make_shared<OptionEvalFile>(_eval_file));
+        _options.emplace("syzygypath", std::make_shared<OptionSyzygy>());
 
-        /** Options TODO */
+        /* TODO: */
         /* Algorithm */
-        /* Best Opening */
-        /* EvalFile */
-        /* SyzygyPath */
+        /* Opening Book */
     }
 
     void run();
@@ -323,10 +350,8 @@ private:
     search::Algorithm _algorithm = search::Algorithm::MTDF;
     search::ContextBuffer _buf;
     search::TranspositionTable _tt;
-    static bool _debug;
-    bool _output_expected = false;
-    bool _ponder = false;
-    bool _use_opening_book = false;
+    std::string _book = "book.bin";
+    std::string _eval_file = NNUE_EVAL_FILE;
     std::atomic_int _extended_time = 0; /* for pondering */
     int _depth = max_depth;
     score_t _score = 0;
@@ -334,6 +359,11 @@ private:
     const std::string _name;
     const std::string _version; /* engine version */
     std::unique_ptr<ThreadPool> _pool;
+    bool _output_expected = false;
+    bool _ponder = false;
+    bool _use_opening_book = false;
+    bool _best_book_move = false;
+    static bool _debug;
 };
 
 bool UCI::_debug = true;
@@ -512,9 +542,12 @@ void UCI::go(const Arguments &args)
     }
     else
     {
-        ASSERT_ALWAYS(!_pool || !_pool->tasks_pending());
         if (_use_opening_book)
-            log_error("TODO: support opening book!");
+            if (auto move = search::Context::_book_lookup(_buf._state, _best_book_move))
+            {
+                output_best(move, false);
+                return;
+            }
 
         ctxt->set_time_limit_ms(movetime);
         if (!explicit_movetime)

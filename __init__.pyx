@@ -58,9 +58,6 @@ ctypedef stdint.int64_t int64_t
 ctypedef stdint.uint64_t uint64_t
 
 
-NNUE_FILE = 'nn-62ef826d1a6d.nnue'
-
-
 # ostream placeholder
 cdef extern from '<iostream>' namespace 'std':
     cdef cppclass ostream:
@@ -389,8 +386,9 @@ cdef class BoardState:
 # context.h
 # ---------------------------------------------------------------------
 cdef extern from 'context.h' nogil:
-    cdef void run_uci_loop(const char* name, const char* version)
+    const char* const NNUE_EVAL_FILE
 
+    cdef void run_uci_loop(const char* name, const char* version)
     #
     # Get/set engine params via Python
     #
@@ -423,6 +421,7 @@ cdef extern from 'context.h' nogil:
         void log_init_message()
 
 
+NNUE_FILE = NNUE_EVAL_FILE.decode()
 #
 # Export nnue functions for testing.
 #
@@ -481,6 +480,8 @@ cdef extern from 'context.h' namespace 'search':
         BaseMove        _best_move
         PyObject*       _engine
 
+        bool            (*_book_init)(const string&)
+        BaseMove        (*_book_lookup)(const State&, bool)
         string          (*_epd)(const State&)
         void            (*_log_message)(int, const string&, bool)
         void            (*_on_iter)(PyObject*, Context*, const IterationInfo*)
@@ -605,6 +606,54 @@ cdef size_t vmem_avail():
 
 
 # ---------------------------------------------------------------------
+# Polyglot opening book.
+# ---------------------------------------------------------------------
+_book = [None]
+
+
+def opening_book():
+    return _book[0]
+
+
+def opening_book_init(filepath: str):
+    _book[0] = None
+    try:
+        _book[0] = chess.polyglot.MemoryMappedReader(filepath)
+    except FileNotFoundError as e:
+        pass
+    except:
+        logging.exception(opening_book_init.__name__)
+    logging.debug(f'{filepath}: {_book[0]}')
+    return _book[0] != None
+
+
+def opening_book_lookup(board: chess.Board, best_move: bool=False):
+    if _book[0] is not None:
+        try:
+            if best_move:
+                entry = _book[0].find(board)
+            else:
+                entry = _book[0].weighted_choice(board)
+            return entry
+        except IndexError:
+            pass
+        except:
+            logging.exception(opening_book_lookup.__name__)
+
+
+cdef bool book_init(const string& filepath) except* with gil:
+    return opening_book_init(filepath.decode())
+
+
+cdef BaseMove book_lookup(const State& state, bool best_move) except* with gil:
+    board = board_from_cxx_state(state)
+    entry = opening_book_lookup(board, best_move)
+    if entry and entry.move:
+        return cxx_move(entry.move)
+    return BaseMove()
+
+
+# ---------------------------------------------------------------------
 # Python wrappers for C++ Context
 # ---------------------------------------------------------------------
 cdef class ContextValue:
@@ -636,6 +685,8 @@ cdef class NodeContext:
         self._value = ContextValue()
         self._ctxt = address(self._value._ctxt)
 
+        self._ctxt._book_init = <bool (*)(const string&)> book_init
+        self._ctxt._book_lookup = <BaseMove (*)(const State&, bool)> book_lookup
         self._ctxt._epd = <string (*)(const State&)> epd
         self._ctxt._log_message = <void (*)(int, const string&, bool)> log_message
         self._ctxt._pgn = <string (*)(Context*)> pgn
@@ -1225,7 +1276,6 @@ def test_incremental_updates(fen):
 
 
 def nnue_init(data_dir, eval_file = NNUE_FILE):
-    # logging.info(f'data_dir={data_dir}, eval_file={eval_file}')
     if not data_dir:
         data_dir = os.path.dirname(__file__)
     data_dir = os.path.realpath(data_dir)
@@ -1238,42 +1288,6 @@ def nnue_init(data_dir, eval_file = NNUE_FILE):
 
 def nnue_ok():
     return USE_NNUE
-
-
-# ---------------------------------------------------------------------
-# Polyglot opening book.
-# ---------------------------------------------------------------------
-_book = [None]
-
-
-def opening_book():
-    return _book[0]
-
-
-def opening_book_init(filepath: str):
-    _book[0] = None
-    try:
-        _book[0] = chess.polyglot.MemoryMappedReader(filepath)
-    except FileNotFoundError as e:
-        pass
-    except:
-        logging.exception(opening_book_init.__name__)
-    logging.debug(f'{filepath}: {_book[0]}')
-    return _book[0] != None
-
-
-def opening_book_lookup(board: chess.Board, best_opening: bool=False):
-    if _book[0] is not None:
-        try:
-            if best_opening:
-                entry = _book[0].find(board)
-            else:
-                entry = _book[0].weighted_choice(board)
-            return entry
-        except IndexError:
-            pass
-        except:
-            logging.exception(opening_book_lookup.__name__)
 
 
 # ---------------------------------------------------------------------

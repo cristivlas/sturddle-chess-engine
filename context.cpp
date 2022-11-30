@@ -440,6 +440,8 @@ namespace search
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
 
+    bool (*Context::_book_init)(const std::string&) = nullptr;
+    BaseMove (*Context::_book_lookup)(const State&, bool) = nullptr;
     std::string (*Context::_epd)(const State&) = nullptr;
     void (*Context::_log_message)(int, const std::string&, bool) = nullptr;
 

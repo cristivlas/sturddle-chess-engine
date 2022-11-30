@@ -32,10 +32,10 @@
 #include "search.h"
 #include "utility.h"
 
+constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
+constexpr auto NNUE_EVAL_FILE = "nn-62ef826d1a6d.nnue";
 
 extern bool USE_NNUE;
-
-constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
 
 /* Configuration API */
 struct Param { int val = 0; int min_val; int max_val; std::string group; };
@@ -381,6 +381,8 @@ namespace search
          */
         static PyObject*    _engine; /* searcher instance */
 
+        static bool         (*_book_init)(const std::string&);
+        static BaseMove     (*_book_lookup)(const State&, bool);
         static std::string  (*_epd)(const State&);
         static void         (*_log_message)(int, const std::string&, bool);
         static void         (*_on_iter)(PyObject*, Context*, const IterationInfo*);
