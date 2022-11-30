@@ -43,7 +43,7 @@ import cpufeature
 import importlib
 
 from os import environ, path
-from psutil import Process, virtual_memory
+from psutil import Process
 from worker import WorkerThread
 
 '''
@@ -69,7 +69,7 @@ for eng in flavors:
         continue
     try:
         engine = importlib.import_module(eng)
-        globals().update(engine.__dict__)
+        globals().update({k:v for k, v in engine.__dict__.items() if not k.startswith('_')})
         break
     except:
         pass
@@ -260,7 +260,7 @@ class UCI:
     def _ponder(self):
         """
         This handler runs on background thread.
-        It starts with a zero time limit (infinite search) and expects that:
+        It starts with infinite time limit and expects that:
         either STOP is received, and the _stop handler will set the cancel
         flag and snooze in a loop until the pondering variable becomes False;
         or PONDERHIT is received, which will extend the search by extended_time

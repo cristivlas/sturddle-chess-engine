@@ -23,6 +23,7 @@ static void log_error(T err)
     }
 }
 #if NATIVE_UCI
+#include <cmath>
 #include <format>
 #include <memory>
 #include <ranges>
@@ -191,10 +192,11 @@ public:
         /* callbacks */
         search::Context::_on_iter = on_iteration;
 
+        _options.emplace("debug", std::make_shared<OptionBool>("Debug", _debug));
         _options.emplace("ownbook", std::make_shared<OptionBool>("OwnBook", _use_opening_book));
         _options.emplace("ponder", std::make_shared<OptionBool>("Ponder", _ponder));
 
-        /** Options TODO: */
+        /** Options TODO */
         /* Algorithm */
         /* Best Opening */
         /* EvalFile */
@@ -217,19 +219,48 @@ private:
     void newgame();
 
     /** Context callbacks */
-    static void on_iteration(PyObject*, search::Context*, const search::IterationInfo*);
+    static void on_iteration(PyObject *, search::Context *, const search::IterationInfo *);
 
 private:
-    /** impl details */
+    /** position() helper */
+    void apply_moves(const Arguments &moves)
+    {
+        for (const auto &m : moves)
+            if (m.size() >= 4)
+            {
+                chess::Square from, to;
+
+                if (chess::parse_square(m, from) && chess::parse_square(std::string_view(&m[2], 2), to))
+                {
+                    const auto promo = m.size() > 4 ? chess::piece_type(m[4]) : chess::PieceType::NONE;
+                    const auto move = chess::BaseMove(from, to, promo);
+                    const auto prev = _buf._state;
+                    _buf._state.apply_move(move);
+                    chess::zobrist_update(prev, move, _buf._state);
+                    ASSERT(_buf._state._hash == chess::zobrist_hash(_buf._state));
+                    search::Context::_history->insert(_buf._state);
+                }
+            }
+    }
+
+    ThreadPool &background()
+    {
+        if (!_pool)
+            _pool = std::make_unique<ThreadPool>(1);
+        return *_pool;
+    }
+
+    INLINE search::Context &context() { return *_buf.as_context(); }
+
     template <bool debug = true>
     static void output(const std::string_view out)
     {
         std::cout << out << std::endl;
         if (debug && _debug)
-            log_debug(out);
+            log_debug(std::format("<<< {}", out));
     }
 
-    void output_best(const chess::BaseMove& move, bool request_ponder)
+    void output_best(const chess::BaseMove &move, bool request_ponder)
     {
         if (_output_expected)
         {
@@ -244,7 +275,7 @@ private:
                 out << "bestmove " << move.uci();
                 if (_ponder && request_ponder)
                 {
-                    const auto& pv = _tt.get_pv();
+                    const auto &pv = _tt.get_pv();
                     if (pv.size() > 1 && pv[0] == move)
                         out << " ponder " << pv[1].uci();
                 }
@@ -254,7 +285,7 @@ private:
     }
 
     template <typename F>
-    INLINE void Invoke(const std::string &cmd, F f, const Arguments &args)
+    INLINE void invoke(const std::string &cmd, F f, const Arguments &args)
     {
         try
         {
@@ -280,7 +311,11 @@ private:
         _buf._state = chess::State();
         _buf._state.castling_rights = chess::BB_DEFAULT_CASTLING_RIGHTS;
         chess::epd::parse_pos(START_POS, _buf._state);
+        _buf._state.rehash();
     }
+
+    /** think on opponent's time */
+    void ponder();
 
     /** iterative deepening search */
     score_t search();
@@ -292,6 +327,7 @@ private:
     bool _output_expected = false;
     bool _ponder = false;
     bool _use_opening_book = false;
+    std::atomic_int _extended_time = 0; /* for pondering */
     int _depth = max_depth;
     score_t _score = 0;
     EngineOptions _options;
@@ -300,26 +336,33 @@ private:
     std::unique_ptr<ThreadPool> _pool;
 };
 
-bool UCI::_debug = false;
+bool UCI::_debug = true;
 
+/** Estimate number of moves (not plies!) until mate. */
+static INLINE int mate_distance(score_t score, const search::PV &pv)
+{
+    return std::copysign((std::max<int>(CHECKMATE - std::abs(score), pv.size()) + 1) / 2, score);
+}
 
 /* static */
-void UCI::on_iteration(PyObject*, search::Context* ctxt, const search::IterationInfo* info)
+void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *info)
 {
     std::ostringstream out;
 
     /* TODO seldepth accuracy */
     out << "info depth " << ctxt->iteration() << " seldepth " << ctxt->get_tt()->_eval_depth;
 
-    /* TODO: mate distance. */
-    out << " score cp " << info->score;
+    if (std::abs(info->score) > MATE_HIGH)
+        out << " mate " << mate_distance(info->score, ctxt->get_pv());
+    else
+        out << " score cp " << info->score;
 
     out << " time " << info->milliseconds;
     out << " nodes " << info->nodes << " knps " << int(info->knps * 1000);
     out << " hashfull " << int(search::TranspositionTable::usage() * 10);
 
     out << " pv ";
-    for (const auto& m : std::ranges::subrange(ctxt->get_pv().begin() + 1, ctxt->get_pv().end()))
+    for (const auto &m : std::ranges::subrange(ctxt->get_pv().begin() + 1, ctxt->get_pv().end()))
         out << m.uci() << " ";
 
     output(out.str());
@@ -331,6 +374,8 @@ void UCI::run()
     while (true)
     {
         std::getline(std::cin, cmd);
+        if (_debug)
+            log_debug(std::format(">>> {}", cmd));
         lowercase(cmd);
         if (cmd == "quit")
             break;
@@ -363,28 +408,28 @@ void UCI::dispatch(const std::string &cmd, const Arguments &args)
         switch (iter->second)
         {
         case Command::GO:
-            Invoke(cmd, &UCI::go, args);
+            invoke(cmd, &UCI::go, args);
             break;
         case Command::ISREADY:
-            Invoke(cmd, &UCI::isready, args);
+            invoke(cmd, &UCI::isready, args);
             break;
         case Command::PONDERHIT:
-            Invoke(cmd, &UCI::ponderhit, args);
+            invoke(cmd, &UCI::ponderhit, args);
             break;
         case Command::POSITION:
-            Invoke(cmd, &UCI::position, args);
+            invoke(cmd, &UCI::position, args);
             break;
         case Command::SETOPTION:
-            Invoke(cmd, &UCI::setoption, args);
+            invoke(cmd, &UCI::setoption, args);
             break;
         case Command::STOP:
-            Invoke(cmd, &UCI::stop, args);
+            invoke(cmd, &UCI::stop, args);
             break;
         case Command::UCI:
-            Invoke(cmd, &UCI::uci, args);
+            invoke(cmd, &UCI::uci, args);
             break;
         case Command::UCINEWGAME:
-            Invoke(cmd, &UCI::newgame, args);
+            invoke(cmd, &UCI::newgame, args);
             break;
         default:
             break;
@@ -403,7 +448,7 @@ void UCI::go(const Arguments &args)
 {
     stop();
 
-    bool explicit_movetime = false, analysis = false, ponder = false;
+    bool explicit_movetime = false, do_analysis = false, do_ponder = false;
     int movestogo = 40, movetime = 0;
     int time_remaining[] = {0, 0};
     auto turn = _buf._state.turn;
@@ -416,7 +461,7 @@ void UCI::go(const Arguments &args)
         if (a == "depth")
         {
             _depth = to_int(next(args, i));
-            analysis = true;
+            do_analysis = true;
         }
         else if (a == "movetime")
         {
@@ -437,13 +482,12 @@ void UCI::go(const Arguments &args)
         }
         else if (a == "ponder")
         {
-            ASSERT_ALWAYS(_ponder);
-            ponder = true;
+            do_ponder = _ponder;
         }
         else if (a == "infinite")
         {
             movetime = -1;
-            analysis = true;
+            do_analysis = true;
         }
     }
     /* initialize search context */
@@ -454,18 +498,18 @@ void UCI::go(const Arguments &args)
         movetime = time_remaining[turn] / std::max(movestogo, 40);
     log_debug("movetime=" + std::to_string(movetime));
 
+    _extended_time = 0;
     _output_expected = true;
 
-    if (ponder)
+    if (do_ponder)
     {
-        log_error("TODO: support pondering!");
+        _extended_time = std::max(1, movetime);
+        background().push_task([this]{ ponder(); });
     }
-    else if (analysis)
+    else if (do_analysis)
     {
         ctxt->set_time_limit_ms(-1);
-        if (!_pool)
-            _pool = std::make_unique<ThreadPool>(1);
-        _pool->push_task([this] { search(); });
+        background().push_task([this]{ search(); });
     }
     else
     {
@@ -484,9 +528,13 @@ void UCI::go(const Arguments &args)
     }
 }
 
+/**
+ * This command must always be answered with "readyok" and can be sent also
+ * when the engine is calculating in which case the engine should also immediately
+ * answer with "readyok" without stopping the search.
+ */
 INLINE void UCI::isready()
 {
-    stop();
     output("readyok");
 }
 
@@ -497,16 +545,51 @@ void UCI::newgame()
     set_start_position();
 }
 
+/**
+ * Runs on a background thread with infinite time, and expects that:
+ * either STOP is received; or
+ * PONDERHIT is received, which extends the search by _extended_time,
+ * then sets _extended_time to 0, to indicate to this function to send out
+ * the best move when the search finishes.
+ *
+ * Pondering may finish before PONDERHIT is received, in which case
+ * it resets _extended_time and does not output a move;
+ *
+ * the ponderhit handler will send out the best move instead, when PONDERHIT
+ * is received (thus avoiding "premature bestmove in ponder" errors).
+ */
+void UCI::ponder()
+{
+    if (_debug)
+        log_debug(std::format("pondering, extended_time={}", _extended_time.load()));
+    context().set_time_limit_ms(-1 /* infinite */);
+    search();
+    if (_extended_time)
+        _extended_time = 0;
+    else
+        output_best(context()._best_move, false);
+}
+
 void UCI::ponderhit()
 {
-    /* TODO */
+    if (int ext = _extended_time)
+    {
+        _extended_time = 0;
+        context().set_time_limit_ms(ext);
+    }
+    else
+    {
+        stop();
+    }
 }
 
 void UCI::position(const Arguments &args)
 {
     stop();
+
     bool in_moves = false;
     Arguments fen, moves;
+
     for (const auto &a : args)
     {
         if (a == "fen")
@@ -516,6 +599,7 @@ void UCI::position(const Arguments &args)
         else if (a == "moves")
         {
             in_moves = true;
+            search::Context::_history = std::make_unique<search::History>();
         }
         else if (a == "startpos")
         {
@@ -539,21 +623,24 @@ void UCI::position(const Arguments &args)
         chess::epd::parse_castling(fen[2], _buf._state);
         chess::epd::parse_en_passant_target(fen[3], _buf._state);
     }
-
-    for (const auto &move : moves)
-        if (move.size() >= 4)
-        {
-            chess::Square from, to;
-
-            if (chess::parse_square(move, from) && chess::parse_square(std::string_view(&move[2], 2), to))
-            {
-                auto promo = move.size() > 4 ? chess::piece_type(move[4]) : chess::PieceType::NONE;
-                _buf._state.apply_move(chess::BaseMove(from, to, promo));
-                /* TODO set up history */
-            }
-        }
+    apply_moves(moves);
     if (_debug)
         log_debug(search::Context::epd(_buf._state));
+}
+
+score_t UCI::search()
+{
+    _tt.init();
+
+    if (!search::Context::_history)
+        search::Context::_history = std::make_unique<search::History>();
+
+    auto& ctxt = context();
+    ctxt._algorithm = _algorithm;
+    ctxt._max_depth = 1;
+    ctxt.set_tt(&_tt);
+
+    return search::iterative(ctxt, _tt, _depth + 1);
 }
 
 void UCI::setoption(const Arguments &args)
@@ -579,18 +666,6 @@ void UCI::setoption(const Arguments &args)
         log_warning(__func__ + (": " + opt_name + ": not found"));
 }
 
-score_t UCI::search()
-{
-    _tt.init();
-
-    auto ctxt = _buf.as_context();
-    ctxt->_algorithm = _algorithm;
-    ctxt->_max_depth = 1;
-    ctxt->set_tt(&_tt);
-
-    return search::iterative(*ctxt, _tt, _depth + 1);
-}
-
 void UCI::stop()
 {
     if (_pool && _pool->tasks_pending())
@@ -599,12 +674,13 @@ void UCI::stop()
         _pool->wait_for_tasks();
         ASSERT_ALWAYS(!_pool->tasks_pending());
     }
-    output_best(_buf.as_context()->_best_move, false /* ponder */);
+    output_best(context()._best_move, false);
 }
 
 void UCI::uci()
 {
     output<false>(std::format("id name {}-{}", _name, _version));
+    output<false>("id author Cristi Vlasceanu");
 
     /* refresh options */
     for (auto p : _get_param_info())
