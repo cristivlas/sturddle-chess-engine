@@ -408,6 +408,11 @@ void UCI::run()
     while (true)
     {
         std::getline(std::cin, cmd);
+        if (std::cin.fail() || std::cin.eof())
+        {
+            stop();
+            break;
+        }
         const auto nl = cmd.find_last_not_of("\n\r");
         if (nl != std::string::npos)
             cmd.erase(nl + 1);
