@@ -35,10 +35,12 @@ static void log_error(T err)
 #include "thread_pool.hpp" /* pondering, go infinite */
 
 static constexpr std::string_view START_POS{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
+static bool _debug = false;
 
 template <typename T> static void log_debug(T msg)
 {
-    search::Context::log_message(LogLevel::DEBUG, std::to_string(msg));
+    if (_debug)
+        search::Context::log_message(LogLevel::DEBUG, std::to_string(msg));
 }
 
 template <typename T> static void log_warning(T warn)
@@ -188,7 +190,10 @@ namespace
         void print(std::ostream& out) const override
         {
             OptionBase::print(out);
-            out << "type string default " << search::Context::syzygy_path();
+            out << "type string";
+            const auto &path = search::Context::syzygy_path();
+            if (!path.empty())
+                out << " default " << path;
         }
 
         void set(std::string_view value) override
@@ -249,6 +254,8 @@ private:
     void apply_moves(const Arguments &moves)
     {
         _last_move = chess::BaseMove();
+        _ply_count = 0;
+
         for (const auto &m : moves)
             if (m.size() >= 4)
             {
@@ -264,6 +271,7 @@ private:
                     ASSERT(_buf._state._hash == chess::zobrist_hash(_buf._state));
                     search::Context::_history->insert(_buf._state);
                     _last_move = move;
+                    ++_ply_count;
                 }
             }
     }
@@ -280,8 +288,7 @@ private:
     template <bool flush=true> static void output(const std::string_view out)
     {
         std::cout << out << "\n";
-        if (_debug)
-            log_debug(std::format("<<< {}", out));
+        log_debug(std::format("<<< {}", out));
         if constexpr(flush)
             std::cout << std::flush;
     }
@@ -352,7 +359,9 @@ private:
     std::string _book = "book.bin";
     std::string _eval_file = NNUE_EVAL_FILE;
     std::atomic_int _extended_time = 0; /* for pondering */
+    int _book_depth = max_depth;
     int _depth = max_depth;
+    int _ply_count =0;
     score_t _score = 0;
     EngineOptions _options;
     const std::string _name;
@@ -363,10 +372,7 @@ private:
     bool _use_opening_book = false;
     bool _best_book_move = false;
     chess::BaseMove _last_move;
-    static bool _debug;
 };
-
-bool UCI::_debug = false;
 
 /** Estimate number of moves (not plies!) until mate. */
 static INLINE int mate_distance(score_t score, const search::PV &pv)
@@ -407,8 +413,7 @@ void UCI::run()
             cmd.erase(nl + 1);
         if (cmd.empty())
             continue;
-        if (_debug)
-            log_debug(std::format(">>> {}", cmd));
+        log_debug(std::format(">>> {}", cmd));
         lowercase(cmd);
         if (cmd == "quit")
             break;
@@ -529,8 +534,7 @@ void UCI::go(const Arguments &args)
 
     if (!movetime)
         movetime = time_remaining[turn] / std::max(movestogo, 40);
-    if (_debug)
-        log_debug(std::format("movetime {}, movestogo {}", movetime, movestogo));
+    log_debug(std::format("movetime {}, movestogo {}", movetime, movestogo));
 
     _extended_time = 0;
     _output_expected = true;
@@ -547,13 +551,17 @@ void UCI::go(const Arguments &args)
     }
     else
     {
-        if (_use_opening_book)
+        if (_use_opening_book && _ply_count < _book_depth)
+        {
+            log_debug(std::format("lookup book_depth={}, ply_count={}", _book_depth, _ply_count));
             if (auto move = search::Context::_book_lookup(_buf._state, _best_book_move))
             {
                 output_best(move, false);
                 return;
             }
-
+            else
+                _book_depth = _ply_count;
+        }
         ctxt->set_time_limit_ms(movetime);
         if (!explicit_movetime)
             ctxt->set_time_info(time_remaining[turn], movestogo, _score);
@@ -597,8 +605,8 @@ void UCI::newgame()
  */
 void UCI::ponder()
 {
-    if (_debug)
-        log_debug(std::format("pondering, extended_time={}", _extended_time.load()));
+    log_debug(std::format("pondering, extended_time={}", _extended_time.load()));
+
     context().set_time_limit_ms(-1 /* infinite */);
     search();
     if (_extended_time)
@@ -661,8 +669,7 @@ void UCI::position(const Arguments &args)
         chess::epd::parse_en_passant_target(fen[3], _buf._state);
     }
     apply_moves(moves);
-    if (_debug)
-        log_debug(search::Context::epd(_buf._state));
+    log_debug(search::Context::epd(_buf._state));
 }
 
 score_t UCI::search()
@@ -740,8 +747,9 @@ void UCI::uci()
     output("uciok");
 }
 
-extern "C" void run_uci_loop(const char *name, const char *version)
+extern "C" void run_uci_loop(const char *name, const char *version, bool debug)
 {
+    _debug = debug;
     std::string err;
     try
     {

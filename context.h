@@ -1457,4 +1457,4 @@ namespace search
 
 } /* namespace */
 
-extern "C" void run_uci_loop(const char* name, const char* version);
+extern "C" void run_uci_loop(const char* name, const char* version, bool debug=false);

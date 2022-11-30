@@ -388,7 +388,7 @@ cdef class BoardState:
 cdef extern from 'context.h' nogil:
     const char* const NNUE_EVAL_FILE
 
-    cdef void run_uci_loop(const char* name, const char* version)
+    cdef void run_uci_loop(const char* name, const char* version, bool)
     #
     # Get/set engine params via Python
     #
@@ -1375,8 +1375,8 @@ def version():
 # ---------------------------------------------------------------------
 # in progress: native C++ UCI implementation
 # ---------------------------------------------------------------------
-def uci(name: str):
+def uci(name: str, debug: bool=False):
     cdef string n = name.encode()
     cdef string v = version().encode()
     with nogil:
-        run_uci_loop(n.c_str(), v.c_str())
+        run_uci_loop(n.c_str(), v.c_str(), debug)

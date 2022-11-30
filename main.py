@@ -71,11 +71,12 @@ def _hide_console():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sturddle Chess Engine bootloader')
+    parser.add_argument('-d', '--debug', action='store_true', help='enable verbose logging')
     parser.add_argument('-l', '--logfile', default='sturddle.log')
     args = parser.parse_args()
     _configure_logging(args)
     _hide_console()
     try:
-        engine.uci('Sturddle UCI')
+        engine.uci('Sturddle UCI', args.debug)
     except KeyboardInterrupt:
         pass
