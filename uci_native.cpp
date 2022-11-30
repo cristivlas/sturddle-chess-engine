@@ -25,6 +25,7 @@ static void log_error(T err)
 #if NATIVE_UCI /* experimental */
 #include <cmath>
 #include <format>
+#include <map>
 #include <memory>
 #include <ranges>
 #include <string>
@@ -96,6 +97,8 @@ namespace
     template <typename R, typename C, typename... Args>
     struct arity<R (C::*)(Args...)> : std::integral_constant<unsigned, sizeof...(Args)> {};
 
+    template <typename T> INLINE int to_int(T v) { return std::stoi(std::string(v)); }
+
     struct Option
     {
         virtual ~Option() = default;
@@ -110,10 +113,34 @@ namespace
         void print(std::ostream &out) const override { out << _name << " "; }
     };
 
-    template <typename T> INLINE int to_int(T v)
+    struct OptionAlgo : public OptionBase
     {
-        return std::stoi(std::string(v));
-    }
+        search::Algorithm &_algo;
+
+        explicit OptionAlgo(search::Algorithm& algo) : OptionBase("Algorithm"), _algo(algo) {}
+        void print(std::ostream &out) const override
+        {
+            OptionBase::print(out);
+            out << "type combo default " << name(_algo) << " var mtdf var negascout var negamax";
+        }
+        std::string_view name(search::Algorithm algo) const
+        {
+            switch (algo)
+            {
+            case search::Algorithm::MTDF: return "mtdf";
+            case search::Algorithm::NEGAMAX: return "negamax";
+            case search::Algorithm::NEGASCOUT: return "negascout";
+            }
+            return "";
+        }
+        void set(std::string_view value) override
+        {
+            if (value == "mtdf") _algo = search::Algorithm::MTDF;
+            else if (value == "negascout") _algo = search::Algorithm::NEGASCOUT;
+            else if (value == "negamax") _algo = search::Algorithm::NEGAMAX;
+        }
+    };
+
 
     struct OptionBool : public OptionBase
     {
@@ -142,9 +169,7 @@ namespace
     {
         const Param _p;
 
-        OptionParam(const std::string &name, const Param &param) : OptionBase(name), _p(param)
-        {
-        }
+        OptionParam(const std::string &name, const Param &param) : OptionBase(name), _p(param) {}
 
         void print(std::ostream &out) const override
         {
@@ -161,7 +186,7 @@ namespace
     struct OptionEvalFile : public OptionBase
     {
         std::string &_eval_file;
-        OptionEvalFile(std::string& eval_file) : OptionBase("EvalFile"), _eval_file(eval_file) {}
+        explicit OptionEvalFile(std::string& eval_file) : OptionBase("EvalFile"), _eval_file(eval_file) {}
 
         void print(std::ostream& out) const override
         {
@@ -206,7 +231,7 @@ namespace
 class UCI
 {
     using Arguments = std::vector<std::string_view>;
-    using EngineOptions = std::unordered_map<std::string, std::shared_ptr<Option>>;
+    using EngineOptions = std::map<std::string, std::shared_ptr<Option>>;
     using ThreadPool = thread_pool<int>;
 
     static constexpr int max_depth = 100;
@@ -221,14 +246,13 @@ public:
 
         search::Context::_on_iter = on_iteration;
 
+        _options.emplace("algorithm", std::make_shared<OptionAlgo>(_algorithm));
         _options.emplace("best opening", std::make_shared<OptionBool>("Best Opening", _best_book_move));
         _options.emplace("debug", std::make_shared<OptionBool>("Debug", _debug));
         _options.emplace("ownbook", std::make_shared<OptionBool>("OwnBook", _use_opening_book));
         _options.emplace("ponder", std::make_shared<OptionBool>("Ponder", _ponder));
         _options.emplace("evalfile", std::make_shared<OptionEvalFile>(_eval_file));
         _options.emplace("syzygypath", std::make_shared<OptionSyzygy>());
-
-        /* Options TODO: Algorithm, Opening Book */
     }
 
     void run();
@@ -361,7 +385,7 @@ private:
     std::atomic_int _extended_time = 0; /* for pondering */
     int _book_depth = max_depth;
     int _depth = max_depth;
-    int _ply_count =0;
+    int _ply_count = 0;
     score_t _score = 0;
     EngineOptions _options;
     const std::string _name;
