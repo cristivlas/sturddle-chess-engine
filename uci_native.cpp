@@ -180,7 +180,7 @@ namespace
                 out << "type spin default " << _p.val << " min " << _p.min_val << " max " << _p.max_val;
         }
 
-        void set(std::string_view value) override { _set_param(_name, to_int(value)); }
+        void set(std::string_view value) override { _set_param(_name, to_int(value), true); }
     };
 
     struct OptionEvalFile : public OptionBase
