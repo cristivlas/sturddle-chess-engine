@@ -1346,7 +1346,7 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
             info.knps = ms ? info.nodes / ms : info.nodes;
             info.milliseconds = ms;
 
-            cython_wrapper::call(Context::_on_iter, Context::_engine, &ctxt, &info);
+            (*Context::_on_iter)(Context::_engine, &ctxt, &info);
         }
         ++i;
     }

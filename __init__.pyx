@@ -1023,7 +1023,7 @@ cdef class SearchAlgorithm:
     #
     # Callback wrappers
     #
-    cdef void on_iter(self, Context* ctxt, const IterationInfo* i) except*:
+    cdef void on_iter(self, Context* ctxt, const IterationInfo* i) except* with gil:
         self.iteration_cb(
             self,
             NodeContext.from_cxx_context(ctxt),
