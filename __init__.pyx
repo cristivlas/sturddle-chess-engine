@@ -452,7 +452,7 @@ cdef extern from 'context.h' namespace 'search':
         MTDF 'search::Algorithm::MTDF'
 
     cdef cppclass History:
-        void    insert(const State&) except*
+        void    emplace(const State&) except*
         int     _fifty
 
     cdef cppclass IterationInfo:
@@ -765,7 +765,7 @@ cdef class NodeContext:
 
         for move in board.move_stack:
             state.apply(move)
-            deref(self._ctxt._history).insert(state._state)
+            deref(self._ctxt._history).emplace(state._state)
 
         deref(self._ctxt._history)._fifty = board.halfmove_clock
 

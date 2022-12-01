@@ -293,7 +293,7 @@ private:
                     _buf._state.apply_move(move);
                     chess::zobrist_update(prev, move, _buf._state);
                     ASSERT(_buf._state._hash == chess::zobrist_hash(_buf._state));
-                    search::Context::_history->insert(_buf._state);
+                    search::Context::_history->emplace(_buf._state);
                     _last_move = move;
                     ++_ply_count;
                 }

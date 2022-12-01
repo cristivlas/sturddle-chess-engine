@@ -89,7 +89,7 @@ namespace search
     {
         History() = default;
 
-        void insert(const State& s) { _positions.insert(s); }
+        void emplace(const State& s) { _positions.emplace(s); }
         size_t count(const State& s) const { return _positions.count(s); }
 
         std::unordered_multiset<State, Hasher<State>> _positions;
