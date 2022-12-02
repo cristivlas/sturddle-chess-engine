@@ -423,7 +423,7 @@ void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::Iteratio
     for (const auto &m : std::ranges::subrange(ctxt->get_pv().begin() + 1, ctxt->get_pv().end()))
         out << m.uci() << " ";
 
-    output(out.str());
+    output<false>(out.str());
 }
 
 void UCI::run()
@@ -797,7 +797,7 @@ extern "C" void run_uci_loop(const char *name, const char *version, bool debug)
         log_error(err);
 }
 #else
-extern "C" void run_uci_loop(const char *name, const char *version)
+extern "C" void run_uci_loop(const char *, const char *, bool)
 {
     log_error("Native UCI implementation is not enabled.");
 }

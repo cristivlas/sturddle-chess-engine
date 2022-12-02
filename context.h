@@ -308,7 +308,7 @@ namespace search
         bool        is_evasion() const;
         bool        is_extended() const;
         bool        is_last_move();
-        bool        is_leftmost() const { return _ply == 0 || _leftmost; }
+        bool        is_leftmost() const { return is_root() || _leftmost; }
         bool        is_leaf(); /* treat as terminal node ? */
         bool        is_mate_bound() const;
         bool        is_null_move_ok(); /* ok to generate null move? */
@@ -321,6 +321,7 @@ namespace search
         bool        is_reduced() const;
         int         is_repeated() const;
         bool        is_retry() const { return _is_retry; }
+        bool        is_root() const { return _ply == 0; }
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
 
         LMRAction   late_move_reduce(int move_count);
@@ -579,7 +580,7 @@ namespace search
     {
         ASSERT(!is_null_move());
 
-        return (_ply != 0)
+        return !is_root()
             && !is_retry()
             && (state().pushed_pawns_score <= 1)
             && !is_extended()
@@ -618,7 +619,7 @@ namespace search
     template<bool EvalCaptures> INLINE score_t Context::evaluate()
     {
         ASSERT(_fifty < 100);
-        ASSERT(_ply == 0 || !is_repeated());
+        ASSERT(is_root() || !is_repeated());
 
         ++_tt->_eval_count;
 
@@ -680,7 +681,7 @@ namespace search
 
     INLINE score_t Context::futility_margin()
     {
-        if (_ply == 0 || !_futility_pruning || depth() < 1)
+        if (is_root() || !_futility_pruning || depth() < 1)
             return 0;
 
         static const auto fp_margins = margins(std::make_index_sequence<PLY_MAX>{});
@@ -778,7 +779,7 @@ namespace search
      */
     INLINE bool Context::is_null_move_ok()
     {
-        if (_ply == 0
+        if (is_root()
             || _null_move_allowed[turn()] == false
             || _excluded
             || is_null_move() /* consecutive null moves are not allowed */
@@ -912,7 +913,7 @@ namespace search
 
         #if REPORT_CURRENT_MOVE
             /* Report (main thread only) the move being searched from the root. */
-            if (_ply == 0
+            if (is_root()
                 && tid() == 0
                 && _on_move
                 && (_tt->_nodes % 1000) <= move_count
@@ -939,7 +940,7 @@ namespace search
         ctxt->_double_ext = _double_ext;
         ctxt->_extension = _extension;
         ctxt->_is_retry = retry;
-        if (_ply == 0)
+        if (is_root())
             ctxt->_is_singleton = !ctxt->is_null_move() && _move_maker.is_singleton(*this);
         ctxt->_futility_pruning = _futility_pruning && FUTILITY_PRUNING;
         ctxt->_multicut_allowed = _multicut_allowed && MULTICUT;
@@ -1002,7 +1003,7 @@ namespace search
                 else if (state().pawns & chess::BB_SQUARES[move->from_square()])
                     ctxt->_fifty = 0;
                 else
-                    ctxt->_fifty = (_ply == 0 ? _history->_fifty : _fifty) + 1;
+                    ctxt->_fifty = (is_root() ? _history->_fifty : _fifty) + 1;
             }
         }
 
@@ -1274,15 +1275,6 @@ namespace search
             if (capture_gain < 0)
             {
                 move._group = MoveOrder::LOSING_CAPTURES;
-            #if FAVOR_SACRIFICES
-                const auto eval = NNUE::eval(*move._state);
-                /* if the neural net thinks the position is good for the side that moved... */
-                if (eval < 0 && capture_gain - eval > SACRIFICE_MARGIN)
-                {
-                    move._group = MoveOrder::WINNING_CAPTURES;
-                    move._score = -eval;
-                }
-            #endif /* FAVOR_SACRIFICES */
             }
             else
             {

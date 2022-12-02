@@ -252,7 +252,7 @@ bool NNUE::init(const std::string& data_dir, const std::string& eval_file)
 /*
  * Convert from bitboard representation to the format expected by nnue.
  */
-template<typename T, bool Full=true> static INLINE void
+template<bool Full=true, typename T=int8_t> static INLINE void
 NNUE_convert_position(const BoardPosition& pos, T (&pieces)[33], T (&squares)[33])
 {
     pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
@@ -360,7 +360,7 @@ void search::Context::eval_incremental()
     int8_t pieces[33];
     int8_t squares[33];
 
-    NNUE_convert_position<int8_t, false>(state(), pieces, squares);
+    NNUE_convert_position<false>(state(), pieces, squares);
     NNUEdata* nnue_data[3] = { nullptr, nullptr, nullptr };
     auto& acc = NNUE_accumulator_data[tid()];
     nnue_data[0] = &acc[_ply];
@@ -535,7 +535,7 @@ namespace search
      */
     bool Context::is_beta_cutoff(Context* next_ctxt, score_t score)
     {
-        ASSERT(next_ctxt->_ply != 0);
+        ASSERT(!next_ctxt->is_root());
         ASSERT(score > SCORE_MIN && score < SCORE_MAX);
         ASSERT(_alpha >= _score); /* invariant */
 
@@ -1517,6 +1517,7 @@ namespace search
             _extension += _move.from_square() == _parent->_capture_square;
             _extension += is_recapture() * (is_pv_node() * (ONE_PLY - 1) + 1);
 
+        #if USE_HISTORY_COUNT_HIGH
             /*
              * extend if move has historically high cutoff percentages and counts
              */
@@ -1525,6 +1526,7 @@ namespace search
                 * (abs(_parent->_tt_entry._value) < MATE_HIGH)
                 * (_parent->history_count(_move) > HISTORY_COUNT_HIGH)
                 * (_parent->history_score(_move) > HISTORY_HIGH);
+        #endif /* USE_HISTORY_COUNT_HIGH */
 
             const auto double_extension_ok = (_double_ext <= DOUBLE_EXT_MAX);
             const auto extend = std::min(1 + double_extension_ok, _extension / ONE_PLY);
@@ -1534,6 +1536,18 @@ namespace search
             _max_depth += extend;
             _extension %= ONE_PLY;
             _double_ext += extend > 1;
+        }
+
+        /* https://www.chessprogramming.org/Capture_Extensions
+         * "... extend three plies [..] if entering the pawn endgame"
+         */
+        if (is_capture()
+            && !is_extended()
+            && abs(state().eval_material()) < 300
+            && state().just_king_and_pawns()
+            && !_parent->state().just_king_and_pawns())
+        {
+            _max_depth += 3;
         }
     }
 
@@ -1553,7 +1567,7 @@ namespace search
      */
     void Context::reinitialize()
     {
-        ASSERT(_ply == 0);
+        ASSERT(is_root());
         ASSERT(!_is_null_move);
         ASSERT(_tt->_w_alpha <= _alpha);
         ASSERT(iteration());
@@ -1657,8 +1671,9 @@ namespace search
 
             if (get_tt()->_w_beta <= get_tt()->_w_alpha + 2 * HALF_WINDOW && iteration() >= 13)
                 ++reduction;
-
+        #if USE_USE_HISTORY_COUNT_HIGH
             reduction -= _parent->history_count(_move) / HISTORY_COUNT_HIGH;
+        #endif /* USE_HISTORY_COUNT_HIGH */
         }
 
         if (is_capture() || (_move.from_square() == _parent->_capture_square))
@@ -1702,7 +1717,7 @@ namespace search
     {
         ASSERT(_fifty < 100);
 
-        if (_ply == 0)
+        if (is_root())
             return false;
         else
             ASSERT(is_repeated() <= 0);
@@ -1788,7 +1803,7 @@ namespace search
      */
     void Context::set_time_info(int millisec, int moves, score_t eval)
     {
-        ASSERT(_ply == 0);
+        ASSERT(is_root());
 
         if (MANAGE_TIME && _time_limit.load(std::memory_order_relaxed) > 0)
         {

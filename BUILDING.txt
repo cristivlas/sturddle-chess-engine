@@ -62,6 +62,15 @@ cd sturddle-sturddle-engine
 python3 setup.py build_ext --inplace
 
 
+Native UCI
+==========
+The UCI protocol is implemented in Cython.
+
+To experiment with a native C++ implementation, set NATIVE_UCI in the environment.
+This will cause the uci_native.cpp code to be used insead of uci.pyx
+uci_native.cpp requires a C++20 standard compiler.
+
+
 Optional: One File Executable
 =============================
 PyInstaller can be used to bundle all the components into all-in-one, self-extracting executable.

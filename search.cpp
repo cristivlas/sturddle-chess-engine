@@ -478,7 +478,7 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
  */
 static bool multicut(Context& ctxt, TranspositionTable& table)
 {
-    if (ctxt._ply == 0
+    if (ctxt.is_root()
         || !ctxt._multicut_allowed
         || ctxt.depth() <= 5
         || ctxt.is_pv_node()
@@ -575,7 +575,7 @@ static INLINE bool probe_endtables(Context& ctxt)
 {
     int v;
 
-    if (ctxt._ply != 0 /* do not probe at root */
+    if (  !ctxt.is_root()
         && ctxt._fifty == 0
         && ctxt.state().is_endgame()
         && Context::tb_cardinality() > 0
@@ -599,11 +599,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     ASSERT(ctxt._beta > SCORE_MIN);
     ASSERT(ctxt._score <= ctxt._alpha);
     ASSERT(ctxt._alpha < ctxt._beta);
-    ASSERT(ctxt._ply == 0 || !ctxt._move || ctxt._move._group < MoveOrder::UNORDERED_MOVES);
+    ASSERT(ctxt.is_root() || !ctxt._move || ctxt._move._group < MoveOrder::UNORDERED_MOVES);
 
     ASSERT(ctxt.get_tt() == &table);
 
-    if (ctxt._ply == 0) /* root? */
+    if (ctxt.is_root())
     {
         /* Do not probe end tables if the number of pieces at root
          * position has dropped below the end tables cardinality
@@ -701,7 +701,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
          * Reverse futility pruning: static eval stored in TT beats beta by a margin and
          * not in check, and no move w/ scores above MATE_HIGH in the hash table? Prune.
          */
-        if (ctxt._ply != 0
+        if (   !ctxt.is_root()
             && !ctxt._excluded /* no reverse pruning during singular extension */
             && !ctxt.is_pv_node()
             && ctxt.depth() > 0
@@ -773,7 +773,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                  * Do not extend at root, or if already deeper than twice the depth at root
                  */
 
-                if (ctxt._ply != 0 && ctxt._ply < root_depth * 2)
+                if (!ctxt.is_root() && ctxt._ply < root_depth * 2)
                 {
                 #if SINGULAR_EXTENSION
                    /*
@@ -971,7 +971,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
              * https://www.chessprogramming.org/PVS_and_Aspiration
              */
             if (ASPIRATION_WINDOW
-                && ctxt._ply == 0
+                && ctxt.is_root()
                 && move_count == 1
                 && move_score < MATE_HIGH
                 && move_score < table._w_alpha
@@ -1036,7 +1036,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 score_t search::mtdf(Context& ctxt, score_t first, TranspositionTable& table)
 {
     ASSERT_ALWAYS(ctxt._algorithm == Algorithm::MTDF);
-    ASSERT_ALWAYS(ctxt._ply == 0);
+    ASSERT_ALWAYS(ctxt.is_root());
 
     auto lower = ctxt._alpha;
     auto upper = ctxt._beta;
