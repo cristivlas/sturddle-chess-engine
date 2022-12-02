@@ -423,7 +423,7 @@ void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::Iteratio
     for (const auto &m : std::ranges::subrange(ctxt->get_pv().begin() + 1, ctxt->get_pv().end()))
         out << m.uci() << " ";
 
-    output<false>(out.str());
+    output(out.str());
 }
 
 void UCI::run()
