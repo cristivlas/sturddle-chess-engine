@@ -219,7 +219,7 @@ class UCI:
         # Support 'go infinite' commands (analysis mode):
         # run in background if no time limit, and expect
         # the GUI to send a 'stop' command later.
-        if analysis:
+        if analysis and not explicit_movetime:
             logging.debug('starting infinite search')
             self.algorithm.time_limit_ms = -1
             self.pondering = True
