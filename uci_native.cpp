@@ -573,14 +573,14 @@ void UCI::go(const Arguments &args)
         _extended_time = std::max(1, movetime);
         background().push_task([this]{ ponder(); });
     }
-    else if (do_analysis)
+    else if (do_analysis && !explicit_movetime)
     {
         ctxt->set_time_limit_ms(-1);
         background().push_task([this]{ search(); });
     }
     else
     {
-        if (_use_opening_book && _ply_count < _book_depth)
+        if (_use_opening_book && _ply_count < _book_depth && !do_analysis)
         {
             log_debug(std::format("lookup book_depth={}, ply_count={}", _book_depth, _ply_count));
             if (auto move = search::Context::_book_lookup(_buf._state, _best_book_move))
