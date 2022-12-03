@@ -324,35 +324,37 @@ private:
             std::cout << std::flush;
     }
 
-    void output_best(bool request_ponder)
+    void output_best_move(bool request_ponder = false)
     {
-        auto &ctxt = context();
-        auto move = ctxt._best_move;
-        if (move)
-            output_best(move, request_ponder);
-        else if (auto first = ctxt.first_valid_move())
-            output_best(*first, request_ponder);
-        else
-            output("resign");
-    }
-
-    void output_best(const chess::BaseMove &move, bool request_ponder)
-    {
-        ASSERT(move);
         if (_output_expected)
         {
-            _output_expected = false;
-            if (_ponder && request_ponder)
-            {
-                const auto &pv = _tt.get_pv();
-                if (pv.size() > 2 && pv[1] == move)
-                {
-                    output(std::format("bestmove {} ponder {}", move.uci(), pv[2].uci()));
-                    return;
-                }
-            }
-            output(std::format("bestmove {}", move.uci()));
+            auto &ctxt = context();
+            auto move = ctxt._best_move;
+            if (move)
+                output_best_move(move, request_ponder);
+            else if (auto first = ctxt.first_valid_move())
+                output_best_move(*first, request_ponder);
+            else
+                output("resign");
         }
+    }
+
+    void output_best_move(const chess::BaseMove &move, bool request_ponder = false)
+    {
+        ASSERT(move);
+        ASSERT(_output_expected);
+        _output_expected = false;
+
+        if (_ponder && request_ponder)
+        {
+            const auto &pv = _tt.get_pv();
+            if (pv.size() > 2 && pv[1] == move)
+            {
+                output(std::format("bestmove {} ponder {}", move.uci(), pv[2].uci()));
+                return;
+            }
+        }
+        output(std::format("bestmove {}", move.uci()));
     }
 
     template <typename F>
@@ -590,7 +592,7 @@ void UCI::go(const Arguments &args)
     else if (do_analysis && !explicit_movetime)
     {
         ctxt->set_time_limit_ms(-1);
-        background().push_task([this]{ search(); });
+        background().push_task([this]{ search(); output_best_move(); });
     }
     else
     {
@@ -599,7 +601,7 @@ void UCI::go(const Arguments &args)
             LOG_DEBUG(std::format("lookup book_depth={}, ply_count={}", _book_depth, _ply_count));
             if (auto move = search::Context::_book_lookup(_buf._state, _best_book_move))
             {
-                output_best(move, false);
+                output_best_move(move);
                 return;
             }
             else
@@ -612,7 +614,7 @@ void UCI::go(const Arguments &args)
         /* search synchronously */
         _score = search();
         /* Do not ponder below 100 ms per move. */
-        output_best(movetime >= 100);
+        output_best_move(movetime >= 100);
     }
 }
 
@@ -655,7 +657,7 @@ void UCI::ponder()
     if (_extended_time)
         _extended_time = 0;
     else
-        output_best(false);
+        output_best_move();
 }
 
 void UCI::ponderhit()
@@ -755,7 +757,7 @@ void UCI::setoption(const Arguments &args)
     if (iter != _options.end())
         iter->second->set(join(" ", value));
     else
-        log_warning(__func__ + (": " + opt_name + ": not found"));
+        log_warning(__func__ + (": \"" + opt_name + "\": not found"));
 }
 
 void UCI::stop()
@@ -766,7 +768,7 @@ void UCI::stop()
         _pool->wait_for_tasks();
         ASSERT(!_pool->tasks_pending());
     }
-    output_best(false);
+    output_best_move();
 }
 
 void UCI::uci()
