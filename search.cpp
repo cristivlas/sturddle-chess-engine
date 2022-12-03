@@ -22,12 +22,6 @@
  * TranspositionTable and related data structs.
  * Search algorithms: Negamax with TranspositionTable, MTD(f)
  */
-#if __linux__
-#include <sys/sysinfo.h>
-#elif __APPLE__
-#include <sys/sysctl.h>
-#endif
-
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -35,6 +29,18 @@
 #include "search.h"
 #include "thread_pool.hpp"
 #include "utility.h"
+
+#if __linux__
+#include <sys/sysinfo.h>
+#elif __APPLE__
+#include <sys/sysctl.h>
+#elif _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#undef ERROR
+#undef max
+#undef min
+#endif /* _WIN32 */
 
 #if HAVE_INT128
 /* primes.hpp requires __int128 */
@@ -86,25 +92,27 @@ TranspositionTable::HashTable TranspositionTable::_table(pick_prime(TRANSPOSITIO
 
 static size_t mem_avail()
 {
-    unsigned long mem = 0;
 #if __linux__
     struct sysinfo info = {};
     if (sysinfo(&info) == 0)
-    {
-        mem = info.freeram;
-    }
+        return info.freeram;
+
 #elif __APPLE__
+    unsigned long mem = 0;
     size_t len = sizeof(mem);
     static int mib[2] = { CTL_HW, HW_USERMEM };
 
-    sysctl(mib, std::extent<decltype(mib)>::value, &mem, &len, nullptr, 0);
+    if (sysctl(mib, std::extent<decltype(mib)>::value, &mem, &len, nullptr, 0) == 0)
+        return mem;
+#elif _WIN32
+    MEMORYSTATUSEX statex = {};
+    statex.dwLength = sizeof (statex);
 
-#else
+    if (::GlobalMemoryStatusEx(&statex))
+        return statex.ullAvailVirtual;
+#endif
     /* failover to psutil via Cython */
-    mem = static_cast<unsigned long>(cython_wrapper::call(search::Context::_vmem_avail));
-#endif /* __linux__ */
-
-    return mem;
+    return static_cast<size_t>(cython_wrapper::call(search::Context::_vmem_avail));
 }
 
 
