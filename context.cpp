@@ -1517,7 +1517,6 @@ namespace search
             _extension += _move.from_square() == _parent->_capture_square;
             _extension += is_recapture() * (is_pv_node() * (ONE_PLY - 1) + 1);
 
-        #if USE_HISTORY_COUNT_HIGH
             /*
              * extend if move has historically high cutoff percentages and counts
              */
@@ -1526,7 +1525,6 @@ namespace search
                 * (abs(_parent->_tt_entry._value) < MATE_HIGH)
                 * (_parent->history_count(_move) > HISTORY_COUNT_HIGH)
                 * (_parent->history_score(_move) > HISTORY_HIGH);
-        #endif /* USE_HISTORY_COUNT_HIGH */
 
             const auto double_extension_ok = (_double_ext <= DOUBLE_EXT_MAX);
             const auto extend = std::min(1 + double_extension_ok, _extension / ONE_PLY);
@@ -1671,9 +1669,7 @@ namespace search
 
             if (get_tt()->_w_beta <= get_tt()->_w_alpha + 2 * HALF_WINDOW && iteration() >= 13)
                 ++reduction;
-        #if USE_USE_HISTORY_COUNT_HIGH
             reduction -= _parent->history_count(_move) / HISTORY_COUNT_HIGH;
-        #endif /* USE_HISTORY_COUNT_HIGH */
         }
 
         if (is_capture() || (_move.from_square() == _parent->_capture_square))

@@ -35,13 +35,14 @@ static void log_error(T err)
 #include "nnue.h"
 #include "thread_pool.hpp" /* pondering, go infinite */
 
+#define LOG_DEBUG(x) while (_debug) { log_debug((x)); break; }
+
 static constexpr std::string_view START_POS{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
 static bool _debug = false;
 
 template <typename T> static void log_debug(T msg)
 {
-    if (_debug)
-        search::Context::log_message(LogLevel::DEBUG, std::to_string(msg));
+    search::Context::log_message(LogLevel::DEBUG, std::to_string(msg));
 }
 
 template <typename T> static void log_warning(T warn)
@@ -293,7 +294,13 @@ private:
                     _buf._state.apply_move(move);
                     chess::zobrist_update(prev, move, _buf._state);
                     ASSERT(_buf._state._hash == chess::zobrist_hash(_buf._state));
+                    /* keep track of played moves, to detect repetitions */
                     search::Context::_history->emplace(_buf._state);
+                    /* update the halfmove clock */
+                    if (_buf._state.capture_value || prev.piece_type_at(from) == chess::PieceType::PAWN)
+                        search::Context::_history->_fifty = 0;
+                    else
+                        ++search::Context::_history->_fifty;
                     _last_move = move;
                     ++_ply_count;
                 }
@@ -312,7 +319,7 @@ private:
     template <bool flush=true> static void output(const std::string_view out)
     {
         std::cout << out << "\n";
-        log_debug(std::format("<<< {}", out));
+        LOG_DEBUG(std::format("<<< {}", out));
         if constexpr(flush)
             std::cout << std::flush;
     }
@@ -442,7 +449,7 @@ void UCI::run()
             cmd.erase(nl + 1);
         if (cmd.empty())
             continue;
-        log_debug(std::format(">>> {}", cmd));
+        LOG_DEBUG(std::format(">>> {}", cmd));
         lowercase(cmd);
         if (cmd == "quit")
             break;
@@ -563,7 +570,7 @@ void UCI::go(const Arguments &args)
 
     if (!movetime)
         movetime = time_remaining[turn] / std::max(movestogo, 40);
-    log_debug(std::format("movetime {}, movestogo {}", movetime, movestogo));
+    LOG_DEBUG(std::format("movetime {}, movestogo {}", movetime, movestogo));
 
     _extended_time = 0;
     _output_expected = true;
@@ -582,7 +589,7 @@ void UCI::go(const Arguments &args)
     {
         if (_use_opening_book && _ply_count < _book_depth && !do_analysis)
         {
-            log_debug(std::format("lookup book_depth={}, ply_count={}", _book_depth, _ply_count));
+            LOG_DEBUG(std::format("lookup book_depth={}, ply_count={}", _book_depth, _ply_count));
             if (auto move = search::Context::_book_lookup(_buf._state, _best_book_move))
             {
                 output_best(move, false);
@@ -634,7 +641,7 @@ void UCI::newgame()
  */
 void UCI::ponder()
 {
-    log_debug(std::format("pondering, extended_time={}", _extended_time.load()));
+    LOG_DEBUG(std::format("pondering, extended_time={}", _extended_time.load()));
 
     context().set_time_limit_ms(-1 /* infinite */);
     search();
@@ -673,7 +680,10 @@ void UCI::position(const Arguments &args)
         else if (a == "moves")
         {
             in_moves = true;
-            search::Context::_history = std::make_unique<search::History>();
+            if (search::Context::_history)
+                search::Context::_history->clear();
+            else
+                search::Context::_history = std::make_unique<search::History>();
         }
         else if (a == "startpos")
         {
@@ -698,7 +708,7 @@ void UCI::position(const Arguments &args)
         chess::epd::parse_en_passant_target(fen[3], _buf._state);
     }
     apply_moves(moves);
-    log_debug(search::Context::epd(_buf._state));
+    LOG_DEBUG(search::Context::epd(_buf._state));
 }
 
 score_t UCI::search()
