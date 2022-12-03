@@ -616,6 +616,8 @@ def opening_book():
 
 
 def opening_book_init(filepath: str):
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(os.path.dirname(__file__), filepath)
     _book[0] = None
     try:
         _book[0] = chess.polyglot.MemoryMappedReader(filepath)
