@@ -109,7 +109,8 @@ void _set_param(const std::string& name, int value, bool echo)
         TranspositionTable::set_hash_size(std::max(std::min(value, HASH_MAX), HASH_MIN));
 
         if (echo)
-            std::cout << "info string " << name << "=" << TranspositionTable::get_hash_size() << "\n";
+            std::cout << "info string " << name << "=" << TranspositionTable::get_hash_size()
+                      << std::endl;
         return;
     }
 
@@ -137,7 +138,7 @@ void _set_param(const std::string& name, int value, bool echo)
             *iter->second._val = value;
 
             if (echo)
-                std::cout << "info string " << name << "=" << *iter->second._val << "\n";
+                std::cout << "info string " << name << "=" << *iter->second._val << std::endl;
         }
     }
 }
