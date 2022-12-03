@@ -324,27 +324,34 @@ private:
             std::cout << std::flush;
     }
 
+    void output_best(bool request_ponder)
+    {
+        auto &ctxt = context();
+        auto move = ctxt._best_move;
+        if (move)
+            output_best(move, request_ponder);
+        else if (auto first = ctxt.first_valid_move())
+            output_best(*first, request_ponder);
+        else
+            output("resign");
+    }
+
     void output_best(const chess::BaseMove &move, bool request_ponder)
     {
+        ASSERT(move);
         if (_output_expected)
         {
             _output_expected = false;
-            if (!move)
+            if (_ponder && request_ponder)
             {
-                output("resign");
-            }
-            else
-            {
-                std::ostringstream out;
-                out << "bestmove " << move.uci();
-                if (_ponder && request_ponder)
+                const auto &pv = _tt.get_pv();
+                if (pv.size() > 2 && pv[1] == move)
                 {
-                    const auto &pv = _tt.get_pv();
-                    if (pv.size() > 2 && pv[1] == move)
-                        out << " ponder " << pv[2].uci();
+                    output(std::format("bestmove {} ponder {}", move.uci(), pv[2].uci()));
+                    return;
                 }
-                output(out.str());
             }
+            output(std::format("bestmove {}", move.uci()));
         }
     }
 
@@ -604,8 +611,8 @@ void UCI::go(const Arguments &args)
 
         /* search synchronously */
         _score = search();
-        /* Do not ponder below 1s per move. */
-        output_best(ctxt->_best_move, movetime >= 1000);
+        /* Do not ponder below 100 ms per move. */
+        output_best(movetime >= 100);
     }
 }
 
@@ -648,7 +655,7 @@ void UCI::ponder()
     if (_extended_time)
         _extended_time = 0;
     else
-        output_best(context()._best_move, false);
+        output_best(false);
 }
 
 void UCI::ponderhit()
@@ -724,7 +731,6 @@ score_t UCI::search()
     ctxt._algorithm = _algorithm;
     ctxt._max_depth = 1;
     ctxt._move = _last_move;
-    ctxt._prev = chess::BaseMove();
 
     return search::iterative(ctxt, _tt, _depth + 1);
 }
@@ -758,9 +764,9 @@ void UCI::stop()
     {
         search::Context::cancel();
         _pool->wait_for_tasks();
-        ASSERT_ALWAYS(!_pool->tasks_pending());
+        ASSERT(!_pool->tasks_pending());
     }
-    output_best(context()._best_move, false);
+    output_best(false);
 }
 
 void UCI::uci()
