@@ -1537,16 +1537,14 @@ namespace search
             _double_ext += extend > 1;
         }
 
-        /* https://www.chessprogramming.org/Capture_Extensions
-         * "... extend three plies [..] if entering the pawn endgame"
-         */
+        /* https://www.chessprogramming.org/Capture_Extensions */
         if (is_capture()
             && !is_extended()
-            && abs(state().eval_material()) < 300
+            && abs(state().eval_material()) <= REBEL_EXTENSION_MARGIN
             && state().just_king_and_pawns()
             && !_parent->state().just_king_and_pawns())
         {
-            _max_depth += 3;
+            _max_depth += REBEL_EXTENSION;
         }
     }
 
