@@ -6,7 +6,6 @@ import sysconfig
 
 build_stamp = datetime.now().strftime('%m%d%y.%H%M')
 
-
 sourcefiles = [
     '__init__.pyx',
     'captures.cpp',
@@ -93,11 +92,17 @@ else:
     if NATIVE_UCI:
         args += [
             '-std=c++20',
+            '-stdlib=libc++',
             '-fexperimental-library',
             '-DNATIVE_UCI=true',
         ]
-        link += ['-L/usr/local/opt/llvm/lib/c++', '-lc++experimental']
-
+        link += [
+            '-fuse-ld=lld',
+            '-L/usr/lib/llvm-15/lib/',
+            '-L/usr/local/opt/llvm/lib/c++',
+            '-lc++',
+            '-lc++experimental',
+        ]
     # Silence off Py_DEPRECATED warnings for clang;
     # clang is the default compiler on macosx.
     cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
