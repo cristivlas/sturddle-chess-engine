@@ -235,7 +235,7 @@ class UCI
     using EngineOptions = std::map<std::string, std::shared_ptr<Option>>;
     using ThreadPool = thread_pool<int>;
 
-    static constexpr int max_depth = 100;
+    static constexpr int max_depth = PLY_MAX;
 
 public:
     UCI(const std::string &name, const std::string &version)
@@ -379,7 +379,7 @@ private:
         }
     }
 
-    void set_start_position()
+    INLINE void set_start_position()
     {
         _buf._state = chess::State();
         _buf._state.castling_rights = chess::BB_DEFAULT_CASTLING_RIGHTS;
