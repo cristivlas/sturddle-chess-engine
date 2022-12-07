@@ -21,6 +21,7 @@
  */
 #include <atomic>
 #include <condition_variable>
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <thread>
@@ -74,7 +75,7 @@ public:
         return _tid;
     }
 
-    void wait_for_tasks()
+    template<int MaxPending = 0> void wait_for_tasks()
     {
         std::unique_lock<std::mutex> lock(_mutex);
         while (!_tasks.empty())
@@ -82,7 +83,7 @@ public:
             _cv.notify_all();
             _cv.wait(lock);
         }
-        while (_tasks_pending)
+        while (tasks_pending() > MaxPending)
             std::this_thread::yield();
     }
 
@@ -107,10 +108,10 @@ private:
                         return;
                     _cv.wait(lock);
                 }
-                task.swap(_tasks.back());
+                task.swap(_tasks.front());
 
                 ++_tasks_pending;
-                _tasks.pop_back();
+                _tasks.pop_front();
             }
 
             task();
@@ -129,7 +130,7 @@ private:
     std::atomic_int _tasks_pending;
     std::condition_variable _cv;
     std::mutex _mutex;
-    std::vector<std::function<void()>> _tasks;
+    std::deque<std::function<void()>> _tasks;
     std::vector<std::thread> _threads;
 
     static THREAD_LOCAL thread_id_type _tid;

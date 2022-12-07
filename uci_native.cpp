@@ -298,7 +298,7 @@ private:
 
 private:
     /** position() helper */
-    INLINE void apply_moves(const Arguments &moves)
+    template <typename T> INLINE void apply_moves(const T &moves)
     {
         _last_move = chess::BaseMove();
         _ply_count = 0;
@@ -343,6 +343,9 @@ private:
     {
         if (output_expected())
         {
+            if (_pool)
+                _pool->wait_for_tasks<1>(); /* wait for on_iteration / output_info tasks to drain */
+
             auto &ctxt = context();
             auto move = ctxt._best_move;
             if (move)
@@ -487,17 +490,14 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
     info.pv->assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
 
     background().push_task([info] {
-        if (UCI::output_expected())
-        {
-            output_info(std::cout, info);
-            std::cout << std::endl;
+        output_info(std::cout, info);
+        std::cout << std::endl;
 
-            if (_debug)
-            {
-                std::ostringstream out;
-                output_info(out << " <<< ", info);
-                log_debug(out.str());
-            }
+        if (_debug)
+        {
+            std::ostringstream out;
+            output_info(out << " <<< ", info);
+            log_debug(out.str());
         }
     });
 }
@@ -519,9 +519,9 @@ void UCI::run()
         if (cmd.empty())
             continue;
         LOG_DEBUG(std::format(">>> {}", cmd));
-        lowercase(cmd);
         if (cmd == "quit")
         {
+            _output_expected = false;
             stop();
             break;
         }
@@ -674,10 +674,11 @@ void UCI::go(const Arguments &args)
         if (!explicit_movetime)
             ctxt->set_time_info(time_remaining[turn], movestogo, _score);
 
-        /* search synchronously */
-        _score = search();
-        /* Do not ponder below 100 ms per move. */
-        output_best_move(movetime >= 100);
+        background().push_task([this, movetime] {
+            _score = search();
+            /* Do not request to ponder below 100 ms per move. */
+            output_best_move(movetime >= 100);
+        });
     }
 }
 
@@ -743,7 +744,7 @@ void UCI::position(const Arguments &args)
     bool in_moves = false;
     Arguments fen, moves;
 
-    for (const auto &a : args)
+    for (const auto &a : std::ranges::subrange(args.begin() + 1, args.end()))
     {
         if (a == "fen")
         {
@@ -774,10 +775,21 @@ void UCI::position(const Arguments &args)
     if (fen.size() >= 4)
     {
         _buf._state = chess::State();
-        chess::epd::parse_pos(fen[0], _buf._state);
-        chess::epd::parse_side_to_move(fen[1], _buf._state);
-        chess::epd::parse_castling(fen[2], _buf._state);
-        chess::epd::parse_en_passant_target(fen[3], _buf._state);
+        if (   !chess::epd::parse_pos(fen[0], _buf._state)
+            || !chess::epd::parse_side_to_move(fen[1], _buf._state)
+            || !chess::epd::parse_castling(fen[2], _buf._state)
+            || !chess::epd::parse_en_passant_target(fen[3], _buf._state)
+        )
+        {
+            log_error(std::format("fen={} {} {} {}", fen[0], fen[1], fen[2], fen[3]));
+            log_error("invalid position: " + search::Context::epd(_buf._state));
+            _exit(-2);
+        }
+    }
+    else if (!fen.empty())
+    {
+        log_error(std::format("invalid number of fen tokens: {}", fen.size()));
+        _exit(-2);
     }
     apply_moves(moves);
     LOG_DEBUG(search::Context::epd(_buf._state));
@@ -825,13 +837,10 @@ void UCI::setoption(const Arguments &args)
 
 void UCI::stop()
 {
-    if (_pool && _pool->tasks_pending())
-    {
-        search::Context::cancel();
-        _pool->wait_for_tasks();
-        ASSERT(!_pool->tasks_pending());
-    }
+    search::Context::cancel();
     output_best_move();
+    if (_pool)
+        _pool->wait_for_tasks<0>();
 }
 
 void UCI::uci()

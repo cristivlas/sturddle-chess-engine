@@ -1800,7 +1800,7 @@ namespace search
     {
         ASSERT(is_root());
 
-        if (MANAGE_TIME && _time_limit.load(std::memory_order_relaxed) > 0)
+        if (MANAGE_TIME && time_limit() > 0)
         {
             if (eval > 100)
             {

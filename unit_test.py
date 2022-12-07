@@ -412,12 +412,15 @@ def test_parse_fen():
         '8/8/4R3/2r3pk/6Pp/7P/1PPB1P2/1K1R4 b - g3',
         '4k3/8/8/8/3pP3/8/8/4K3 b - e3',
         '4k3/8/8/3pP3/8/8/8/4K3 w - d6',
+        '8/8/5pkp/p4p2/P4P1K/7P/8/8 w - -',
     ]
     for fen in tests:
         board_state = engine.board_from_fen(fen)
         if board_state:
-            result = engine.board_from_state(board_state).epd()
+            board = engine.board_from_state(board_state)
+            result = board.epd()
             assert fen == result, (result, fen)
+            assert board.is_valid()
             print(f'Ok: "{result}"')
 
 
