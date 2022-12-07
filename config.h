@@ -169,8 +169,10 @@ DECLARE_VALUE(  NULL_MOVE_MIN,                        5,    0,      10)
 DECLARE_VALUE(  NULL_MOVE_MIN_VERIFICATION_DEPTH,    14,    0,     100)
 DECLARE_VALUE(  RAZOR_DEPTH_COEFF,                  316,    0,    1000)
 DECLARE_VALUE(  RAZOR_INTERCEPT,                    510,    0,    1000)
+#if !WITH_NNUE
 DECLARE_VALUE(  REBEL_EXTENSION,                      2,    1,      10)
 DECLARE_VALUE(  REBEL_EXTENSION_MARGIN,             185,    0,     500)
+#endif /* WITH_NNUE */
 DECLARE_VALUE(  REVERSE_FUTILITY_MARGIN,             37,    0,    1000)
 DECLARE_VALUE(  SINGULAR_MARGIN,                      6,    0,     100)
 

@@ -462,17 +462,16 @@ static void INLINE output_info(std::ostream& out, const Info& info)
         "info depth ", info.iteration,
         " seldepth ", info.eval_depth,
         " score cp ", info.score);
-    if (std::abs(info.score) > MATE_HIGH)
-        output(out, " mate ", mate_distance(info.score, *info.pv));
-
     if (info.time_limit < 0 || info.time_limit > 50)
     {
+        if (std::abs(info.score) > MATE_HIGH)
+            output(out, " mate ", mate_distance(info.score, *info.pv));
+
         output(out,
             " time ", info.milliseconds,
             " nodes ", info.nodes,
             " knps ", int(info.knps * 1000),
             " hashfull ", info.hashfull);
-
         out << " pv ";
         for (const auto &m : *info.pv)
             out << m << " ";
