@@ -329,11 +329,11 @@ private:
             }
     }
 
-    /* Lazily initialize thread pool. One thread for thinking, another for sending info back to the GUI. */
+    /* Lazily initialize thread pool. */
     static ThreadPool &background()
     {
         if (!_pool)
-            _pool = std::make_unique<ThreadPool>(2);
+            _pool = std::make_unique<ThreadPool>(1);
         return *_pool;
     }
 
@@ -434,64 +434,48 @@ std::unique_ptr<ThreadPool> UCI::_pool;
 std::atomic_bool UCI::_output_expected(false);
 
 /** Estimate number of moves (not plies!) until mate. */
-static INLINE int mate_distance(score_t score, const search::PV &pv)
+template <typename T>
+static INLINE int mate_distance(score_t score, const T &pv)
 {
     return std::copysign((std::max<int>(CHECKMATE - std::abs(score), pv.size()) + 1) / 2, score);
 }
 
-struct Info : public search::IterationInfo
+static void INLINE output_info(std::ostream& out, search::Context *ctxt, const search::IterationInfo* info)
 {
-    int eval_depth;
-    int hashfull;
-    int iteration;
-    int time_limit;
-    static search::PV pv;
+    const auto& pv = std::ranges::subrange(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
 
-    explicit Info(const IterationInfo& info) : IterationInfo(info) {}
-};
-
-search::PV Info::pv;
-
-static void INLINE output_info(std::ostream& out, const Info& info)
-{
     output(out,
-        "info depth ", info.iteration,
-        " seldepth ", info.eval_depth,
-        " score cp ", info.score);
-    if (std::abs(info.score) > MATE_HIGH)
-        output(out, " mate ", mate_distance(info.score, info.pv));
+        "info depth ", ctxt->iteration(),
+        " seldepth ", ctxt->get_tt()->_eval_depth,
+        " score cp ", info->score);
+    if (std::abs(info->score) > MATE_HIGH)
+        output(out, " mate ", mate_distance(info->score, pv));
 
-    if (info.time_limit < 0 || info.time_limit > 50)
+    const auto time_limit = ctxt->time_limit();
+    if (time_limit < 0 || time_limit > 50)
     {
         output(out,
-            " time ", info.milliseconds,
-            " nodes ", info.nodes,
-            " knps ", int(info.knps * 1000),
-            " hashfull ", info.hashfull);
+            " time ", info->milliseconds,
+            " nodes ", info->nodes,
+            " knps ", int(info->knps * 1000),
+            " hashfull ", int(search::TranspositionTable::usage() * 10));
 
         out << " pv ";
-        for (const auto &m : info.pv)
+        for (const auto &m : pv)
             out << m << " ";
     }
 }
 
 /* static */
-INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *iter_info)
+INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *info)
 {
-    Info info(*iter_info);
-    info.eval_depth = ctxt->get_tt()->_eval_depth;
-    info.hashfull = search::TranspositionTable::usage() * 10;
-    info.iteration = ctxt->iteration();
-    info.time_limit = ctxt->time_limit();
-    info.pv.assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
-
-    output_info(std::cout, info);
+    output_info(std::cout, ctxt, info);
     std::cout << std::endl;
 
     if (_debug)
     {
         std::ostringstream out;
-        output_info(out << " <<< ", info);
+        output_info(out << " <<< ", ctxt, info);
         log_debug(out.str());
     }
 }
