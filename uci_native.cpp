@@ -37,32 +37,53 @@ static void log_error(T err)
 
 #define LOG_DEBUG(x) while (_debug) { log_debug((x)); break; }
 
-static constexpr std::string_view START_POS{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
-static bool _debug = false;
-
-template <typename T> static void log_debug(T msg)
+namespace
 {
-    search::Context::log_message(LogLevel::DEBUG, std::to_string(msg));
-}
+    static constexpr std::string_view START_POS{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
+    static bool _debug = false;
 
-template <typename T> static void log_warning(T warn)
-{
-    search::Context::log_message(LogLevel::WARN, std::to_string(warn));
-}
+    template <typename T> static void log_debug(T msg)
+    {
+        search::Context::log_message(LogLevel::DEBUG, std::to_string(msg));
+    }
 
-template <typename T> static INLINE T &lowercase(T &s)
-{
-    std::transform(s.begin(), s.end(), s.begin(), [](auto c) { return std::tolower(c); });
-    return s;
-}
+    template <typename T> static void log_warning(T warn)
+    {
+        search::Context::log_message(LogLevel::WARN, std::to_string(warn));
+    }
 
-template <typename T> static INLINE std::string join(std::string_view sep, const T &v)
-{
-    std::ostringstream s;
-    for (const auto &elem : v)
-        (s.tellp() ? s << sep : s) << elem;
-    return s.str();
-}
+    template <typename T> static INLINE T &lowercase(T &s)
+    {
+        std::transform(s.begin(), s.end(), s.begin(), [](auto c) { return std::tolower(c); });
+        return s;
+    }
+
+    template <typename T> static INLINE std::string join(std::string_view sep, const T &v)
+    {
+        std::ostringstream s;
+        for (const auto &elem : v)
+            (s.tellp() ? s << sep : s) << elem;
+        return s.str();
+    }
+
+    template <typename T> INLINE void output(std::ostream& out, T val)
+    {
+        out << val;
+    }
+
+    template <typename T, typename... Args> INLINE void output(std::ostream& out, T val, Args... args)
+    {
+        output(out << val, args...);
+    }
+
+    template <bool flush=true> INLINE void output(const std::string_view out)
+    {
+        std::cout << out << "\n";
+        LOG_DEBUG(std::format("<<< {}", out));
+        if constexpr(flush)
+            std::cout << std::flush;
+    }
+} /* namespace */
 
 enum class Command
 {
@@ -141,7 +162,6 @@ namespace
             else if (value == "negamax") _algo = search::Algorithm::NEGAMAX;
         }
     };
-
 
     struct OptionBool : public OptionBase
     {
@@ -229,11 +249,12 @@ namespace
     };
 }
 
+using ThreadPool = thread_pool<int>;
+
 class UCI
 {
     using Arguments = std::vector<std::string_view>;
     using EngineOptions = std::map<std::string, std::shared_ptr<Option>>;
-    using ThreadPool = thread_pool<int>;
 
     static constexpr int max_depth = PLY_MAX;
 
@@ -256,6 +277,7 @@ public:
         _options.emplace("syzygypath", std::make_shared<OptionSyzygy>());
     }
 
+    static bool output_expected() { return _output_expected.load(std::memory_order_relaxed); }
     void run();
 
 private:
@@ -276,7 +298,7 @@ private:
 
 private:
     /** position() helper */
-    void apply_moves(const Arguments &moves)
+    INLINE void apply_moves(const Arguments &moves)
     {
         _last_move = chess::BaseMove();
         _ply_count = 0;
@@ -307,26 +329,19 @@ private:
             }
     }
 
-    ThreadPool &background()
+    /* Lazily initialize thread pool. One thread for thinking, another for sending info back to the GUI. */
+    static ThreadPool &background()
     {
         if (!_pool)
-            _pool = std::make_unique<ThreadPool>(1);
+            _pool = std::make_unique<ThreadPool>(2);
         return *_pool;
     }
 
     INLINE search::Context &context() { return *_buf.as_context(); }
 
-    template <bool flush=true> static void output(const std::string_view out)
+    INLINE void output_best_move(bool request_ponder = false)
     {
-        std::cout << out << "\n";
-        LOG_DEBUG(std::format("<<< {}", out));
-        if constexpr(flush)
-            std::cout << std::flush;
-    }
-
-    void output_best_move(bool request_ponder = false)
-    {
-        if (_output_expected)
+        if (output_expected())
         {
             auto &ctxt = context();
             auto move = ctxt._best_move;
@@ -339,10 +354,10 @@ private:
         }
     }
 
-    void output_best_move(const chess::BaseMove &move, bool request_ponder = false)
+    INLINE void output_best_move(const chess::BaseMove &move, bool request_ponder = false)
     {
         ASSERT(move);
-        ASSERT(_output_expected);
+        ASSERT(output_expected());
         _output_expected = false;
 
         if (_ponder && request_ponder)
@@ -406,13 +421,16 @@ private:
     EngineOptions _options;
     const std::string _name;
     const std::string _version; /* engine version */
-    std::unique_ptr<ThreadPool> _pool;
-    bool _output_expected = false;
+    static std::unique_ptr<ThreadPool> _pool;
+    static std::atomic_bool _output_expected;
     bool _ponder = false;
     bool _use_opening_book = false;
     bool _best_book_move = false;
     chess::BaseMove _last_move;
 };
+
+std::unique_ptr<ThreadPool> UCI::_pool;
+std::atomic_bool UCI::_output_expected(false);
 
 /** Estimate number of moves (not plies!) until mate. */
 static INLINE int mate_distance(score_t score, const search::PV &pv)
@@ -420,26 +438,68 @@ static INLINE int mate_distance(score_t score, const search::PV &pv)
     return std::copysign((std::max<int>(CHECKMATE - std::abs(score), pv.size()) + 1) / 2, score);
 }
 
-/* static */
-void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *info)
+struct Info : public search::IterationInfo
 {
-    std::ostringstream out;
+    int eval_depth;
+    int hashfull;
+    int iteration;
+    int time_limit;
+    search::PV* pv = nullptr;
+    static std::array<search::PV, PLY_MAX> pvs;
 
-    out << "info depth " << ctxt->iteration() << " seldepth " << ctxt->get_tt()->_eval_depth;
-    out << " score cp " << info->score;
+    explicit Info(const IterationInfo& info) : IterationInfo(info) {}
+};
 
-    if (std::abs(info->score) > MATE_HIGH)
-        out << " mate " << mate_distance(info->score, ctxt->get_pv());
+std::array<search::PV, PLY_MAX> Info::pvs;
 
-    out << " time " << info->milliseconds;
-    out << " nodes " << info->nodes << " knps " << int(info->knps * 1000);
-    out << " hashfull " << int(search::TranspositionTable::usage() * 10);
+static void INLINE output_info(std::ostream& out, const Info& info)
+{
+    output(out,
+        "info depth ", info.iteration,
+        " seldepth ", info.eval_depth,
+        " score cp ", info.score);
+    if (std::abs(info.score) > MATE_HIGH)
+        output(out, " mate ", mate_distance(info.score, *info.pv));
 
-    out << " pv ";
-    for (const auto &m : std::ranges::subrange(ctxt->get_pv().begin() + 1, ctxt->get_pv().end()))
-        out << m.uci() << " ";
+    if (info.time_limit < 0 || info.time_limit > 50)
+    {
+        output(out,
+            " time ", info.milliseconds,
+            " nodes ", info.nodes,
+            " knps ", int(info.knps * 1000),
+            " hashfull ", info.hashfull);
 
-    output(out.str());
+        out << " pv ";
+        for (const auto &m : *info.pv)
+            out << m << " ";
+    }
+}
+
+/* static */
+INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *iter_info)
+{
+    Info info(*iter_info);
+    info.eval_depth = ctxt->get_tt()->_eval_depth;
+    info.hashfull = search::TranspositionTable::usage() * 10;
+    info.iteration = ctxt->iteration();
+    info.time_limit = ctxt->time_limit();
+    info.pv = &info.pvs[std::min<size_t>(info.pvs.size() - 1, info.iteration)];
+    info.pv->assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
+
+    background().push_task([info] {
+        if (UCI::output_expected())
+        {
+            output_info(std::cout, info);
+            std::cout << std::endl;
+
+            if (_debug)
+            {
+                std::ostringstream out;
+                output_info(out << " <<< ", info);
+                log_debug(out.str());
+            }
+        }
+    });
 }
 
 void UCI::run()
@@ -461,7 +521,10 @@ void UCI::run()
         LOG_DEBUG(std::format(">>> {}", cmd));
         lowercase(cmd);
         if (cmd == "quit")
+        {
+            stop();
             break;
+        }
 
         Arguments args;
         /* tokenize command */
@@ -478,7 +541,7 @@ void UCI::run()
     }
 }
 
-void UCI::dispatch(const std::string &cmd, const Arguments &args)
+INLINE void UCI::dispatch(const std::string &cmd, const Arguments &args)
 {
     ASSERT(!args.empty());
     const auto iter = commands.find(args.front());
@@ -720,7 +783,7 @@ void UCI::position(const Arguments &args)
     LOG_DEBUG(search::Context::epd(_buf._state));
 }
 
-score_t UCI::search()
+INLINE score_t UCI::search()
 {
     if (!search::Context::_history)
         search::Context::_history = std::make_unique<search::History>();
