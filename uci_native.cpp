@@ -329,11 +329,11 @@ private:
             }
     }
 
-    /* Lazily initialize thread pool. */
+    /* Lazily initialize thread pool. One thread for thinking, another for sending info back to the GUI. */
     static ThreadPool &background()
     {
         if (!_pool)
-            _pool = std::make_unique<ThreadPool>(1);
+            _pool = std::make_unique<ThreadPool>(2);
         return *_pool;
     }
 
@@ -343,6 +343,9 @@ private:
     {
         if (output_expected())
         {
+            if (_pool)
+                _pool->wait_for_tasks<1>(); /* wait for on_iteration / output_info tasks to drain */
+
             auto &ctxt = context();
             auto move = ctxt._best_move;
             if (move)
@@ -434,50 +437,70 @@ std::unique_ptr<ThreadPool> UCI::_pool;
 std::atomic_bool UCI::_output_expected(false);
 
 /** Estimate number of moves (not plies!) until mate. */
-template <typename T>
-static INLINE int mate_distance(score_t score, const T &pv)
+static INLINE int mate_distance(score_t score, const search::PV &pv)
 {
     return std::copysign((std::max<int>(CHECKMATE - std::abs(score), pv.size()) + 1) / 2, score);
 }
 
-static void INLINE output_info(std::ostream& out, search::Context *ctxt, const search::IterationInfo* info)
+struct Info : public search::IterationInfo
 {
-    const auto& pv = std::ranges::subrange(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
+    int eval_depth;
+    int hashfull;
+    int iteration;
+    int time_limit;
+    search::PV* pv = nullptr;
+    static std::array<search::PV, PLY_MAX> pvs;
 
+    explicit Info(const IterationInfo& info) : IterationInfo(info) {}
+};
+
+std::array<search::PV, PLY_MAX> Info::pvs;
+
+static void INLINE output_info(std::ostream& out, const Info& info)
+{
     output(out,
-        "info depth ", ctxt->iteration(),
-        " seldepth ", ctxt->get_tt()->_eval_depth,
-        " score cp ", info->score);
-    if (std::abs(info->score) > MATE_HIGH)
-        output(out, " mate ", mate_distance(info->score, pv));
+        "info depth ", info.iteration,
+        " seldepth ", info.eval_depth,
+        " score cp ", info.score);
+    if (std::abs(info.score) > MATE_HIGH)
+        output(out, " mate ", mate_distance(info.score, *info.pv));
 
-    const auto time_limit = ctxt->time_limit();
-    if (time_limit < 0 || time_limit > 50)
+    if (info.time_limit < 0 || info.time_limit > 50)
     {
         output(out,
-            " time ", info->milliseconds,
-            " nodes ", info->nodes,
-            " knps ", int(info->knps * 1000),
-            " hashfull ", int(search::TranspositionTable::usage() * 10));
+            " time ", info.milliseconds,
+            " nodes ", info.nodes,
+            " knps ", int(info.knps * 1000),
+            " hashfull ", info.hashfull);
 
         out << " pv ";
-        for (const auto &m : pv)
+        for (const auto &m : *info.pv)
             out << m << " ";
     }
 }
 
 /* static */
-INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *info)
+INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *iter_info)
 {
-    output_info(std::cout, ctxt, info);
-    std::cout << std::endl;
+    Info info(*iter_info);
+    info.eval_depth = ctxt->get_tt()->_eval_depth;
+    info.hashfull = search::TranspositionTable::usage() * 10;
+    info.iteration = ctxt->iteration();
+    info.time_limit = ctxt->time_limit();
+    info.pv = &info.pvs[std::min<size_t>(info.pvs.size() - 1, info.iteration)];
+    info.pv->assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
 
-    if (_debug)
-    {
-        std::ostringstream out;
-        output_info(out << " <<< ", ctxt, info);
-        log_debug(out.str());
-    }
+    background().push_task([info] {
+        output_info(std::cout, info);
+        std::cout << std::endl;
+
+        if (_debug)
+        {
+            std::ostringstream out;
+            output_info(out << " <<< ", info);
+            log_debug(out.str());
+        }
+    });
 }
 
 void UCI::run()
@@ -652,9 +675,11 @@ void UCI::go(const Arguments &args)
         if (!explicit_movetime)
             ctxt->set_time_info(time_remaining[turn], movestogo, _score);
 
-        _score = search();
-        /* Do not request to ponder below 100 ms per move. */
-        output_best_move(movetime >= 100);
+        background().push_task([this, movetime] {
+            _score = search();
+            /* Do not request to ponder below 100 ms per move. */
+            output_best_move(movetime >= 100);
+        });
     }
 }
 
@@ -803,8 +828,8 @@ void UCI::setoption(const Arguments &args)
             acc->emplace_back(a);
     }
 
-    const auto opt_name = join(" ", name);
-    auto iter = _options.find(opt_name);
+    auto opt_name = join(" ", name);
+    auto iter = _options.find(lowercase(opt_name));
     if (iter != _options.end())
         iter->second->set(join(" ", value));
     else
@@ -816,7 +841,7 @@ void UCI::stop()
     search::Context::cancel();
     output_best_move();
     if (_pool)
-        _pool->wait_for_tasks();
+        _pool->wait_for_tasks<0>();
 }
 
 void UCI::uci()
