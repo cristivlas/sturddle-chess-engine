@@ -2173,7 +2173,6 @@ void cancel_search(CancelReason reason)
         _exit(1);
 
     case CancelReason::PY_ERROR:
-        std::cout << "\nPython exception:\n";
         PyErr_Print();
         _exit(2);
     }

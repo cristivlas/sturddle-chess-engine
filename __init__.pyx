@@ -388,7 +388,7 @@ cdef class BoardState:
 cdef extern from 'context.h' nogil:
     const char* const NNUE_EVAL_FILE
 
-    cdef void run_uci_loop(const char* name, const char* version, bool)
+    cdef void run_uci_loop(const char* name, const char* version, bool) except*
     #
     # Get/set engine params via Python
     #

@@ -4,24 +4,13 @@
 #include <string_view>
 #include "context.h"
 
-namespace std
+static void raise_runtime_error(const char* err)
 {
-    INLINE std::string to_string(std::string_view v)
-    {
-        return std::string(v);
-    }
+    PyGILState_STATE with_gil(PyGILState_Ensure());
+    PyErr_SetString(PyExc_RuntimeError, err);
+    PyGILState_Release(with_gil);
 }
-template <typename T>
-static void log_error(T err)
-{
-    try
-    {
-        search::Context::log_message(LogLevel::ERROR, std::to_string(err));
-    }
-    catch (...)
-    {
-    }
-}
+
 #if NATIVE_UCI /* experimental */
 #include <cmath>
 #include <format>
@@ -37,10 +26,30 @@ static void log_error(T err)
 
 #define LOG_DEBUG(x) while (_debug) { log_debug((x)); break; }
 
+namespace std
+{
+    INLINE std::string to_string(std::string_view v)
+    {
+        return std::string(v);
+    }
+}
+
 namespace
 {
     static constexpr std::string_view START_POS{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
     static bool _debug = false;
+
+    template <typename T>
+    static void log_error(T err)
+    {
+        try
+        {
+            search::Context::log_message(LogLevel::ERROR, std::to_string(err));
+        }
+        catch (...)
+        {
+        }
+    }
 
     template <typename T> static void log_debug(T msg)
     {
@@ -82,6 +91,14 @@ namespace
         LOG_DEBUG(std::format("<<< {}", out));
         if constexpr(flush)
             std::cout << std::flush;
+    }
+
+    template <typename... Args> void raise_value_error(std::format_string<Args...> fmt, Args&&... args)
+    {
+        const auto err = std::format(fmt, std::forward<Args>(args)...);
+        cython_wrapper::GIL_State with_gil;
+        log_error(err);
+        PyErr_SetString(PyExc_ValueError, err.c_str());
     }
 } /* namespace */
 
@@ -218,14 +235,9 @@ namespace
         void set(std::string_view value) override
         {
             if (nnue_init(std::string(value).c_str()))
-            {
                 _eval_file = value;
-            }
             else
-            {
-                log_error(std::format("invalid NNUE file: {}", value));
-                _exit(-1); /* refuse to run without valid NNUE */
-            }
+                raise_value_error("invalid NNUE file: {}", value);  /* refuse to run without valid NNUE */
         }
     };
 
@@ -343,9 +355,6 @@ private:
     {
         if (output_expected())
         {
-            if (_pool)
-                _pool->wait_for_tasks<1>(); /* wait for on_iteration / output_info tasks to drain */
-
             auto &ctxt = context();
             auto move = ctxt._best_move;
             if (move)
@@ -378,22 +387,15 @@ private:
     template <typename F>
     INLINE void invoke(const std::string &cmd, F f, const Arguments &args)
     {
-        try
+        if constexpr (arity<F>{} == 0)
         {
-            if constexpr (arity<F>{} == 0)
-            {
-                if (args.size() > 1)
-                    log_warning("extraneous arguments: " + cmd);
-                (this->*f)();
-            }
-            else
-            {
-                (this->*f)(args);
-            }
+            if (args.size() > 1)
+                log_warning("extraneous arguments: " + cmd);
+            (this->*f)();
         }
-        catch (const std::exception &e)
+        else
         {
-            log_error(e.what());
+            (this->*f)(args);
         }
     }
 
@@ -490,6 +492,8 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
     info.pv->assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
 
     background().push_task([info] {
+        if (!output_expected())
+            return;
         output_info(std::cout, info);
         std::cout << std::endl;
 
@@ -779,17 +783,12 @@ void UCI::position(const Arguments &args)
             || !chess::epd::parse_side_to_move(fen[1], _buf._state)
             || !chess::epd::parse_castling(fen[2], _buf._state)
             || !chess::epd::parse_en_passant_target(fen[3], _buf._state)
-        )
-        {
-            log_error(std::format("fen={} {} {} {}", fen[0], fen[1], fen[2], fen[3]));
-            log_error("invalid position: " + search::Context::epd(_buf._state));
-            _exit(-2);
-        }
+           )
+            raise_value_error("fen={} {} {} {}", fen[0], fen[1], fen[2], fen[3]);
     }
     else if (!fen.empty())
     {
-        log_error(std::format("invalid number of fen tokens: {}", fen.size()));
-        _exit(-2);
+        raise_value_error("invalid token count {}, expected 4", fen.size());
     }
     apply_moves(moves);
     LOG_DEBUG(search::Context::epd(_buf._state));
@@ -840,7 +839,7 @@ void UCI::stop()
     search::Context::cancel();
     output_best_move();
     if (_pool)
-        _pool->wait_for_tasks<0>();
+        _pool->wait_for_tasks();
 }
 
 void UCI::uci()
@@ -884,11 +883,11 @@ extern "C" void run_uci_loop(const char *name, const char *version, bool debug)
         err = "unknown exception";
     }
     if (!err.empty())
-        log_error(err);
+        raise_runtime_error(err.c_str());
 }
 #else
 extern "C" void run_uci_loop(const char *, const char *, bool)
 {
-    log_error("Native UCI implementation is not enabled.");
+    raise_runtime_error("Native UCI implementation is not enabled.");
 }
 #endif /* NATIVE_UCI */

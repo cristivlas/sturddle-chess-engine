@@ -80,3 +80,5 @@ if __name__ == '__main__':
         engine.uci('Sturddle UCI', args.debug)
     except KeyboardInterrupt:
         pass
+    except:
+        logging.exception('UCI')
