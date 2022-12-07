@@ -27,6 +27,8 @@ static void raise_runtime_error(const char* err)
 
 #define LOG_DEBUG(x) while (_debug) { log_debug((x)); break; }
 
+using namespace std::literals::chrono_literals;
+
 namespace std
 {
     INLINE std::string to_string(std::string_view v)
@@ -500,8 +502,8 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
     info.pv->assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
 
     /* output in background, to minimize latency of compute tasks */
-    background().push_task([info] {
-        if (!output_expected())
+    background().push_task(1ms, [info] {
+        if (!output_expected() || search::Context::is_cancelled())
             return;
         output_info(std::cout, info);
         std::cout << std::endl;
@@ -509,7 +511,7 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
         if (_debug)
         {
             std::ostringstream out;
-            output_info(out << " <<< ", info);
+            output_info(out << "<<< ", info);
             log_debug(out.str());
         }
     });

@@ -32,6 +32,7 @@
 template<typename I> class thread_pool
 {
 public:
+    using mutex_type = std::timed_mutex;
     using thread_id_type = I;
 
     explicit thread_pool(size_t thread_count)
@@ -64,7 +65,19 @@ public:
     template<typename T> void push_task(T&& task)
     {
         {
-            std::unique_lock<std::mutex> lock(_mutex);
+            std::unique_lock<mutex_type> lock(_mutex);
+            _tasks.emplace_back(std::move(task));
+        }
+        _cv.notify_all();
+    }
+
+    template<typename T, typename Rep, typename Period>
+    void push_task(const std::chrono::duration<Rep, Period>& d, T&& task)
+    {
+        {
+            std::unique_lock<mutex_type> lock(_mutex, std::defer_lock);
+            if (!lock.try_lock_for(d))
+                return;
             _tasks.emplace_back(std::move(task));
         }
         _cv.notify_all();
@@ -75,15 +88,15 @@ public:
         return _tid;
     }
 
-    template<int MaxPending = 0> void wait_for_tasks()
+    void wait_for_tasks()
     {
-        std::unique_lock<std::mutex> lock(_mutex);
+        std::unique_lock<mutex_type> lock(_mutex);
         while (!_tasks.empty())
         {
             _cv.notify_all();
             _cv.wait(lock);
         }
-        while (tasks_pending() > MaxPending)
+        while (tasks_pending() > 0)
             std::this_thread::yield();
     }
 
@@ -97,11 +110,11 @@ private:
     {
         _tid = static_cast<thread_id_type>(index);
 
-        while (_running)
+        while (_running.load(std::memory_order_relaxed))
         {
             std::function<void()> task;
             {
-                std::unique_lock<std::mutex> lock(_mutex);
+                std::unique_lock<mutex_type> lock(_mutex);
                 while (_tasks.empty())
                 {
                     if (!_running)
@@ -128,8 +141,8 @@ private:
 
     std::atomic_bool _running;
     std::atomic_int _tasks_pending;
-    std::condition_variable _cv;
-    std::mutex _mutex;
+    std::condition_variable_any _cv;
+    mutex_type _mutex;
     std::deque<std::function<void()>> _tasks;
     std::vector<std::thread> _threads;
 
