@@ -32,7 +32,7 @@
 template<typename I> class thread_pool
 {
 public:
-    using mutex_type = std::timed_mutex;
+    using mutex_type = std::mutex;
     using thread_id_type = I;
 
     explicit thread_pool(size_t thread_count)
@@ -66,18 +66,6 @@ public:
     {
         {
             std::unique_lock<mutex_type> lock(_mutex);
-            _tasks.emplace_back(std::move(task));
-        }
-        _cv.notify_all();
-    }
-
-    template<typename T, typename Rep, typename Period>
-    void push_task(const std::chrono::duration<Rep, Period>& d, T&& task)
-    {
-        {
-            std::unique_lock<mutex_type> lock(_mutex, std::defer_lock);
-            if (!lock.try_lock_for(d))
-                return;
             _tasks.emplace_back(std::move(task));
         }
         _cv.notify_all();
@@ -141,7 +129,7 @@ private:
 
     std::atomic_bool _running;
     std::atomic_int _tasks_pending;
-    std::condition_variable_any _cv;
+    std::condition_variable _cv;
     mutex_type _mutex;
     std::deque<std::function<void()>> _tasks;
     std::vector<std::thread> _threads;

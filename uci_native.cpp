@@ -27,8 +27,6 @@ static void raise_runtime_error(const char* err)
 
 #define LOG_DEBUG(x) while (_debug) { log_debug((x)); break; }
 
-using namespace std::literals::chrono_literals;
-
 namespace std
 {
     INLINE std::string to_string(std::string_view v)
@@ -350,11 +348,11 @@ private:
             }
     }
 
-    /* Lazily initialize thread pool. One thread for thinking, another for sending info back to the GUI. */
+    /* Lazily initialize thread pool. */
     static ThreadPool &background()
     {
         if (!_pool)
-            _pool = std::make_unique<ThreadPool>(2);
+            _pool = std::make_unique<ThreadPool>(1);
         return *_pool;
     }
 
@@ -493,6 +491,8 @@ static void INLINE output_info(std::ostream& out, const Info& info)
 /* static */
 INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *iter_info)
 {
+    if (search::Context::is_cancelled() || !output_expected())
+        return;
     Info info(*iter_info);
     info.eval_depth = ctxt->get_tt()->_eval_depth;
     info.hashfull = search::TranspositionTable::usage() * 10;
@@ -501,20 +501,15 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
     info.pv = &info.pvs[std::min<size_t>(info.pvs.size() - 1, info.iteration)];
     info.pv->assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
 
-    /* output in background, to minimize latency of compute tasks */
-    background().push_task(1ms, [info] {
-        if (!output_expected() || search::Context::is_cancelled())
-            return;
-        output_info(std::cout, info);
-        std::cout << std::endl;
+    output_info(std::cout, info);
+    std::cout << std::endl;
 
-        if (_debug)
-        {
-            std::ostringstream out;
-            output_info(out << "<<< ", info);
-            log_debug(out.str());
-        }
-    });
+    if (_debug)
+    {
+        std::ostringstream out;
+        output_info(out << "<<< ", info);
+        log_debug(out.str());
+    }
 }
 
 void UCI::run()
@@ -689,11 +684,11 @@ void UCI::go(const Arguments &args)
         if (!explicit_movetime)
             ctxt->set_time_info(time_remaining[turn], movestogo, _score);
 
-        background().push_task([this, movetime] {
+        // background().push_task([this, movetime] {
             _score = search();
             /* Do not request to ponder below 100 ms per move. */
             output_best_move(movetime >= 100);
-        });
+        // });
     }
 }
 
