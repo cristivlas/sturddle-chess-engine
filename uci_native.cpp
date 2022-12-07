@@ -4,6 +4,7 @@
 #include <string_view>
 #include "context.h"
 
+/** Raise RuntimeError, and let Python handle it... */
 static void raise_runtime_error(const char* err)
 {
     PyGILState_STATE with_gil(PyGILState_Ensure());
@@ -93,6 +94,7 @@ namespace
             std::cout << std::flush;
     }
 
+    /** Raise ValueError exception, and exit with error (see dtor of GIL_State) */
     template <typename... Args>
 #if _MSC_VER
     void raise_value_error(std::_Fmt_string<Args...> fmt, Args&&... args)
@@ -461,6 +463,7 @@ struct Info : public search::IterationInfo
     explicit Info(const IterationInfo& info) : IterationInfo(info) {}
 };
 
+/* Hold PVs for pending output tasks */
 std::array<search::PV, PLY_MAX> Info::pvs;
 
 static void INLINE output_info(std::ostream& out, const Info& info)
@@ -496,6 +499,7 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
     info.pv = &info.pvs[std::min<size_t>(info.pvs.size() - 1, info.iteration)];
     info.pv->assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
 
+    /* output in background, to minimize latency of compute tasks */
     background().push_task([info] {
         if (!output_expected())
             return;
