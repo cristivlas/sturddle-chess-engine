@@ -343,9 +343,6 @@ private:
     {
         if (output_expected())
         {
-            if (_pool)
-                _pool->wait_for_tasks<1>(); /* wait for on_iteration / output_info tasks to drain */
-
             auto &ctxt = context();
             auto move = ctxt._best_move;
             if (move)
@@ -403,6 +400,7 @@ private:
         _buf._state.castling_rights = chess::BB_DEFAULT_CASTLING_RIGHTS;
         chess::epd::parse_pos(START_POS, _buf._state);
         _buf._state.rehash();
+        _book_depth = max_depth;
     }
 
     /** think on opponent's time */
@@ -447,13 +445,12 @@ struct Info : public search::IterationInfo
     int hashfull;
     int iteration;
     int time_limit;
-    search::PV* pv = nullptr;
-    static std::array<search::PV, PLY_MAX> pvs;
+    static search::PV pv;
 
     explicit Info(const IterationInfo& info) : IterationInfo(info) {}
 };
 
-std::array<search::PV, PLY_MAX> Info::pvs;
+search::PV Info::pv;
 
 static void INLINE output_info(std::ostream& out, const Info& info)
 {
@@ -462,7 +459,7 @@ static void INLINE output_info(std::ostream& out, const Info& info)
         " seldepth ", info.eval_depth,
         " score cp ", info.score);
     if (std::abs(info.score) > MATE_HIGH)
-        output(out, " mate ", mate_distance(info.score, *info.pv));
+        output(out, " mate ", mate_distance(info.score, info.pv));
 
     if (info.time_limit < 0 || info.time_limit > 50)
     {
@@ -473,7 +470,7 @@ static void INLINE output_info(std::ostream& out, const Info& info)
             " hashfull ", info.hashfull);
 
         out << " pv ";
-        for (const auto &m : *info.pv)
+        for (const auto &m : info.pv)
             out << m << " ";
     }
 }
@@ -486,20 +483,17 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
     info.hashfull = search::TranspositionTable::usage() * 10;
     info.iteration = ctxt->iteration();
     info.time_limit = ctxt->time_limit();
-    info.pv = &info.pvs[std::min<size_t>(info.pvs.size() - 1, info.iteration)];
-    info.pv->assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
+    info.pv.assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
 
-    background().push_task([info] {
-        output_info(std::cout, info);
-        std::cout << std::endl;
+    output_info(std::cout, info);
+    std::cout << std::endl;
 
-        if (_debug)
-        {
-            std::ostringstream out;
-            output_info(out << " <<< ", info);
-            log_debug(out.str());
-        }
-    });
+    if (_debug)
+    {
+        std::ostringstream out;
+        output_info(out << " <<< ", info);
+        log_debug(out.str());
+    }
 }
 
 void UCI::run()
@@ -674,11 +668,9 @@ void UCI::go(const Arguments &args)
         if (!explicit_movetime)
             ctxt->set_time_info(time_remaining[turn], movestogo, _score);
 
-        background().push_task([this, movetime] {
-            _score = search();
-            /* Do not request to ponder below 100 ms per move. */
-            output_best_move(movetime >= 100);
-        });
+        _score = search();
+        /* Do not request to ponder below 100 ms per move. */
+        output_best_move(movetime >= 100);
     }
 }
 
@@ -840,7 +832,7 @@ void UCI::stop()
     search::Context::cancel();
     output_best_move();
     if (_pool)
-        _pool->wait_for_tasks<0>();
+        _pool->wait_for_tasks();
 }
 
 void UCI::uci()
