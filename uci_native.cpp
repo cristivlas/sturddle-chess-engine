@@ -93,7 +93,12 @@ namespace
             std::cout << std::flush;
     }
 
-    template <typename... Args> void raise_value_error(std::format_string<Args...> fmt, Args&&... args)
+    template <typename... Args>
+#if _MSC_VER
+    void raise_value_error(std::_Fmt_string<Args...> fmt, Args&&... args)
+#else
+    void raise_value_error(std::format_string<Args...> fmt, Args&&... args)
+#endif
     {
         const auto err = std::format(fmt, std::forward<Args>(args)...);
         cython_wrapper::GIL_State with_gil;
