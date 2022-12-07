@@ -491,8 +491,6 @@ static void INLINE output_info(std::ostream& out, const Info& info)
 /* static */
 INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *iter_info)
 {
-    if (search::Context::is_cancelled() || !output_expected())
-        return;
     Info info(*iter_info);
     info.eval_depth = ctxt->get_tt()->_eval_depth;
     info.hashfull = search::TranspositionTable::usage() * 10;
@@ -684,11 +682,9 @@ void UCI::go(const Arguments &args)
         if (!explicit_movetime)
             ctxt->set_time_info(time_remaining[turn], movestogo, _score);
 
-        // background().push_task([this, movetime] {
-            _score = search();
-            /* Do not request to ponder below 100 ms per move. */
-            output_best_move(movetime >= 100);
-        // });
+        _score = search();
+        /* Do not request to ponder below 100 ms per move. */
+        output_best_move(movetime >= 100);
     }
 }
 
