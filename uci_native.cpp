@@ -27,6 +27,8 @@ static void raise_runtime_error(const char* err)
 
 #define LOG_DEBUG(x) while (_debug) { log_debug((x)); break; }
 
+static constexpr auto INFINITE = -1;
+
 namespace std
 {
     INLINE std::string to_string(std::string_view v)
@@ -380,7 +382,7 @@ private:
         }
         else
         {
-            if (_ponder && request_ponder)
+            if (request_ponder && _ponder)
             {
                 const auto &pv = _tt.get_pv();
                 if (pv.size() > 2 && pv[1] == move)
@@ -453,7 +455,11 @@ std::atomic_bool UCI::_output_expected(false);
 /** Estimate number of moves (not plies!) until mate. */
 static INLINE int mate_distance(score_t score, const search::PV &pv)
 {
+#if 0
     return std::copysign((std::max<int>(CHECKMATE - std::abs(score), pv.size()) + 1) / 2, score);
+#else
+    return std::copysign((pv.size() + 1) / 2, score);
+#endif
 }
 
 /** Info sent to the GUI. */
@@ -481,18 +487,27 @@ std::array<search::PV, PLY_MAX> Info::pvs;
 
 static void INLINE output_info(std::ostream& out, const Info& info)
 {
-    output(out, "info depth ", info.iteration, " score cp ", info.score);
+    constexpr auto TIME_LOW = 25; /* millisec */
+
+    const auto ms = info.milliseconds;
     const auto time_limit = search::Context::time_limit();
-    if (time_limit < 0 || time_limit > search::Context::elapsed_milliseconds() + 25)
+
+    if (time_limit > 0 && time_limit <= ms + TIME_LOW)
     {
+        output(out, "info depth ", info.iteration, " score cp ", info.score);
+    }
+    else
+    {
+        output(out, "info depth ", info.iteration, " seldepth ", info.eval_depth);
         if (std::abs(info.score) > MATE_HIGH)
-            output(out, " mate ", mate_distance(info.score, *info.pv));
+            output(out, " score mate ", mate_distance(info.score, *info.pv));
+        else
+            output(out, " score cp ", info.score);
 
         output(out,
-            " seldepth ", info.eval_depth,
-            " time ", info.milliseconds,
+            " time ", ms,
             " nodes ", info.nodes,
-            " knps ", int(info.knps * 1000),
+            " nps ", int(info.knps * 1000),
             " hashfull ", info.hashfull);
         out << " pv ";
         for (const auto &m : *info.pv)
@@ -652,7 +667,7 @@ void UCI::go(const Arguments &args)
         }
         else if (a == "ponder")
         {
-            do_ponder = _ponder;
+            do_ponder = true;
         }
         else if (a == "infinite")
         {
@@ -674,11 +689,12 @@ void UCI::go(const Arguments &args)
     if (do_ponder)
     {
         _extended_time = std::max(1, movetime);
+        ctxt->set_time_limit_ms(INFINITE);
         _compute_pool->push_task([this]{ ponder(); });
     }
     else if (do_analysis && !explicit_movetime)
     {
-        ctxt->set_time_limit_ms(-1);
+        ctxt->set_time_limit_ms(INFINITE);
         _compute_pool->push_task([this]{ search(); output_best_move(); });
     }
     else
@@ -739,8 +755,6 @@ void UCI::newgame()
 void UCI::ponder()
 {
     LOG_DEBUG(std::format("pondering, extended_time={}", _extended_time.load()));
-
-    context().set_time_limit_ms(-1 /* infinite */);
     search();
     if (_extended_time)
         _extended_time = 0;
