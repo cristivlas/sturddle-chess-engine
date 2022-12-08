@@ -373,9 +373,8 @@ private:
                     output_best_move(move, request_ponder);
                 }))
                 {
-                    if (_debug)
-                        log_warning("try_push_task(output_best_move) failed");
-                    output_best_move(move, request_ponder);
+                    log_warning("try_push_task(output_best_move) failed");
+                    /* hopefully the tail call in stop() takes care of it */
                 }
         }
     }
@@ -468,14 +467,23 @@ static INLINE int mate_distance(score_t score, const search::PV &pv)
 
 struct Info : public search::IterationInfo
 {
-    int eval_depth;
-    int hashfull;
-    int iteration;
-    int time_limit;
-    search::PV* pv = nullptr;
+    const int eval_depth;
+    const int hashfull;
+    const int iteration;
+    const int time_limit;
+    search::PV* const pv;
     static std::array<search::PV, PLY_MAX> pvs;
 
-    explicit Info(const IterationInfo& info) : IterationInfo(info) {}
+    Info(const search::Context& ctxt, const IterationInfo& info)
+        : IterationInfo(info)
+        , eval_depth(ctxt.get_tt()->_eval_depth)
+        , hashfull(search::TranspositionTable::usage() * 10)
+        , iteration(ctxt.iteration())
+        , time_limit(ctxt.time_limit())
+        , pv(&pvs[std::min<size_t>(pvs.size() - 1, iteration)])
+    {
+        pv->assign(ctxt.get_pv().begin() + 1, ctxt.get_pv().end());
+    }
 };
 
 /* Hold PVs for pending output tasks */
@@ -519,22 +527,19 @@ static void INLINE output_info(const Info& info)
 /* static */
 INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *iter_info)
 {
-    Info info(*iter_info);
-    info.eval_depth = ctxt->get_tt()->_eval_depth;
-    info.hashfull = search::TranspositionTable::usage() * 10;
-    info.iteration = ctxt->iteration();
-    info.time_limit = ctxt->time_limit();
-    info.pv = &info.pvs[std::min<size_t>(info.pvs.size() - 1, info.iteration)];
-    info.pv->assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
-
-    if (!background().try_push_task([info] {
-        std::unique_lock<std::mutex> lock(_mutex);
-        output_info(info);
-    }))
+    if (ctxt && iter_info)
     {
-        if (_debug)
-            log_warning("try_push_task(output_info) failed");
-        output_info(info);
+        const Info info(*ctxt, *iter_info);
+        if (!background().try_push_task([info] {
+            std::unique_lock<std::mutex> lock(_mutex);
+            output_info(info);
+        }))
+        {
+            if (_debug)
+                log_warning("try_push_task(output_info) failed");
+            /* fail over to synchronous mode */
+            output_info(info);
+        }
     }
 }
 
