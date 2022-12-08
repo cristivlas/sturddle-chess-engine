@@ -51,7 +51,8 @@ def _configure_logging(args):
     for h in log.handlers[:]:
         log.removeHandler(h)
     format = '%(asctime)s %(levelname)-8s %(process)d %(message)s'
-    logging.basicConfig(level=logging.INFO, filename=args.logfile, format=format)
+    filename = f'{args.logfile}.{os.getpid()}' if args.separate_logs else args.logfile
+    logging.basicConfig(level=logging.INFO, filename=filename, format=format)
 
 '''
 Workaround for --onefile executable built with PyInstaller:
@@ -71,13 +72,14 @@ def _hide_console():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sturddle Chess Engine bootloader')
-    parser.add_argument('-d', '--debug', action='store_true', help='enable verbose logging')
     parser.add_argument('-l', '--logfile', default='sturddle.log')
+    parser.add_argument('-s', '--separate-logs', action='store_true')
+    parser.add_argument('-v', '--verbose', action='store_true', help='enable verbose logging')
     args = parser.parse_args()
     _configure_logging(args)
     _hide_console()
     try:
-        engine.uci('Sturddle UCI', args.debug)
+        engine.uci('Sturddle UCI', debug=args.verbose)
     except KeyboardInterrupt:
         pass
     except:

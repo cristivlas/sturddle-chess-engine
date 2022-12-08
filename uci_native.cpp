@@ -348,47 +348,60 @@ private:
             }
     }
 
-    /* Lazily initialize thread pool. */
-    static ThreadPool &background()
+    static INLINE ThreadPool &background()
     {
-        if (!_pool)
-            _pool = std::make_unique<ThreadPool>(1);
         return *_pool;
     }
 
     INLINE search::Context &context() { return *_buf.as_context(); }
 
+    template <bool same_thread=false>
     INLINE void output_best_move(bool request_ponder = false)
     {
         if (output_expected())
         {
             auto &ctxt = context();
             auto move = ctxt._best_move;
-            if (move)
+            if (!move)
+                if (auto first = ctxt.first_valid_move())
+                    move = *first;
+            if constexpr(same_thread)
                 output_best_move(move, request_ponder);
-            else if (auto first = ctxt.first_valid_move())
-                output_best_move(*first, request_ponder);
             else
-                output("resign");
+                if (!background().try_push_task([this, move, request_ponder] {
+                    std::unique_lock<std::mutex> lock(_mutex);
+                    output_best_move(move, request_ponder);
+                }))
+                {
+                    if (_debug)
+                        log_warning("try_push_task(output_best_move) failed");
+                    output_best_move(move, request_ponder);
+                }
         }
     }
 
     INLINE void output_best_move(const chess::BaseMove &move, bool request_ponder = false)
     {
-        ASSERT(move);
         ASSERT(output_expected());
         _output_expected = false;
 
-        if (_ponder && request_ponder)
+        if (!move)
         {
-            const auto &pv = _tt.get_pv();
-            if (pv.size() > 2 && pv[1] == move)
-            {
-                output(std::format("bestmove {} ponder {}", move.uci(), pv[2].uci()));
-                return;
-            }
+            output("resign");
         }
-        output(std::format("bestmove {}", move.uci()));
+        else
+        {
+            if (_ponder && request_ponder)
+            {
+                const auto &pv = _tt.get_pv();
+                if (pv.size() > 2 && pv[1] == move)
+                {
+                    output(std::format("bestmove {} ponder {}", move.uci(), pv[2].uci()));
+                    return;
+                }
+            }
+            output(std::format("bestmove {}", move.uci()));
+        }
     }
 
     template <typename F>
@@ -397,7 +410,7 @@ private:
         if constexpr (arity<F>{} == 0)
         {
             if (args.size() > 1)
-                log_warning("extraneous arguments: " + cmd);
+                log_warning(std::format("extraneous arguments: {}", cmd));
             (this->*f)();
         }
         else
@@ -440,10 +453,12 @@ private:
     bool _use_opening_book = false;
     bool _best_book_move = false;
     chess::BaseMove _last_move;
+    static std::mutex _mutex; /* for ordering output_best_move / output_info */
 };
 
-std::unique_ptr<ThreadPool> UCI::_pool;
+std::unique_ptr<ThreadPool> UCI::_pool(std::make_unique<ThreadPool>(2));
 std::atomic_bool UCI::_output_expected(false);
+std::mutex UCI::_mutex;
 
 /** Estimate number of moves (not plies!) until mate. */
 static INLINE int mate_distance(score_t score, const search::PV &pv)
@@ -488,6 +503,19 @@ static void INLINE output_info(std::ostream& out, const Info& info)
     }
 }
 
+static void INLINE output_info(const Info& info)
+{
+    output_info(std::cout, info);
+    std::cout << std::endl;
+
+    if (_debug)
+    {
+        std::ostringstream out;
+        output_info(out << "<<< ", info);
+        log_debug(out.str());
+    }
+}
+
 /* static */
 INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *iter_info)
 {
@@ -499,14 +527,14 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
     info.pv = &info.pvs[std::min<size_t>(info.pvs.size() - 1, info.iteration)];
     info.pv->assign(ctxt->get_pv().begin() + 1, ctxt->get_pv().end());
 
-    output_info(std::cout, info);
-    std::cout << std::endl;
-
-    if (_debug)
+    if (!background().try_push_task([info] {
+        std::unique_lock<std::mutex> lock(_mutex);
+        output_info(info);
+    }))
     {
-        std::ostringstream out;
-        output_info(out << "<<< ", info);
-        log_debug(out.str());
+        if (_debug)
+            log_warning("try_push_task(output_info) failed");
+        output_info(info);
     }
 }
 
@@ -531,6 +559,7 @@ void UCI::run()
         {
             _output_expected = false;
             stop();
+            output("info string good bye");
             break;
         }
 
@@ -682,9 +711,11 @@ void UCI::go(const Arguments &args)
         if (!explicit_movetime)
             ctxt->set_time_info(time_remaining[turn], movestogo, _score);
 
-        _score = search();
-        /* Do not request to ponder below 100 ms per move. */
-        output_best_move(movetime >= 100);
+        background().push_task([this, movetime] {
+            _score = search();
+            /* Do not request to ponder below 100 ms per move. */
+            output_best_move(movetime >= 100);
+        });
     }
 }
 
@@ -838,10 +869,9 @@ void UCI::setoption(const Arguments &args)
 
 void UCI::stop()
 {
-    search::Context::cancel();
-    output_best_move();
-    if (_pool)
-        _pool->wait_for_tasks();
+    search::Context::set_time_limit_ms(0);
+    _pool->wait_for_tasks([] { search::Context::cancel(); });
+    output_best_move<true>();
 }
 
 void UCI::uci()

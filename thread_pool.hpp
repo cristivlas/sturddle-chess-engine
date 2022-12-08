@@ -64,11 +64,24 @@ public:
 
     template<typename T> void push_task(T&& task)
     {
-        {
+        {   /* mutex scope */
             std::unique_lock<mutex_type> lock(_mutex);
             _tasks.emplace_back(std::move(task));
         }
         _cv.notify_all();
+    }
+
+    /* For non-critical tasks, to avoid deadlocks when another thread calls wait_for_tasks */
+    template<typename T> bool try_push_task(T&& task)
+    {
+        {   /* mutex scope */
+            std::unique_lock<mutex_type> lock(_mutex, std::defer_lock);
+            if (!lock.try_lock())
+                return false;
+            _tasks.emplace_back(std::move(task));
+        }
+        _cv.notify_all();
+        return true;
     }
 
     static thread_id_type thread_id()
@@ -76,16 +89,22 @@ public:
         return _tid;
     }
 
-    void wait_for_tasks()
+    template<typename F = void (*)()>
+    void wait_for_tasks(F f = []{})
     {
+        /* wait for all tasks to get picked up, assume enough workers */
         std::unique_lock<mutex_type> lock(_mutex);
         while (!_tasks.empty())
         {
             _cv.notify_all();
             _cv.wait(lock);
         }
+
         while (tasks_pending() > 0)
+        {
+            f();
             std::this_thread::yield();
+        }
     }
 
     int tasks_pending() const
@@ -121,7 +140,7 @@ private:
              * by value go out of scope before decrementing _tasks_pending
              */
             task = nullptr;
-
+            ASSERT(tasks_pending() > 0);
             --_tasks_pending;
             _cv.notify_all();
         }
