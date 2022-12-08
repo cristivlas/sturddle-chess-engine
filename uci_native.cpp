@@ -373,8 +373,9 @@ private:
                     output_best_move(move, request_ponder);
                 }))
                 {
-                    log_warning("try_push_task(output_best_move) failed");
-                    /* hopefully the tail call in stop() takes care of it */
+                    if (_debug)
+                        log_warning("output_best_move failed");
+                    /* ignore, hopefully the tail call in stop() will handle it */
                 }
         }
     }
@@ -536,9 +537,7 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
         }))
         {
             if (_debug)
-                log_warning("try_push_task(output_info) failed");
-            /* fail over to synchronous mode */
-            output_info(info);
+                log_warning(std::format("output_info failed on iteration {}", ctxt->iteration()));
         }
     }
 }
@@ -851,7 +850,6 @@ INLINE score_t UCI::search()
 
 void UCI::setoption(const Arguments &args)
 {
-    stop();
     Arguments name, value, *acc = nullptr;
 
     for (const auto &a : std::ranges::subrange(args.begin() + 1, args.end()))
