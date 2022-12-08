@@ -348,11 +348,6 @@ private:
             }
     }
 
-    static INLINE ThreadPool &background()
-    {
-        return *_pool;
-    }
-
     INLINE search::Context &context() { return *_buf.as_context(); }
 
     template <bool same_thread=false>
@@ -368,8 +363,7 @@ private:
             if constexpr(same_thread)
                 output_best_move(move, request_ponder);
             else
-                if (!background().try_push_task([this, move, request_ponder] {
-                    std::unique_lock<std::mutex> lock(_mutex);
+                if (!_output_pool->try_push_task([this, move, request_ponder] {
                     output_best_move(move, request_ponder);
                 }))
                 {
@@ -447,18 +441,19 @@ private:
     EngineOptions _options;
     const std::string _name;
     const std::string _version; /* engine version */
-    static std::unique_ptr<ThreadPool> _pool;
+    static std::unique_ptr<ThreadPool> _compute_pool;
+    static std::unique_ptr<ThreadPool> _output_pool;
     static std::atomic_bool _output_expected;
     bool _ponder = false;
     bool _use_opening_book = false;
     bool _best_book_move = false;
     chess::BaseMove _last_move;
-    static std::mutex _mutex; /* for ordering output_best_move / output_info */
 };
 
-std::unique_ptr<ThreadPool> UCI::_pool(std::make_unique<ThreadPool>(2));
+std::unique_ptr<ThreadPool> UCI::_output_pool(std::make_unique<ThreadPool>(1));
+std::unique_ptr<ThreadPool> UCI::_compute_pool(std::make_unique<ThreadPool>(1));
+
 std::atomic_bool UCI::_output_expected(false);
-std::mutex UCI::_mutex;
 
 /** Estimate number of moves (not plies!) until mate. */
 static INLINE int mate_distance(score_t score, const search::PV &pv)
@@ -528,8 +523,7 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
     if (ctxt && iter_info)
     {
         const Info info(*ctxt, *iter_info);
-        if (!background().try_push_task([info] {
-            std::unique_lock<std::mutex> lock(_mutex);
+        if (!_output_pool->try_push_task([info] {
             output_info(info);
         }))
         {
@@ -688,12 +682,12 @@ void UCI::go(const Arguments &args)
     if (do_ponder)
     {
         _extended_time = std::max(1, movetime);
-        background().push_task([this]{ ponder(); });
+        _compute_pool->push_task([this]{ ponder(); });
     }
     else if (do_analysis && !explicit_movetime)
     {
         ctxt->set_time_limit_ms(-1);
-        background().push_task([this]{ search(); output_best_move(); });
+        _compute_pool->push_task([this]{ search(); output_best_move(); });
     }
     else
     {
@@ -712,7 +706,7 @@ void UCI::go(const Arguments &args)
         if (!explicit_movetime)
             ctxt->set_time_info(time_remaining[turn], movestogo, _score);
 
-        background().push_task([this, movetime] {
+        _compute_pool->push_task([this, movetime] {
             _score = search();
             /* Do not request to ponder below 100 ms per move. */
             output_best_move(movetime >= 100);
@@ -870,7 +864,8 @@ void UCI::setoption(const Arguments &args)
 void UCI::stop()
 {
     search::Context::set_time_limit_ms(0);
-    _pool->wait_for_tasks([] { search::Context::cancel(); });
+    _compute_pool->wait_for_tasks([] { search::Context::cancel(); });
+    _output_pool->wait_for_tasks();
     output_best_move<true>();
 }
 
