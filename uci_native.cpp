@@ -38,7 +38,7 @@ namespace std
 namespace
 {
     static constexpr std::string_view START_POS{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
-    static bool _debug = false;
+    static bool _debug = false; /* enable verbose logging */
 
     template <typename T>
     static void log_error(T err)
@@ -350,7 +350,7 @@ private:
 
     INLINE search::Context &context() { return *_buf.as_context(); }
 
-    template <bool same_thread=false>
+    template <bool synchronous=false>
     INLINE void output_best_move(bool request_ponder = false)
     {
         if (output_expected())
@@ -360,17 +360,12 @@ private:
             if (!move)
                 if (auto first = ctxt.first_valid_move())
                     move = *first;
-            if constexpr(same_thread)
+            if constexpr(synchronous)
                 output_best_move(move, request_ponder);
             else
-                if (!_output_pool->try_push_task([this, move, request_ponder] {
+                _output_pool->push_task([this, move, request_ponder] {
                     output_best_move(move, request_ponder);
-                }))
-                {
-                    if (_debug)
-                        log_warning("output_best_move failed");
-                    /* ignore, hopefully the tail call in stop() will handle it */
-                }
+                });
         }
     }
 
@@ -461,6 +456,7 @@ static INLINE int mate_distance(score_t score, const search::PV &pv)
     return std::copysign((std::max<int>(CHECKMATE - std::abs(score), pv.size()) + 1) / 2, score);
 }
 
+/** Info sent to the GUI. */
 struct Info : public search::IterationInfo
 {
     const int eval_depth;
@@ -523,13 +519,9 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
     if (ctxt && iter_info)
     {
         const Info info(*ctxt, *iter_info);
-        if (!_output_pool->try_push_task([info] {
+        _output_pool->push_task([info] {
             output_info(info);
-        }))
-        {
-            if (_debug)
-                log_warning(std::format("output_info failed on iteration {}", ctxt->iteration()));
-        }
+        });
     }
 }
 
