@@ -471,7 +471,6 @@ struct Info : public search::IterationInfo
     const int eval_depth;
     const int hashfull;
     const int iteration;
-    const int time_limit;
     search::PV* const pv;
     static std::array<search::PV, PLY_MAX> pvs;
 
@@ -480,7 +479,6 @@ struct Info : public search::IterationInfo
         , eval_depth(ctxt.get_tt()->_eval_depth)
         , hashfull(search::TranspositionTable::usage() * 10)
         , iteration(ctxt.iteration())
-        , time_limit(ctxt.time_limit())
         , pv(&pvs[std::min<size_t>(pvs.size() - 1, iteration)])
     {
         pv->assign(ctxt.get_pv().begin() + 1, ctxt.get_pv().end());
@@ -492,16 +490,15 @@ std::array<search::PV, PLY_MAX> Info::pvs;
 
 static void INLINE output_info(std::ostream& out, const Info& info)
 {
-    output(out,
-        "info depth ", info.iteration,
-        " seldepth ", info.eval_depth,
-        " score cp ", info.score);
-    if (info.time_limit < 0 || info.time_limit > 50)
+    output(out, "info depth ", info.iteration, " score cp ", info.score);
+    const auto time_limit = search::Context::time_limit();
+    if (time_limit < 0 || time_limit > search::Context::elapsed_milliseconds() + 25)
     {
         if (std::abs(info.score) > MATE_HIGH)
             output(out, " mate ", mate_distance(info.score, *info.pv));
 
         output(out,
+            " seldepth ", info.eval_depth,
             " time ", info.milliseconds,
             " nodes ", info.nodes,
             " knps ", int(info.knps * 1000),
