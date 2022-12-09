@@ -453,13 +453,14 @@ namespace search
     /*
      * An alternative SEE implementation than aims to be simpler
      * and perhaps more efficient than estimate_static_exchanges.
-     * Does not handle supporting attacks, pinned pieces, checks, etc.
+     * Does not handle supporting attacks, pinned pieces, checks, etc.,
+     * which is ok; this is only used for reordering capturing moves.
      */
     INLINE score_t see(const State& pos, chess::Color side_to_move, Square square)
     {
         score_t val = 0;
         score_t target_val = chess::WEIGHT[pos.piece_type_at(square)];
-        ASSERT(target_val); /* expect to be called only after a move to square */
+        ASSERT(target_val); /* expected to be called after a move to square */
 
         const auto occupancy_mask = pos.occupied();
         const Bitboard attacks[] = {
@@ -469,6 +470,7 @@ namespace search
         std::array<Square, 32> piece_squares[2];
         piece_squares[chess::BLACK].fill(Square::UNDEFINED);
         piece_squares[chess::WHITE].fill(Square::UNDEFINED);
+        size_t index[2] = {0, 0}; /* indices into piece_squares */
 
         for (const auto c : { chess::BLACK, chess::WHITE })
         {
@@ -483,22 +485,27 @@ namespace search
                 });
         }
 
-        size_t index[2] = {0, 0}; /* indices into piece_squares */
+        auto depleted = [&](chess::Color side) {
+            const auto i = index[side];
+            return i >= 32 || piece_squares[side][i] == Square::UNDEFINED;
+        };
         for (auto side = side_to_move;; chess::flip(side))
         {
-            const auto i = index[side]++;
-            /* ran out of attackers or defenders? done. */
-            if (i >= piece_squares[side].size() || piece_squares[side][i] == Square::UNDEFINED)
+            /* ran out of attackers or defenders? done */
+            if (depleted(side))
                 break;
-
+            const auto i = index[side]++;
+            const auto piece_type = pos.piece_type_at(piece_squares[side][i]);
+            /* king cannot recapture if the other side actively attacks the square */
+            if (piece_type == chess::KING && !depleted(!side))
+                break;
             if (side == side_to_move)
                 val += target_val;
             else if (val <= target_val)
-                return 0; /* assume side_to_move will not initiate exchanges with net loss */
+                return 0; /* assume side_to_move will not initiate exchanges of net loss */
             else
                 val -= target_val;
-
-            target_val = chess::WEIGHT[pos.piece_type_at(piece_squares[side][i])];
+            target_val = chess::WEIGHT[piece_type];
         }
         return val;
     }
