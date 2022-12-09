@@ -540,6 +540,7 @@ namespace chess
         /* Get the bitboard of squares attacked from a given square */
         Bitboard attacks_mask(Square, Bitboard occupied) const;
 
+        /* Get the bitboard of pieces of a given color that attack the given square */
         INLINE Bitboard attackers_mask(Color color, Square square, Bitboard occupied) const
         {
             const auto attackers = attacker_pieces_mask(color, square, occupied)
@@ -550,8 +551,7 @@ namespace chess
         }
 
         /*
-         * Get the bitboard of squares attacked from a given square
-         * by pieces other than pawns and kings.
+         * Get the pieces of given color, other than pawns and kings, that are attacking the square.
          */
         INLINE Bitboard attacker_pieces_mask(Color color, Square square, Bitboard occupied_mask) const
         {
