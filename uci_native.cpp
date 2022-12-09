@@ -455,16 +455,13 @@ std::atomic_bool UCI::_output_expected(false);
 /** Estimate number of moves (not plies!) until mate. */
 static INLINE int mate_distance(score_t score, const search::PV &pv)
 {
-#if 0
     return std::copysign((std::max<int>(CHECKMATE - std::abs(score), pv.size()) + 1) / 2, score);
-#else
-    return std::copysign((pv.size() + 1) / 2, score);
-#endif
 }
 
 /** Info sent to the GUI. */
 struct Info : public search::IterationInfo
 {
+    bool brief = false;
     const int eval_depth;
     const int hashfull;
     const int iteration;
@@ -478,7 +475,11 @@ struct Info : public search::IterationInfo
         , iteration(ctxt.iteration())
         , pv(&pvs[std::min<size_t>(pvs.size() - 1, iteration)])
     {
-        pv->assign(ctxt.get_pv().begin() + 1, ctxt.get_pv().end());
+        constexpr auto TIME_LOW = 25; /* millisec */
+        const auto time_limit = search::Context::time_limit();
+        brief = (time_limit >= 0 && time_limit <= milliseconds + TIME_LOW);
+        if (!brief)
+            pv->assign(ctxt.get_pv().begin() + 1, ctxt.get_pv().end());
     }
 };
 
@@ -487,25 +488,22 @@ std::array<search::PV, PLY_MAX> Info::pvs;
 
 static void INLINE output_info(std::ostream& out, const Info& info)
 {
-    constexpr auto TIME_LOW = 25; /* millisec */
+    constexpr auto MATE_DIST_MAX = 10;
 
-    const auto ms = info.milliseconds;
-    const auto time_limit = search::Context::time_limit();
-
-    if (time_limit > 0 && time_limit <= ms + TIME_LOW)
+    if (info.brief)
     {
         output(out, "info depth ", info.iteration, " score cp ", info.score);
     }
     else
     {
         output(out, "info depth ", info.iteration, " seldepth ", info.eval_depth);
-        if (std::abs(info.score) > MATE_HIGH)
+        if (std::abs(info.score) > CHECKMATE - MATE_DIST_MAX)
             output(out, " score mate ", mate_distance(info.score, *info.pv));
         else
             output(out, " score cp ", info.score);
 
         output(out,
-            " time ", ms,
+            " time ", info.milliseconds,
             " nodes ", info.nodes,
             " nps ", int(info.knps * 1000),
             " hashfull ", info.hashfull);
