@@ -70,6 +70,13 @@ namespace
         return s;
     }
 
+    static INLINE std::string lowercase(std::string_view s)
+    {
+        std::string tmp(s);
+        lowercase(tmp);
+        return tmp;
+    }
+
     template <typename T> static INLINE std::string join(std::string_view sep, const T &v)
     {
         std::ostringstream s;
@@ -114,6 +121,7 @@ namespace
 enum class Command
 {
     NONE,
+    DEBUG,
     GO,
     ISREADY,
     PONDERHIT,
@@ -125,6 +133,8 @@ enum class Command
 };
 
 static std::unordered_map<std::string_view, Command> commands{
+    {"d", Command::DEBUG},
+    {"debug", Command::DEBUG},
     {"go", Command::GO},
     {"isready", Command::ISREADY},
     {"ponderhit", Command::PONDERHIT},
@@ -305,6 +315,7 @@ private:
     void dispatch(const std::string &, const Arguments &args);
 
     /** UCI commands */
+    void debug(const Arguments &args);
     void go(const Arguments &args);
     void isready();
     void ponderhit();
@@ -348,6 +359,9 @@ private:
                     ++_ply_count;
                 }
             }
+        if (moves.empty())
+            _buf._state.hash();
+        ASSERT(_buf._state._hash);
     }
 
     INLINE search::Context &context() { return *_buf.as_context(); }
@@ -555,13 +569,6 @@ void UCI::run()
         if (cmd.empty())
             continue;
         LOG_DEBUG(std::format(">>> {}", cmd));
-        if (cmd == "quit")
-        {
-            _output_expected = false;
-            stop();
-            output("info string good bye");
-            break;
-        }
 
         Arguments args;
         /* tokenize command */
@@ -573,6 +580,13 @@ void UCI::run()
                     args.emplace_back(std::string_view(&*tok.begin(), std::ranges::distance(tok)));
             });
 
+        if (lowercase(args.front()) == "quit")
+        {
+            _output_expected = false;
+            stop();
+            output("info string good bye");
+            break;
+        }
         if (!args.empty())
             dispatch(cmd, args);
     }
@@ -581,7 +595,7 @@ void UCI::run()
 INLINE void UCI::dispatch(const std::string &cmd, const Arguments &args)
 {
     ASSERT(!args.empty());
-    const auto iter = commands.find(args.front());
+    const auto iter = commands.find(lowercase(args.front()));
     if (iter == commands.end())
     {
         log_error("unknown command: " + cmd);
@@ -590,6 +604,9 @@ INLINE void UCI::dispatch(const std::string &cmd, const Arguments &args)
     {
         switch (iter->second)
         {
+        case Command::DEBUG:
+            invoke(cmd, &UCI::debug, args);
+            break;
         case Command::GO:
             invoke(cmd, &UCI::go, args);
             break;
@@ -625,6 +642,23 @@ INLINE const auto &next(const T &v, size_t &i)
 {
     static typename T::value_type empty;
     return ++i < v.size() ? v[i] : empty;
+}
+
+void UCI::debug(const Arguments &args)
+{
+    cython_wrapper::call(search::Context::_print_state, _buf._state);
+    output(std::format("fen: {}", search::Context::epd(_buf._state)));
+    output(std::format("hash: {}", _buf._state._hash));
+    size_t history_size = 0;
+    if (search::Context::_history)
+        history_size = search::Context::_history->_positions.size();
+    output(std::format("history_size: {}", history_size));
+    std::ostringstream checkers;
+    chess::for_each_square(_buf._state.checkers_mask(_buf._state.turn),
+        [&checkers](chess::Square sq) {
+            checkers << sq << " ";
+        });
+    output(std::format("checkers: {}", checkers.str()));
 }
 
 void UCI::go(const Arguments &args)
