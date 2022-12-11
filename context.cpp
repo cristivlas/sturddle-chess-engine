@@ -806,7 +806,7 @@ namespace search
      * Skip the exchanges when the value of the captured piece exceeds
      * the value of the capturer.
      */
-    static score_t do_captures(int tid, const State& state, Bitboard from_mask, Bitboard to_mask)
+    INLINE int do_captures(int tid, const State& state, Bitboard from_mask, Bitboard to_mask)
     {
         static constexpr auto ply = FIRST_EXCHANGE_PLY;
         const auto mask = to_mask & state.occupied_co(!state.turn) & ~state.kings;

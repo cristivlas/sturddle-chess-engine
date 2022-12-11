@@ -528,8 +528,8 @@ namespace search
                 /* Approximate without playing the moves. */
             #if 0
                 val = estimate_static_exchanges(*move._state, move._state->turn, move.to_square());
-                std::cout << val << ", " << see(*move._state, move._state->turn, move.to_square())
-                          << std::endl;
+                // std::cout << val << ", " << see(*move._state, move._state->turn, move.to_square())
+                //           << std::endl;
             #else
                 val = see(*move._state, move._state->turn, move.to_square());
             #endif

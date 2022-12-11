@@ -184,7 +184,7 @@ DECLARE_VALUE(  HISTORY_SCORE_DIV,                   43,    1,     100)
 DECLARE_VALUE(  HISTORY_FAIL_LOW_MARGIN,           1175,    0,    2000)
 DECLARE_VALUE(  HISTORY_FAIL_LOW_PENALTY,            43,    0,     100)
 DECLARE_VALUE(  HISTORY_HIGH,                        92,    0,     100)
-DECLARE_VALUE(  HISTORY_LOW,                         65,    0, HISTORY_HIGH)
+DECLARE_VALUE(  HISTORY_LOW,                         27,    0, HISTORY_HIGH)
 DECLARE_VALUE(  HISTORY_MIN_DEPTH,                    3,    0,     100)
 DECLARE_VALUE(  HISTORY_PRUNE,                       56,    0,     100)
 
