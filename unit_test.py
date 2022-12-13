@@ -366,8 +366,12 @@ def test_nnue_eval():
         'r4rk1/ppp2ppp/5n2/2bPn3/4K3/2NP4/PPPBB1PP/R6R w - - 3 3',
         '1r1q1rk1/p3bBpp/2Q5/8/3Pb3/2n1BN2/P4PPP/R4RK1 b - - 0 18',
     ]
-    for fen in tests:
+    evals = [
+        57, -1074, -63, -277, 974, 426, 92, -249
+    ]
+    for i, fen in enumerate(tests):
         eval = engine.nnue_eval_fen(fen)
+        assert eval == evals[i], (eval, evals[i])
         assert eval == engine.nnue_eval_board(chess.Board(fen=fen)), (fen, eval)
 
 
