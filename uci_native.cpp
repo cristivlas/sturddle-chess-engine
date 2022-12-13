@@ -430,7 +430,6 @@ private:
         _buf._state.castling_rights = chess::BB_DEFAULT_CASTLING_RIGHTS;
         chess::epd::parse_pos(START_POS, _buf._state);
         _buf._state.rehash();
-        _book_depth = max_depth;
     }
 
     /** think on opponent's time */
@@ -769,6 +768,7 @@ void UCI::newgame()
     stop();
     search::TranspositionTable::clear_shared_hashtable();
     set_start_position();
+    _book_depth = max_depth;
 }
 
 /**

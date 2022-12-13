@@ -526,10 +526,8 @@ namespace search
             if constexpr(StaticExchangeEvaluation)
             {
                 /* Approximate without playing the moves. */
-            #if 0
+            #if 1
                 val = estimate_static_exchanges(*move._state, move._state->turn, move.to_square());
-                // std::cout << val << ", " << see(*move._state, move._state->turn, move.to_square())
-                //           << std::endl;
             #else
                 val = see(*move._state, move._state->turn, move.to_square());
             #endif
