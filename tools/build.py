@@ -58,7 +58,8 @@ if __name__ == '__main__':
 
         arch_flags = ''
         if is_windows():
-            arch_flags = f'/arch:{arch}'
+            if arch:
+                arch_flags = f'/arch:{arch}'
         # otherwise assume Clang compiler
         elif arch == 'AVX2':
             arch_flags = '-march=core-avx2' # '-DUSE_AVX2'
