@@ -56,16 +56,16 @@ if __name__ == '__main__':
         print(f'Building {arch if arch else "generic"} module')
         print('*********************************************************')
 
-        arch_spec = ''
+        arch_flags = ''
         if is_windows():
-            arch_flag = f'/arch:{arch}'
+            arch_flags = f'/arch:{arch}'
         # otherwise assume Clang compiler
         elif arch == 'AVX2':
-            arch_flag = '-march=core-avx2'
+            arch_flags = '-march=core-avx2' # '-DUSE_AVX2'
         elif arch == 'AVX512':
-            arch_flag = '-march=skylake-avx512'
+            arch_flags = '-march=skylake-avx512' # '-DUSE_AVX512'
 
-        os.environ['CXXFLAGS'] = arch_spec
+        os.environ['CXXFLAGS'] = arch_flags
         arch = arch.lower()
         os.environ['TARGET'] = f'chess_engine_{arch}' if arch else 'chess_engine'
 

@@ -51,11 +51,10 @@ if environ.get('BUILD_DEBUG', None):
 
 
 args.append('-DBUILD_STAMP=' + build_stamp)
-
+args += environ.get("CXXFLAGS", '').split()
 
 if platform.startswith('win'):
     # Windows build
-    args += environ.get("CXXFLAGS", '').split()
     args += [
         '/std:c++20',
         '/DWITH_NNUE',
