@@ -745,11 +745,19 @@ void UCI::go(const Arguments &args)
         if (!explicit_movetime)
             ctxt->set_time_info(time_remaining[turn], movestogo, _score);
 
+    #if 0
+        /* search asynchronously on the background thread */
         _compute_pool->push_task([this, movetime] {
             _score = search();
             /* Do not request to ponder below 100 ms per move. */
             output_best_move(movetime >= 100);
         });
+    #else
+        /* search synchronously */
+        _score = search();
+        /* Do not request to ponder below 100 ms per move. */
+        output_best_move(movetime >= 100);
+    #endif
     }
 }
 

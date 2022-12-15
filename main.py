@@ -36,15 +36,16 @@ flavors = {
     'chess_engine': lambda *_: True,
 }
 
-for eng in flavors:
-    if not flavors[eng]():
-        continue
-    try:
-        engine = importlib.import_module(eng)
-        globals().update({k:v for k, v in engine.__dict__.items() if not k.startswith('_')})
-        break
-    except:
-        pass
+def load_engine():
+    for eng in flavors:
+        if not flavors[eng]():
+            continue
+        try:
+            engine = importlib.import_module(eng)
+            globals().update({k:v for k, v in engine.__dict__.items() if not k.startswith('_')})
+            return engine
+        except Exception as e:
+            logging.warning(e)
 
 def _configure_logging(args):
     log = logging.getLogger()
@@ -78,6 +79,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     _configure_logging(args)
     _hide_console()
+
+    engine = load_engine()
+    assert engine, 'Failed to load engine.'
     try:
         engine.uci('Sturddle UCI', debug=args.verbose)
     except KeyboardInterrupt:
