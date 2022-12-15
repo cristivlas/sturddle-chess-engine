@@ -46,7 +46,7 @@ if __name__ == '__main__':
     mods = '*.pyd' if is_windows() else '*.so'
 
     # cleanup
-    delete(['*.spec', 'dist', 'build', mods])
+    delete(['*.spec', 'build', mods])
 
     exe = sys.executable # the Python interpreter
 
