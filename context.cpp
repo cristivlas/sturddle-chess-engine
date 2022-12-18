@@ -398,7 +398,7 @@ void search::Context::eval_incremental()
     };
     auto eval = nnue::evaluate(pos);
 
-    /* Verify incremental result againt full eval. */
+    /* Verify incremental result against full eval. */
     ASSERT(eval == NNUE::eval(state()));
 
     eval += eval_fuzz();
