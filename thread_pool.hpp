@@ -21,8 +21,8 @@
  */
 #include <atomic>
 #include <condition_variable>
-#include <deque>
 #include <functional>
+#include <list>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -137,7 +137,7 @@ private:
     std::atomic_int _tasks_pending;
     std::condition_variable _cv;
     mutex_type _mutex;
-    std::deque<std::function<void()>> _tasks;
+    std::list<std::function<void()>> _tasks;
     std::vector<std::thread> _threads;
 
     static THREAD_LOCAL thread_id_type _tid;
