@@ -1366,7 +1366,7 @@ nnue_init(os.path.dirname(__file__))
 _tb_init()
 
 __major__   = 1
-__minor__   = 21
+__minor__   = 22
 __build__   = ['NNUE', str(__major__), f'{int(__minor__):02d}', timestamp().decode()]
 
 
