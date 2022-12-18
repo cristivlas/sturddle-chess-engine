@@ -71,19 +71,6 @@ public:
         _cv.notify_all();
     }
 
-    /* For non-critical tasks, to avoid deadlocks when another thread calls wait_for_tasks */
-    template<typename T> bool try_push_task(T&& task)
-    {
-        {   /* mutex scope */
-            std::unique_lock<mutex_type> lock(_mutex, std::defer_lock);
-            if (!lock.try_lock())
-                return false;
-            _tasks.emplace_back(std::move(task));
-        }
-        _cv.notify_all();
-        return true;
-    }
-
     static thread_id_type thread_id()
     {
         return _tid;
