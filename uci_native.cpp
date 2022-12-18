@@ -70,11 +70,11 @@ namespace
         return s;
     }
 
-    static INLINE std::string lowercase(std::string_view s)
+    static INLINE std::string& lowercase(std::string &s, std::string_view v)
     {
-        std::string tmp(s);
-        lowercase(tmp);
-        return tmp;
+        const auto distance = v.data() - s.data();
+        std::transform(v.begin(), v.end(), s.begin() + distance, [](auto c) { return std::tolower(c); });
+        return s;
     }
 
     template <typename T> static INLINE std::string join(std::string_view sep, const T &v)
@@ -312,7 +312,7 @@ public:
     void run();
 
 private:
-    void dispatch(const std::string &, const Arguments &args);
+    void dispatch(std::string &, const Arguments &args);
 
     /** UCI commands */
     void debug(const Arguments &args);
@@ -579,7 +579,7 @@ void UCI::run()
                     args.emplace_back(std::string_view(&*tok.begin(), std::ranges::distance(tok)));
             });
 
-        if (lowercase(args.front()) == "quit")
+        if (lowercase(cmd, args.front()) == "quit")
         {
             _output_expected = false;
             stop();
@@ -591,10 +591,10 @@ void UCI::run()
     }
 }
 
-INLINE void UCI::dispatch(const std::string &cmd, const Arguments &args)
+INLINE void UCI::dispatch(std::string &cmd, const Arguments &args)
 {
     ASSERT(!args.empty());
-    const auto iter = commands.find(lowercase(args.front()));
+    const auto iter = commands.find(lowercase(cmd, args.front()));
     if (iter == commands.end())
     {
         log_error("unknown command: " + cmd);
