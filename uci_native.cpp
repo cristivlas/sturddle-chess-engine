@@ -70,13 +70,6 @@ namespace
         return s;
     }
 
-    static INLINE std::string& lowercase(std::string &s, std::string_view v)
-    {
-        const auto distance = v.data() - s.data();
-        std::transform(v.begin(), v.end(), s.begin() + distance, [](auto c) { return std::tolower(c); });
-        return s;
-    }
-
     template <typename T> static INLINE std::string join(std::string_view sep, const T &v)
     {
         std::ostringstream s;
@@ -299,6 +292,7 @@ public:
 
         search::Context::_on_iter = on_iteration;
 
+        refresh_options();
         _options.emplace("algorithm", std::make_shared<OptionAlgo>(_algorithm));
         _options.emplace("best opening", std::make_shared<OptionBool>("Best Opening", _best_book_move));
         _options.emplace("debug", std::make_shared<OptionBool>("Debug", _debug));
@@ -430,6 +424,16 @@ private:
         _buf._state.castling_rights = chess::BB_DEFAULT_CASTLING_RIGHTS;
         chess::epd::parse_pos(START_POS, _buf._state);
         _buf._state.rehash();
+    }
+
+    void refresh_options()
+    {
+        for (auto p : _get_param_info())
+        {
+            auto name = p.first;
+            /* option names are case insensitive, and can contain _single_ spaces */
+            _options[lowercase(name)] = std::make_shared<OptionParam>(p.first, p.second);
+        }
     }
 
     /** think on opponent's time */
@@ -579,7 +583,7 @@ void UCI::run()
                     args.emplace_back(std::string_view(&*tok.begin(), std::ranges::distance(tok)));
             });
 
-        if (lowercase(cmd, args.front()) == "quit")
+        if (args.front() == "quit")
         {
             _output_expected = false;
             stop();
@@ -594,7 +598,7 @@ void UCI::run()
 INLINE void UCI::dispatch(std::string &cmd, const Arguments &args)
 {
     ASSERT(!args.empty());
-    const auto iter = commands.find(lowercase(cmd, args.front()));
+    const auto iter = commands.find(args.front());
     if (iter == commands.end())
     {
         log_error("unknown command: " + cmd);
@@ -921,13 +925,8 @@ void UCI::uci()
     output<false>(std::format("id name {}-{}", _name, _version));
     output<false>("id author Cristi Vlasceanu");
 
-    /* refresh options */
-    for (auto p : _get_param_info())
-    {
-        auto name = p.first;
-        /* option names are case insensitive, and can contain _single_ spaces */
-        _options[lowercase(name)] = std::make_shared<OptionParam>(p.first, p.second);
-    }
+    refresh_options();
+
     /* show available options */
     for (const auto &opt : _options)
     {
