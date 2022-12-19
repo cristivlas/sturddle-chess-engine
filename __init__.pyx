@@ -1375,7 +1375,7 @@ def version():
 
 
 # ---------------------------------------------------------------------
-# in progress: native C++ UCI implementation
+# Experimental: native C++ UCI implementation
 # ---------------------------------------------------------------------
 def uci(name: str, debug: bool=False):
     cdef string n = name.encode()
