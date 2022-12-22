@@ -78,22 +78,19 @@ namespace
         return s.str();
     }
 
-    template <typename T> INLINE void output(std::ostream& out, T val)
+    INLINE void output(std::ostream& out, const std::string& str)
     {
-        out << val;
+        out.write(str.data(), str.size());
     }
 
-    template <typename T, typename... Args> INLINE void output(std::ostream& out, T val, Args... args)
+    template <bool flush=true>
+    INLINE void output(const std::string& str)
     {
-        output(out << val, args...);
-    }
-
-    template <bool flush=true> INLINE void output(const std::string_view out)
-    {
-        std::cout << out << "\n";
-        LOG_DEBUG(std::format("<<< {}", out));
+        output(std::cout, str);
+        std::cout.write("\n", 1);
+        LOG_DEBUG(std::format("<<< {}", str));
         if constexpr(flush)
-            std::cout << std::flush;
+            std::cout.flush();
     }
 
     /** Raise ValueError exception, and exit with error (see dtor of GIL_State) */
@@ -505,28 +502,37 @@ std::array<search::PV, PLY_MAX> Info::pvs;
 
 static void INLINE output_info(std::ostream& out, const Info& info)
 {
-    constexpr auto MATE_DIST_MAX = 10;
-
     if (info.brief)
     {
-        output(out, "info depth ", info.iteration, " score cp ", info.score);
+        output(out, std::format("info depth {} score cp {}", info.iteration, info.score));
     }
     else
     {
-        output(out, "info depth ", info.iteration, " seldepth ", info.eval_depth);
-        if (std::abs(info.score) > CHECKMATE - MATE_DIST_MAX)
-            output(out, " score mate ", mate_distance(info.score, *info.pv));
-        else
-            output(out, " score cp ", info.score);
+        constexpr auto MATE_DIST_MAX = 10;
 
-        output(out,
-            " time ", info.milliseconds,
-            " nodes ", info.nodes,
-            " nps ", int(info.knps * 1000),
-            " hashfull ", info.hashfull);
-        out << " pv ";
+        auto score_unit = "cp";
+        auto score = info.score;
+        if (std::abs(info.score) > CHECKMATE - MATE_DIST_MAX)
+        {
+            score_unit = "mate";
+            score = mate_distance(info.score, *info.pv);
+        }
+        output(out, std::format(
+            "info score {} {} depth {} seldepth {} time {} nodes {} nps {} hashfull {} pv ",
+            score_unit,
+            score,
+            info.iteration,
+            info.eval_depth,
+            info.milliseconds,
+            info.nodes,
+            int(info.knps * 1000),
+            info.hashfull));
         for (const auto &m : *info.pv)
-            out << m << " ";
+        {
+            const auto uci = m.uci();
+            out.write(uci.data(), uci.size());
+            out.write(" ", 1);
+        }
     }
 }
 

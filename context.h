@@ -978,7 +978,7 @@ namespace search
             if (is_root()
                 && tid() == 0
                 && _on_move
-                && (_tt->_nodes % 1000) <= move_count
+                && (_tt->_nodes % 1000) <= size_t(move_count)
                 && time_limit() > 250
                )
                 (*_on_move)(_engine, move->uci(), move_count + 1);
