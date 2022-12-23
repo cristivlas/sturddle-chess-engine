@@ -556,7 +556,7 @@ void UCI::run()
                     args.emplace_back(std::string_view(&*tok.begin(), std::ranges::distance(tok)));
             });
 
-        if (args.front() == "quit")
+        if (!args.empty() && args.front() == "quit")
         {
             _output_expected = false;
             stop();
