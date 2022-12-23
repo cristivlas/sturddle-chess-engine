@@ -466,7 +466,7 @@ static void INLINE output_info(std::ostream& out, const Info& info)
     g_out.clear();
     if (info.brief)
     {
-        std::format_to(std::back_inserter(g_out), "info depth {} score cp {}", info.iteration, info.score);
+        std::format_to(std::back_inserter(g_out), "info score cp {} depth {}", info.score, info.iteration);
         output(out, g_out);
     }
     else
