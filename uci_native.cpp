@@ -556,15 +556,17 @@ void UCI::run()
                     args.emplace_back(std::string_view(&*tok.begin(), std::ranges::distance(tok)));
             });
 
-        if (!args.empty() && args.front() == "quit")
+        if (args.empty())
+            continue;
+
+        if (args.front() == "quit")
         {
             _output_expected = false;
             stop();
             output("info string good bye");
             break;
         }
-        if (!args.empty())
-            dispatch(cmd, args);
+        dispatch(cmd, args);
     }
 }
 
