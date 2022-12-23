@@ -108,33 +108,6 @@ namespace
     }
 } /* namespace */
 
-enum class Command
-{
-    NONE,
-    DEBUG,
-    GO,
-    ISREADY,
-    PONDERHIT,
-    POSITION,
-    SETOPTION,
-    STOP,
-    UCI,
-    UCINEWGAME,
-};
-
-static std::map<std::string_view, Command> commands{
-    {"d", Command::DEBUG},
-    {"debug", Command::DEBUG},
-    {"go", Command::GO},
-    {"isready", Command::ISREADY},
-    {"ponderhit", Command::PONDERHIT},
-    {"position", Command::POSITION},
-    {"setoption", Command::SETOPTION},
-    {"stop", Command::STOP},
-    {"uci", Command::UCI},
-    {"ucinewgame", Command::UCINEWGAME},
-};
-
 namespace
 {
     /*
@@ -306,7 +279,7 @@ private:
     void dispatch(std::string &, const Arguments &args);
 
     /** UCI commands */
-    void debug(const Arguments &args);
+    void debug();
     void go(const Arguments &args);
     void isready();
     void ponderhit();
@@ -400,21 +373,6 @@ private:
             }
             std::format_to(std::back_inserter(g_out), "bestmove {}", move.uci());
             output(g_out);
-        }
-    }
-
-    template <typename F>
-    INLINE void invoke(const std::string &cmd, F f, const Arguments &args)
-    {
-        if constexpr (arity<F>{} == 0)
-        {
-            if (args.size() > 1)
-                log_warning(std::format("extraneous arguments: {}", cmd));
-            (this->*f)();
-        }
-        else
-        {
-            (this->*f)(args);
         }
     }
 
@@ -613,46 +571,68 @@ void UCI::run()
 INLINE void UCI::dispatch(std::string &cmd, const Arguments &args)
 {
     ASSERT(!args.empty());
-    const auto iter = commands.find(args.front());
-    if (iter == commands.end())
+    const auto& tok = args.front();
+    switch (tok[0])
     {
-        log_error("unknown command: " + cmd);
-    }
-    else
-    {
-        switch (iter->second)
+    case 'd':
+        if (tok == "debug")
         {
-        case Command::DEBUG:
-            invoke(cmd, &UCI::debug, args);
-            break;
-        case Command::GO:
-            invoke(cmd, &UCI::go, args);
-            break;
-        case Command::ISREADY:
-            invoke(cmd, &UCI::isready, args);
-            break;
-        case Command::PONDERHIT:
-            invoke(cmd, &UCI::ponderhit, args);
-            break;
-        case Command::POSITION:
-            invoke(cmd, &UCI::position, args);
-            break;
-        case Command::SETOPTION:
-            invoke(cmd, &UCI::setoption, args);
-            break;
-        case Command::STOP:
-            invoke(cmd, &UCI::stop, args);
-            break;
-        case Command::UCI:
-            invoke(cmd, &UCI::uci, args);
-            break;
-        case Command::UCINEWGAME:
-            invoke(cmd, &UCI::newgame, args);
-            break;
-        default:
-            break;
+            debug();
+            return;
         }
+        break;
+    case 'g':
+        if (tok == "go")
+        {
+            go(args);
+            return;
+        }
+        break;
+    case 'i':
+        if (tok == "isready")
+        {
+            isready();
+            return;
+        }
+        break;
+    case 'p':
+        if (tok == "position")
+        {
+            position(args);
+            return;
+        }
+        if (tok == "ponderhit")
+        {
+            ponderhit();
+            return;
+        }
+        break;
+    case 's':
+        if (tok == "setoption")
+        {
+            setoption(args);
+            return;
+        }
+        if (tok == "stop")
+        {
+            stop();
+            return;
+        }
+        break;
+    case 'u':
+        if (tok == "uci")
+        {
+            uci();
+            return;
+        }
+        if (tok == "ucinewgame")
+        {
+            newgame();
+            return;
+        }
+        break;
     }
+    log_error("unknown command: " + cmd);
 }
 
 template <typename T>
@@ -662,7 +642,7 @@ INLINE const auto &next(const T &v, size_t &i)
     return ++i < v.size() ? v[i] : empty;
 }
 
-void UCI::debug(const Arguments &args)
+void UCI::debug()
 {
     cython_wrapper::call(search::Context::_print_state, _buf._state);
     output(std::format("fen: {}", search::Context::epd(_buf._state)));
