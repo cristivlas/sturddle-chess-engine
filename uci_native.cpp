@@ -20,7 +20,6 @@ static void raise_runtime_error(const char* err)
 #include <ranges>
 #include <string>
 #include <sstream>
-#include <unordered_map>
 #include <vector>
 #include "nnue.h"
 #include "thread_pool.hpp" /* pondering, go infinite */
@@ -28,6 +27,7 @@ static void raise_runtime_error(const char* err)
 #define LOG_DEBUG(x) while (_debug) { log_debug((x)); break; }
 
 static constexpr auto INFINITE = -1;
+static std::string g_out; /* global output buffer */
 
 namespace std
 {
@@ -122,7 +122,7 @@ enum class Command
     UCINEWGAME,
 };
 
-static std::unordered_map<std::string_view, Command> commands{
+static std::map<std::string_view, Command> commands{
     {"d", Command::DEBUG},
     {"debug", Command::DEBUG},
     {"go", Command::GO},
@@ -387,16 +387,19 @@ private:
         }
         else
         {
+            g_out.clear();
             if (request_ponder && _ponder)
             {
                 const auto &pv = _tt.get_pv();
                 if (pv.size() > 2 && pv[1] == move)
                 {
-                    output(std::format("bestmove {} ponder {}", move.uci(), pv[2].uci()));
+                    std::format_to(std::back_inserter(g_out), "bestmove {} ponder {}", move.uci(), pv[2].uci());
+                    output(g_out);
                     return;
                 }
             }
-            output(std::format("bestmove {}", move.uci()));
+            std::format_to(std::back_inserter(g_out), "bestmove {}", move.uci());
+            output(g_out);
         }
     }
 
@@ -502,9 +505,11 @@ std::array<search::PV, PLY_MAX> Info::pvs;
 
 static void INLINE output_info(std::ostream& out, const Info& info)
 {
+    g_out.clear();
     if (info.brief)
     {
-        output(out, std::format("info depth {} score cp {}", info.iteration, info.score));
+        std::format_to(std::back_inserter(g_out), "info depth {} score cp {}", info.iteration, info.score);
+        output(out, g_out);
     }
     else
     {
@@ -517,7 +522,8 @@ static void INLINE output_info(std::ostream& out, const Info& info)
             score_unit = "mate";
             score = mate_distance(info.score, *info.pv);
         }
-        output(out, std::format(
+        std::format_to(
+            std::back_inserter(g_out),
             "info score {} {} depth {} seldepth {} time {} nodes {} nps {} hashfull {} pv ",
             score_unit,
             score,
@@ -526,7 +532,10 @@ static void INLINE output_info(std::ostream& out, const Info& info)
             info.milliseconds,
             info.nodes,
             int(info.knps * 1000),
-            info.hashfull));
+            info.hashfull);
+        output(out, g_out);
+
+        /* output PV */
         for (const auto &m : *info.pv)
         {
             const auto uci = m.uci();
