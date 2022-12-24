@@ -821,7 +821,10 @@ void UCI::position(const Arguments &args)
     stop();
 
     bool in_moves = false;
-    Arguments fen, moves;
+    static Arguments fen, moves;
+
+    fen.clear();
+    moves.clear();
 
     for (const auto &a : std::ranges::subrange(args.begin() + 1, args.end()))
     {
