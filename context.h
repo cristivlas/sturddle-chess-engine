@@ -449,6 +449,14 @@ namespace search
 
     extern score_t eval_captures(Context& ctxt);
 
+    using PieceSquares = std::array<Square, 32>;
+
+    static INLINE bool
+    depleted(const PieceSquares (&piece_squares)[2], size_t (&index)[2], chess::Color side)
+    {
+        const auto i = index[side];
+        return i >= 32 || piece_squares[side][i] == Square::UNDEFINED;
+    }
 
     /*
      * An alternative SEE implementation than aims to be simpler
@@ -467,7 +475,7 @@ namespace search
             pos.attackers_mask(chess::Color::BLACK, square, occupancy_mask),
             pos.attackers_mask(chess::Color::WHITE, square, occupancy_mask),
         };
-        std::array<Square, 32> piece_squares[2];
+        PieceSquares piece_squares[2];
         piece_squares[chess::BLACK].fill(Square::UNDEFINED);
         piece_squares[chess::WHITE].fill(Square::UNDEFINED);
         size_t index[2] = {0, 0}; /* indices into piece_squares */
@@ -485,19 +493,15 @@ namespace search
                 });
         }
 
-        auto depleted = [&](chess::Color side) {
-            const auto i = index[side];
-            return i >= 32 || piece_squares[side][i] == Square::UNDEFINED;
-        };
         for (auto side = side_to_move;; chess::flip(side))
         {
             /* ran out of attackers or defenders? done */
-            if (depleted(side))
+            if (depleted(piece_squares, index, side))
                 break;
             const auto i = index[side]++;
             const auto piece_type = pos.piece_type_at(piece_squares[side][i]);
             /* king cannot recapture if the other side actively attacks the square */
-            if (piece_type == chess::KING && !depleted(!side))
+            if (piece_type == chess::KING && !depleted(piece_squares, index, !side))
                 break;
             if (side == side_to_move)
                 val += target_val;
@@ -526,11 +530,11 @@ namespace search
             if constexpr(StaticExchangeEvaluation)
             {
                 /* Approximate without playing the moves. */
-            #if 0
-                val = estimate_static_exchanges(*move._state, move._state->turn, move.to_square());
-            #else
+            #if USE_SIMPLE_SEE
                 val = see(*move._state, move._state->turn, move.to_square());
-            #endif
+            #else
+                val = estimate_static_exchanges(*move._state, move._state->turn, move.to_square());
+            #endif /* USE_SIMPLE_SEE */
             }
             else
             {

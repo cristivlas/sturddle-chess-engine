@@ -100,6 +100,11 @@ using score_t = int;
 
 #define SMP                                 true
 
+/* experiment with different SEE heuristic impls */
+#if !defined(USE_SIMPLE_SEE)
+  #define USE_SIMPLE_SEE                    false
+#endif /* USE_SIMPLE_SEE */
+
 #if !WITH_NNUE && !defined(USE_PIECE_SQUARE_TABLES)
   #define USE_PIECE_SQUARE_TABLES           true
 #endif
