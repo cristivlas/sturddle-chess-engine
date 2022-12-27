@@ -480,6 +480,16 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
     return false;
 }
 
+/*
+ * Adjust the multicut margin based on the complexity of the board.
+ * The assumption is that a more balanced position is less complex.
+ * Increase the multicut margin for lower complexity, to increase the
+ * breadth of the search.
+ */
+static int INLINE multicut_margin(const Context& ctxt)
+{
+    return ctxt._eval < MULTICUT_COMPLEXITY_THRESHOLD ? MULTICUT_MARGIN_HIGH : MULTICUT_MARGIN_LOW;
+}
 
 /*
  * https://www.chessprogramming.org/Multi-Cut
@@ -521,7 +531,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
      */
     const auto min_cutoffs = MULTICUT_C - (ctxt.depth() > 5
         && ctxt._tt_entry.is_lower()
-        && ctxt._tt_entry._value + MULTICUT_MARGIN >= ctxt._beta);
+        && ctxt._tt_entry._value + multicut_margin(ctxt) >= ctxt._beta);
 
     while (auto next_ctxt = ctxt.next(false, 0, move_count))
     {
