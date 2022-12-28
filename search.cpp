@@ -488,7 +488,7 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
  */
 static int INLINE multicut_margin(const Context& ctxt)
 {
-    return ctxt._eval < MULTICUT_COMPLEXITY_THRESHOLD ? MULTICUT_MARGIN_HIGH : MULTICUT_MARGIN_LOW;
+    return abs(ctxt._eval) < MULTICUT_COMPLEXITY_THRESHOLD ? MULTICUT_MARGIN_HIGH : MULTICUT_MARGIN_LOW;
 }
 
 /*

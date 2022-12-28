@@ -742,7 +742,7 @@ void UCI::go(const Arguments &args)
                 return;
             }
             else
-                _book_depth = _ply_count;
+                _book_depth = std::min(_book_depth, _ply_count);
         }
         ctxt->set_time_limit_ms(movetime);
         if (!explicit_movetime)
