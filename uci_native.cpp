@@ -530,7 +530,9 @@ INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::I
 
 void UCI::run()
 {
+    Arguments args;
     std::string cmd;
+
     while (true)
     {
         std::getline(std::cin, cmd);
@@ -546,7 +548,7 @@ void UCI::run()
             continue;
         LOG_DEBUG(std::format(">>> {}", cmd));
 
-        Arguments args;
+        args.clear();
         /* tokenize command */
         std::ranges::for_each(
             std::views::lazy_split(cmd, std::string_view(" ")),
