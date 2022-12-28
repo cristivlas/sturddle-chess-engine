@@ -84,8 +84,6 @@ else:
         '-DCYTHON_WITHOUT_ASSERTIONS',
         '-DCALLBACK_PERIOD=8192',
         '-fno-stack-protector',
-        '-fvisibility=hidden',
-        '-DPyMODINIT_FUNC=__attribute__((visibility("default"))) extern "C" PyObject*',
         '-DWITH_NNUE',
     ]
     if NATIVE_UCI:
@@ -106,7 +104,11 @@ else:
     # clang is the default compiler on macosx.
     cc = 'clang' if platform.startswith('macos') else environ.get('CC', None)
     if cc and cc.startswith('clang'):
-         args.append('-Wno-deprecated-declarations')
+        args += [
+            '-Wno-deprecated-declarations',
+            '-fvisibility=hidden',
+            '-DPyMODINIT_FUNC=__attribute__((visibility("default"))) extern "C" PyObject*',
+        ]
 """
 end of compiler args.
 """
