@@ -118,7 +118,22 @@ namespace
     template <typename R, typename C, typename... Args>
     struct arity<R (C::*)(Args...)> : std::integral_constant<unsigned, sizeof...(Args)> {};
 
-    template <typename T> INLINE int to_int(T v) { return std::stoi(std::string(v)); }
+    template <typename T> INLINE int to_int(T v)
+    {
+        try
+        {
+            return std::stoi(std::string(v));
+        }
+        catch(const std::exception&)
+        {
+            if (v == "false")
+                return 0;
+            if (v == "true")
+                return 1;
+            throw;
+        }
+    }
+
 
     struct Option
     {
