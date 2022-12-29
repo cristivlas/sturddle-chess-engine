@@ -59,7 +59,7 @@ https://docs.python.org/3/using/windows.html
 Build
 =====
 cd sturddle-sturddle-engine
-python3 setup.py build_ext --inplace
+CFLAGS=-march=native python3 setup.py build_ext --inplace
 
 
 Native UCI
@@ -76,12 +76,6 @@ Optional: One File Executable
 PyInstaller can be used to bundle all the components into all-in-one, self-extracting executable.
 (https://pyinstaller.org/en/stable/)
 
-Asumming the python extension module is built for Python 3.10 on a 64-bit Window system, the command
-for creating the one-file executable will look something like this:
-
-pyinstaller sturddle.py --add-binary=*.pyd;. -p . --onefile --add-data=nn-62ef826d1a6d.nnue;.
-
-It is recommended to run pyinstaller from a Python virtual environment, please see the pyinstaller documentation.
-
-Under some GUIs, a window may pop up when activating the engine. The workaround is to add --noconsole to the pyinstaller command.
+The (experimental) tools/build.py script generates a self-extracting executable that contains the
+AVX512/AVX2/generic modules, the nnue file, the opening book, and all the scripts required to run.
 
