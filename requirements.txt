@@ -1,0 +1,5 @@
+argparse
+chess
+cpufeature
+cython
+psutil

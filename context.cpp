@@ -109,7 +109,8 @@ void _set_param(const std::string& name, int value, bool echo)
         TranspositionTable::set_hash_size(std::max(std::min(value, HASH_MAX), HASH_MIN));
 
         if (echo)
-            std::clog << name << " = " << TranspositionTable::get_hash_size() << std::endl;
+            std::cout << "info string " << name << "=" << TranspositionTable::get_hash_size()
+                      << std::endl;
         return;
     }
 
@@ -137,7 +138,7 @@ void _set_param(const std::string& name, int value, bool echo)
             *iter->second._val = value;
 
             if (echo)
-                std::clog << name << " = " << *iter->second._val << "\n";
+                std::cout << "info string " << name << "=" << *iter->second._val << std::endl;
         }
     }
 }
@@ -252,7 +253,7 @@ bool NNUE::init(const std::string& data_dir, const std::string& eval_file)
 /*
  * Convert from bitboard representation to the format expected by nnue.
  */
-template<typename T, bool Full=true> static INLINE void
+template<bool Full=true, typename T=int8_t> static INLINE void
 NNUE_convert_position(const BoardPosition& pos, T (&pieces)[33], T (&squares)[33])
 {
     pieces[0] = NNUE::piece(KING, WHITE); squares[0] = pos.king(WHITE);
@@ -360,7 +361,7 @@ void search::Context::eval_incremental()
     int8_t pieces[33];
     int8_t squares[33];
 
-    NNUE_convert_position<int8_t, false>(state(), pieces, squares);
+    NNUE_convert_position<false>(state(), pieces, squares);
     NNUEdata* nnue_data[3] = { nullptr, nullptr, nullptr };
     auto& acc = NNUE_accumulator_data[tid()];
     nnue_data[0] = &acc[_ply];
@@ -397,7 +398,7 @@ void search::Context::eval_incremental()
     };
     auto eval = nnue::evaluate(pos);
 
-    /* Verify incremental result againt full eval. */
+    /* Verify incremental result against full eval. */
     ASSERT(eval == NNUE::eval(state()));
 
     eval += eval_fuzz();
@@ -440,6 +441,8 @@ namespace search
     /* Cython callbacks */
     PyObject* Context::_engine = nullptr;
 
+    bool (*Context::_book_init)(const std::string&) = nullptr;
+    BaseMove (*Context::_book_lookup)(const State&, bool) = nullptr;
     std::string (*Context::_epd)(const State&) = nullptr;
     void (*Context::_log_message)(int, const std::string&, bool) = nullptr;
 
@@ -533,7 +536,7 @@ namespace search
      */
     bool Context::is_beta_cutoff(Context* next_ctxt, score_t score)
     {
-        ASSERT(next_ctxt->_ply != 0);
+        ASSERT(!next_ctxt->is_root());
         ASSERT(score > SCORE_MIN && score < SCORE_MAX);
         ASSERT(_alpha >= _score); /* invariant */
 
@@ -803,7 +806,7 @@ namespace search
      * Skip the exchanges when the value of the captured piece exceeds
      * the value of the capturer.
      */
-    static score_t do_captures(int tid, const State& state, Bitboard from_mask, Bitboard to_mask)
+    INLINE int do_captures(int tid, const State& state, Bitboard from_mask, Bitboard to_mask)
     {
         static constexpr auto ply = FIRST_EXCHANGE_PLY;
         const auto mask = to_mask & state.occupied_co(!state.turn) & ~state.kings;
@@ -1467,7 +1470,7 @@ namespace search
      */
     score_t Context::_evaluate()
     {
-        _tt->_eval_depth = _ply;
+        _tt->_eval_depth = std::max(_ply, _tt->_eval_depth);
 
         if (_eval == SCORE_MIN)
         {
@@ -1533,6 +1536,18 @@ namespace search
             _extension %= ONE_PLY;
             _double_ext += extend > 1;
         }
+
+    #if !WITH_NNUE
+        /* https://www.chessprogramming.org/Capture_Extensions */
+        if (is_capture()
+            && !is_extended()
+            && abs(state().eval_material()) <= REBEL_EXTENSION_MARGIN
+            && state().just_king_and_pawns()
+            && !_parent->state().just_king_and_pawns())
+        {
+            _max_depth += REBEL_EXTENSION;
+        }
+    #endif /* !WITH_NNUE*/
     }
 
 
@@ -1551,7 +1566,7 @@ namespace search
      */
     void Context::reinitialize()
     {
-        ASSERT(_ply == 0);
+        ASSERT(is_root());
         ASSERT(!_is_null_move);
         ASSERT(_tt->_w_alpha <= _alpha);
         ASSERT(iteration());
@@ -1582,6 +1597,42 @@ namespace search
         rewind(0, true);
     }
 
+    /*
+    The complexity_factor() function is intended to adjust the aspiration window size
+    based on the number of pieces on the board. The assumption is that as the number of
+    pieces decreases, the score of a given move becomes easier to predict, so the engine
+    can afford to use a smaller aspiration window and can search more efficiently.
+    The function returns a factor based on the number of pieces on the board, with larger
+    factors corresponding to positions with more pieces and smaller factors corresponding
+    to positions with fewer pieces.
+    */
+    static INLINE float complexity_factor(const State& board)
+    {
+        // number of pieces on the board
+        const auto num_pieces = chess::popcount(board.occupied());
+
+        if (num_pieces < 8) return 1.0;
+        if (num_pieces < 12) return 0.8;
+        if (num_pieces < 16) return 0.6;
+        return 0.4;
+    }
+
+    /*
+    The elapsed_time_factor() function is intended to adjust the aspiration window size based
+    on the elapsed time. The assumption is that as the elapsed time increases, the engine may
+    have less time to search and may need to use a larger aspiration window in order to find
+    the best move. The function returns a factor based on the elapsed time, with larger factors
+    corresponding to less elapsed time and smaller factors corresponding to more elapsed time.
+    */
+    static INLINE float elapsed_time_factor()
+    {
+        const auto elapsed_time = Context::elapsed_milliseconds();
+
+        if (elapsed_time < 5.0) return 1.0;
+        if (elapsed_time < 10.0) return 0.8;
+        if (elapsed_time < 20.0) return 0.6;
+        return 0.4;
+    }
 
     void Context::set_search_window(score_t score, score_t& prev_score)
     {
@@ -1600,23 +1651,29 @@ namespace search
             _alpha = SCORE_MIN;
             _beta = _tt->_w_beta;
         }
-        else if (score <= _tt->_w_alpha)
-        {
-            _alpha = std::max<score_t>(SCORE_MIN, score - HALF_WINDOW * pow2(iteration()));
-            _beta = _tt->_w_beta;
-        }
-        else if (score >= _tt->_w_beta)
-        {
-            _alpha = _tt->_w_alpha;
-            _beta = std::min<score_t>(SCORE_MAX, score + HALF_WINDOW * pow2(iteration()));
-        }
         else
         {
-            const score_t delta = score - prev_score;
-            prev_score = score;
+            // Calculate the size of the aspiration window based on the search depth and other factors
+            score_t window_size = HALF_WINDOW * pow2(iteration()) * complexity_factor(state()) * elapsed_time_factor();
 
-            _alpha = std::max<score_t>(SCORE_MIN, score - std::max(HALF_WINDOW, delta));
-            _beta = std::min<score_t>(SCORE_MAX, score + std::max(HALF_WINDOW, -delta));
+            if (score <= _tt->_w_alpha)
+            {
+                _alpha = std::max<score_t>(SCORE_MIN, score - window_size);
+                _beta = _tt->_w_beta;
+            }
+            else if (score >= _tt->_w_beta)
+            {
+                _alpha = _tt->_w_alpha;
+                _beta = std::min<score_t>(SCORE_MAX, score + window_size);
+            }
+            else
+            {
+                const score_t delta = score - prev_score;
+                prev_score = score;
+
+                _alpha = std::max<score_t>(SCORE_MIN, score - std::max(window_size, delta));
+                _beta = std::min<score_t>(SCORE_MAX, score + std::max(window_size, -delta));
+            }
         }
 
         /* save iteration bounds */
@@ -1655,7 +1712,6 @@ namespace search
 
             if (get_tt()->_w_beta <= get_tt()->_w_alpha + 2 * HALF_WINDOW && iteration() >= 13)
                 ++reduction;
-
             reduction -= _parent->history_count(_move) / HISTORY_COUNT_HIGH;
         }
 
@@ -1700,7 +1756,7 @@ namespace search
     {
         ASSERT(_fifty < 100);
 
-        if (_ply == 0)
+        if (is_root())
             return false;
         else
             ASSERT(is_repeated() <= 0);
@@ -1786,9 +1842,9 @@ namespace search
      */
     void Context::set_time_info(int millisec, int moves, score_t eval)
     {
-        ASSERT(_ply == 0);
+        ASSERT(is_root());
 
-        if (MANAGE_TIME && _time_limit.load(std::memory_order_relaxed) > 0)
+        if (MANAGE_TIME && time_limit() > 0)
         {
             if (eval > 100)
             {
@@ -2159,7 +2215,6 @@ void cancel_search(CancelReason reason)
         _exit(1);
 
     case CancelReason::PY_ERROR:
-        std::cout << "\nPython exception:\n";
         PyErr_Print();
         _exit(2);
     }

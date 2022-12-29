@@ -32,10 +32,10 @@
 #include "search.h"
 #include "utility.h"
 
+constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
+constexpr auto NNUE_EVAL_FILE = "nn-62ef826d1a6d.nnue";
 
 extern bool USE_NNUE;
-
-constexpr auto FIRST_EXCHANGE_PLY = PLY_MAX;
 
 /* Configuration API */
 struct Param { int val = 0; int min_val; int max_val; std::string group; };
@@ -89,7 +89,8 @@ namespace search
     {
         History() = default;
 
-        void insert(const State& s) { _positions.insert(s); }
+        void emplace(const State& s) { _positions.emplace(s); }
+        void clear() { _positions.clear(); }
         size_t count(const State& s) const { return _positions.count(s); }
 
         std::unordered_multiset<State, Hasher<State>> _positions;
@@ -308,7 +309,7 @@ namespace search
         bool        is_evasion() const;
         bool        is_extended() const;
         bool        is_last_move();
-        bool        is_leftmost() const { return _ply == 0 || _leftmost; }
+        bool        is_leftmost() const { return is_root() || _leftmost; }
         bool        is_leaf(); /* treat as terminal node ? */
         bool        is_mate_bound() const;
         bool        is_null_move_ok(); /* ok to generate null move? */
@@ -321,6 +322,7 @@ namespace search
         bool        is_reduced() const;
         int         is_repeated() const;
         bool        is_retry() const { return _is_retry; }
+        bool        is_root() const { return _ply == 0; }
         int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
 
         LMRAction   late_move_reduce(int move_count);
@@ -371,8 +373,6 @@ namespace search
         static MovesList& moves(int tid, int ply);
         static std::vector<State>& states(int tid, int ply);
 
-        const ContextStack& stack() const { return _context_stacks[tid()]; }
-
         static void set_syzygy_path(const std::string& path) { _syzygy_path = path; }
         static const std::string& syzygy_path() { return _syzygy_path; }
         static void set_tb_cardinality(int n) { _tb_cardinality = n; }
@@ -383,6 +383,8 @@ namespace search
          */
         static PyObject*    _engine; /* searcher instance */
 
+        static bool         (*_book_init)(const std::string&);
+        static BaseMove     (*_book_lookup)(const State&, bool);
         static std::string  (*_epd)(const State&);
         static void         (*_log_message)(int, const std::string&, bool);
         static void         (*_on_iter)(PyObject*, Context*, const IterationInfo*);
@@ -447,12 +449,76 @@ namespace search
 
     extern score_t eval_captures(Context& ctxt);
 
+    using PieceSquares = std::array<Square, 32>;
+
+    static INLINE bool
+    depleted(const PieceSquares (&piece_squares)[2], size_t (&index)[2], chess::Color side)
+    {
+        const auto i = index[side];
+        return i >= 32 || piece_squares[side][i] == Square::UNDEFINED;
+    }
+
+    /*
+     * An alternative SEE implementation than aims to be simpler
+     * and perhaps more efficient than estimate_static_exchanges.
+     * Does not handle supporting attacks, pinned pieces, checks, etc.,
+     * which is ok; this is only used for reordering capturing moves.
+     */
+    INLINE score_t see(const State& pos, chess::Color side_to_move, Square square)
+    {
+        score_t val = 0;
+        score_t target_val = chess::WEIGHT[pos.piece_type_at(square)];
+        ASSERT(target_val); /* expected to be called after a move to square */
+
+        const auto occupancy_mask = pos.occupied();
+        const Bitboard attacks[] = {
+            pos.attackers_mask(chess::Color::BLACK, square, occupancy_mask),
+            pos.attackers_mask(chess::Color::WHITE, square, occupancy_mask),
+        };
+        PieceSquares piece_squares[2];
+        piece_squares[chess::BLACK].fill(Square::UNDEFINED);
+        piece_squares[chess::WHITE].fill(Square::UNDEFINED);
+        size_t index[2] = {0, 0}; /* indices into piece_squares */
+
+        for (const auto c : { chess::BLACK, chess::WHITE })
+        {
+            size_t i = 0;
+            chess::for_each_square(attacks[c], [c, &piece_squares, &i] (Square s) {
+                piece_squares[c][i++] = s;
+            });
+            /* sort by least valuable attacker/defender */
+            insertion_sort(piece_squares[c].begin(), piece_squares[c].begin() + i,
+                [&pos](Square lhs, Square rhs) {
+                    return pos.piece_type_at(lhs) < pos.piece_type_at(rhs);
+                });
+        }
+
+        for (auto side = side_to_move;; chess::flip(side))
+        {
+            /* ran out of attackers or defenders? done */
+            if (depleted(piece_squares, index, side))
+                break;
+            const auto i = index[side]++;
+            const auto piece_type = pos.piece_type_at(piece_squares[side][i]);
+            /* king cannot recapture if the other side actively attacks the square */
+            if (piece_type == chess::KING && !depleted(piece_squares, index, !side))
+                break;
+            if (side == side_to_move)
+                val += target_val;
+            else if (val <= target_val)
+                return 0; /* assume side_to_move will not initiate exchanges of net loss */
+            else
+                val -= target_val;
+            target_val = chess::WEIGHT[piece_type];
+        }
+        return val;
+    }
 
     /*
      * Evaluate same square exchanges
      */
     template<bool StaticExchangeEvaluation>
-    score_t eval_exchanges(int tid, const Move& move)
+    INLINE score_t eval_exchanges(int tid, const Move& move)
     {
         score_t val = 0;
 
@@ -463,10 +529,12 @@ namespace search
 
             if constexpr(StaticExchangeEvaluation)
             {
-                /*
-                 * Approximate without playing the moves.
-                 */
+                /* Approximate without playing the moves. */
+            #if USE_SIMPLE_SEE
+                val = see(*move._state, move._state->turn, move.to_square());
+            #else
                 val = estimate_static_exchanges(*move._state, move._state->turn, move.to_square());
+            #endif /* USE_SIMPLE_SEE */
             }
             else
             {
@@ -474,7 +542,6 @@ namespace search
                 val = do_exchanges<DEBUG_CAPTURES != 0>(*move._state, mask, 0, tid);
             }
         }
-
         return val;
     }
 
@@ -579,7 +646,7 @@ namespace search
     {
         ASSERT(!is_null_move());
 
-        return (_ply != 0)
+        return !is_root()
             && !is_retry()
             && (state().pushed_pawns_score <= 1)
             && !is_extended()
@@ -618,7 +685,7 @@ namespace search
     template<bool EvalCaptures> INLINE score_t Context::evaluate()
     {
         ASSERT(_fifty < 100);
-        ASSERT(_ply == 0 || !is_repeated());
+        ASSERT(is_root() || !is_repeated());
 
         ++_tt->_eval_count;
 
@@ -680,7 +747,7 @@ namespace search
 
     INLINE score_t Context::futility_margin()
     {
-        if (_ply == 0 || !_futility_pruning || depth() < 1)
+        if (is_root() || !_futility_pruning || depth() < 1)
             return 0;
 
         static const auto fp_margins = margins(std::make_index_sequence<PLY_MAX>{});
@@ -778,7 +845,7 @@ namespace search
      */
     INLINE bool Context::is_null_move_ok()
     {
-        if (_ply == 0
+        if (is_root()
             || _null_move_allowed[turn()] == false
             || _excluded
             || is_null_move() /* consecutive null moves are not allowed */
@@ -912,10 +979,10 @@ namespace search
 
         #if REPORT_CURRENT_MOVE
             /* Report (main thread only) the move being searched from the root. */
-            if (_ply == 0
+            if (is_root()
                 && tid() == 0
                 && _on_move
-                && (_tt->_nodes % 1000) <= move_count
+                && (_tt->_nodes % 1000) <= size_t(move_count)
                 && time_limit() > 250
                )
                 (*_on_move)(_engine, move->uci(), move_count + 1);
@@ -939,7 +1006,7 @@ namespace search
         ctxt->_double_ext = _double_ext;
         ctxt->_extension = _extension;
         ctxt->_is_retry = retry;
-        if (_ply == 0)
+        if (is_root())
             ctxt->_is_singleton = !ctxt->is_null_move() && _move_maker.is_singleton(*this);
         ctxt->_futility_pruning = _futility_pruning && FUTILITY_PRUNING;
         ctxt->_multicut_allowed = _multicut_allowed && MULTICUT;
@@ -1002,7 +1069,7 @@ namespace search
                 else if (state().pawns & chess::BB_SQUARES[move->from_square()])
                     ctxt->_fifty = 0;
                 else
-                    ctxt->_fifty = (_ply == 0 ? _history->_fifty : _fifty) + 1;
+                    ctxt->_fifty = (is_root() ? _history->_fifty : _fifty) + 1;
             }
         }
 
@@ -1274,15 +1341,6 @@ namespace search
             if (capture_gain < 0)
             {
                 move._group = MoveOrder::LOSING_CAPTURES;
-            #if FAVOR_SACRIFICES
-                const auto eval = NNUE::eval(*move._state);
-                /* if the neural net thinks the position is good for the side that moved... */
-                if (eval < 0 && capture_gain - eval > SACRIFICE_MARGIN)
-                {
-                    move._group = MoveOrder::WINNING_CAPTURES;
-                    move._score = -eval;
-                }
-            #endif /* FAVOR_SACRIFICES */
             }
             else
             {
@@ -1456,3 +1514,5 @@ namespace search
     }
 
 } /* namespace */
+
+extern "C" void run_uci_loop(const char* name, const char* version, bool debug=false);

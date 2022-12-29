@@ -30,7 +30,6 @@ The sturddlefish is a hybrid of the paddlefish (Polyodon spathula)
 and the sturgeon (Acipenser gueldenstaedtii), accidentally created
 by researchers in 2019 and announced in 2020.
 """
-
 from cpython.ref cimport PyObject
 from cython.operator cimport address, dereference as deref
 
@@ -45,6 +44,7 @@ from datetime import datetime
 
 import chess
 import chess.pgn
+import chess.polyglot
 import chess.syzygy
 import logging
 import platform
@@ -56,9 +56,6 @@ ctypedef int score_t
 ctypedef stdint.uint64_t Bitboard
 ctypedef stdint.int64_t int64_t
 ctypedef stdint.uint64_t uint64_t
-
-
-NNUE_FILE = 'nn-62ef826d1a6d.nnue'
 
 
 # ostream placeholder
@@ -83,8 +80,8 @@ def print_board(board):
 cdef extern from 'common.h':
     score_t SCORE_MAX
     score_t SCORE_MIN
-    const int MOBILITY_TUNING_ENABLED
-    const int USE_NNUE
+    const bool MOBILITY_TUNING_ENABLED
+    const bool USE_NNUE
     string timestamp() nogil
 
 
@@ -129,15 +126,14 @@ cdef extern from 'chess.h' namespace 'chess':
         Square      from_square() const
         Square      to_square() const
         PieceType   promotion() const
-        bint        is_none() const
+        bool        is_none() const
         string      uci() const
-
-
-    ctypedef vector[BaseMove] PV
 
     cdef cppclass Move(BaseMove):
         Move()
         Move(const BaseMove&)
+
+    ctypedef vector[BaseMove] PV
 
 
     cdef cppclass Position:
@@ -172,21 +168,21 @@ cdef extern from 'chess.h' namespace 'chess':
         int     count_connected_pawns(Color, Bitboard) const
         int     count_isolated_pawns(Color, Bitboard) const
 
-        bint    equals(const State&) const
+        bool    equals(const State&) const
         score_t eval() const
         score_t eval_incremental(const BaseMove&) const
         size_t  hash() const
         void    rehash()
 
-        bint    has_connected_rooks(int) const
-        bint    has_fork(Color) const
+        bool    has_connected_rooks(int) const
+        bool    has_fork(Color) const
 
-        bint    is_castling(const BaseMove&) const
-        bint    is_check() const
-        bint    is_checkmate() const
-        bint    is_endgame() const
-        bint    is_en_passant(const BaseMove&) const
-        bint    is_pinned(Color) const
+        bool    is_castling(const BaseMove&) const
+        bool    is_check() const
+        bool    is_checkmate() const
+        bool    is_endgame() const
+        bool    is_en_passant(const BaseMove&) const
+        bool    is_pinned(Color) const
 
         int     longest_pawn_sequence(Bitboard) const
 
@@ -201,6 +197,8 @@ cdef extern from 'chess.h' namespace 'chess':
 
     cdef score_t estimate_static_exchanges(const State&, Color, int, PieceType)
     cdef void zobrist_update(const State&, const BaseMove&, State&)
+
+    bool parse_fen[T](const string&, T&)
 
 
 cdef extern from 'zobrist.h' namespace 'chess':
@@ -323,23 +321,23 @@ cdef class BoardState:
         return self._state.count_isolated_pawns(color, mask)
 
 
-    cpdef bint has_connected_rooks(self, color):
+    cpdef bool has_connected_rooks(self, color):
         return self._state.has_connected_rooks(WHITE if color else BLACK)
 
 
-    cpdef bint is_check(self):
+    cpdef bool is_check(self):
         return self._state.is_check()
 
 
-    cpdef bint is_checkmate(self):
+    cpdef bool is_checkmate(self):
         return self._state.is_checkmate()
 
 
-    cpdef bint is_endgame(self):
+    cpdef bool is_endgame(self):
         return self._state.is_endgame()
 
 
-    cpdef bint is_pinned(self, Color color):
+    cpdef bool is_pinned(self, Color color):
         return self._state.is_pinned(color)
 
 
@@ -387,7 +385,10 @@ cdef class BoardState:
 # ---------------------------------------------------------------------
 # context.h
 # ---------------------------------------------------------------------
-cdef extern from 'context.h':
+cdef extern from 'context.h' nogil:
+    const char* const NNUE_EVAL_FILE
+
+    cdef void run_uci_loop(const char* name, const char* version, bool) except*
     #
     # Get/set engine params via Python
     #
@@ -397,7 +398,7 @@ cdef extern from 'context.h':
         int max_val
         string group
 
-    void _set_param(string, int, bint) except+
+    void _set_param(string, int, bool) except+
 
     map[string, int] _get_params() except+
     map[string, Param] _get_param_info() except+
@@ -420,6 +421,7 @@ cdef extern from 'context.h':
         void log_init_message()
 
 
+NNUE_FILE = NNUE_EVAL_FILE.decode()
 #
 # Export nnue functions for testing.
 #
@@ -450,7 +452,7 @@ cdef extern from 'context.h' namespace 'search':
         MTDF 'search::Algorithm::MTDF'
 
     cdef cppclass History:
-        void    insert(const State&) except*
+        void    emplace(const State&) except*
         int     _fifty
 
     cdef cppclass IterationInfo:
@@ -478,6 +480,8 @@ cdef extern from 'context.h' namespace 'search':
         BaseMove        _best_move
         PyObject*       _engine
 
+        bool            (*_book_init)(const string&)
+        BaseMove        (*_book_lookup)(const State&, bool)
         string          (*_epd)(const State&)
         void            (*_log_message)(int, const string&, bool)
         void            (*_on_iter)(PyObject*, Context*, const IterationInfo*)
@@ -602,6 +606,56 @@ cdef size_t vmem_avail():
 
 
 # ---------------------------------------------------------------------
+# Polyglot opening book.
+# ---------------------------------------------------------------------
+_book = [None]
+
+
+def opening_book():
+    return _book[0]
+
+
+def opening_book_init(filepath: str):
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(os.path.dirname(__file__), filepath)
+    _book[0] = None
+    try:
+        _book[0] = chess.polyglot.MemoryMappedReader(filepath)
+    except FileNotFoundError as e:
+        pass
+    except:
+        logging.exception(opening_book_init.__name__)
+    logging.debug(f'{filepath}: {_book[0]}')
+    return _book[0] != None
+
+
+def opening_book_lookup(board: chess.Board, best_move: bool=False):
+    if _book[0] is not None:
+        try:
+            if best_move:
+                entry = _book[0].find(board)
+            else:
+                entry = _book[0].weighted_choice(board)
+            return entry
+        except IndexError:
+            pass
+        except:
+            logging.exception(opening_book_lookup.__name__)
+
+
+cdef bool book_init(const string& filepath) except* with gil:
+    return opening_book_init(filepath.decode())
+
+
+cdef BaseMove book_lookup(const State& state, bool best_move) except* with gil:
+    board = board_from_cxx_state(state)
+    entry = opening_book_lookup(board, best_move)
+    if entry and entry.move:
+        return cxx_move(entry.move)
+    return BaseMove()
+
+
+# ---------------------------------------------------------------------
 # Python wrappers for C++ Context
 # ---------------------------------------------------------------------
 cdef class ContextValue:
@@ -633,6 +687,8 @@ cdef class NodeContext:
         self._value = ContextValue()
         self._ctxt = address(self._value._ctxt)
 
+        self._ctxt._book_init = <bool (*)(const string&)> book_init
+        self._ctxt._book_lookup = <BaseMove (*)(const State&, bool)> book_lookup
         self._ctxt._epd = <string (*)(const State&)> epd
         self._ctxt._log_message = <void (*)(int, const string&, bool)> log_message
         self._ctxt._pgn = <string (*)(Context*)> pgn
@@ -696,11 +752,11 @@ cdef class NodeContext:
         return self._ctxt._state.turn
 
 
-
     cdef sync_to_board(self, board: chess.Board):
-
-        # set history of played positions
-
+        '''
+        Set history of played positions.
+        Set internal representation of the position to match the board.
+        '''
         # first, unwind the board to the starting position
         # (which may not necessarily be a brand new game!)
         b = board.copy()
@@ -711,7 +767,7 @@ cdef class NodeContext:
 
         for move in board.move_stack:
             state.apply(move)
-            deref(self._ctxt._history).insert(state._state)
+            deref(self._ctxt._history).emplace(state._state)
 
         deref(self._ctxt._history)._fifty = board.halfmove_clock
 
@@ -969,7 +1025,7 @@ cdef class SearchAlgorithm:
     #
     # Callback wrappers
     #
-    cdef void on_iter(self, Context* ctxt, const IterationInfo* i) except*:
+    cdef void on_iter(self, Context* ctxt, const IterationInfo* i) except* with gil:
         self.iteration_cb(
             self,
             NodeContext.from_cxx_context(ctxt),
@@ -1104,7 +1160,6 @@ cpdef eval_static_exchanges(board, Color color, Square square):
         state._state, color, square, state._state.piece_type_at(square))
 
 
-
 # ---------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------
@@ -1145,6 +1200,9 @@ def get_hash_full():
     return int(TranspositionTable.usage() * 10)
 
 
+# ---------------------------------------------------------------------
+# Ad-hoc move generation performance tests.
+# ---------------------------------------------------------------------
 def perft(fen, repeat=1):
     cdef vector[Move] moves
     cdef size_t count = 0
@@ -1194,6 +1252,9 @@ def read_config(fname='sturddle.cfg', echo=False):
             set_param(name, value, echo)
 
 
+# ---------------------------------------------------------------------
+# NNUE testing, verify that incremental eval matches full eval results.
+# ---------------------------------------------------------------------
 def test_incremental_updates(fen):
     cdef TranspositionTable table
     node = NodeContext(chess.Board(fen=fen))
@@ -1217,7 +1278,6 @@ def test_incremental_updates(fen):
 
 
 def nnue_init(data_dir, eval_file = NNUE_FILE):
-    # logging.info(f'data_dir={data_dir}, eval_file={eval_file}')
     if not data_dir:
         data_dir = os.path.dirname(__file__)
     data_dir = os.path.realpath(data_dir)
@@ -1230,6 +1290,15 @@ def nnue_init(data_dir, eval_file = NNUE_FILE):
 
 def nnue_ok():
     return USE_NNUE
+
+
+# ---------------------------------------------------------------------
+# optional / experimental FEN parsing (needs -DNATIVE_UCI at compile-time)
+# ---------------------------------------------------------------------
+def board_from_fen(fen: str):
+    board = BoardState()
+    if parse_fen(fen.encode(), board._state):
+        return board
 
 
 # ---------------------------------------------------------------------
@@ -1297,9 +1366,19 @@ nnue_init(os.path.dirname(__file__))
 _tb_init()
 
 __major__   = 1
-__minor__   = 4
+__minor__   = 25
 __build__   = ['NNUE', str(__major__), f'{int(__minor__):02d}', timestamp().decode()]
 
 
 def version():
     return '.'.join(__build__[not USE_NNUE:])
+
+
+# ---------------------------------------------------------------------
+# Experimental: native C++ UCI implementation
+# ---------------------------------------------------------------------
+def uci(name: str, debug: bool=False):
+    cdef string n = name.encode()
+    cdef string v = version().encode()
+    with nogil:
+        run_uci_loop(n.c_str(), v.c_str(), debug)

@@ -26,6 +26,7 @@
  * python-chess (C) Niklas Fiekas (https://python-chess.readthedocs.io/en/latest/)
 */
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -59,6 +60,11 @@ extern const magic_bits::Attacks magic_bits_attacks;
 
 #include "tables.h"
 
+#if NATIVE_UCI /* C++20 */
+  #include <ranges>
+  #include <string_view>
+#endif /* NATIVE_UCI */
+
 #if !defined (M_E)
 static constexpr auto M_E = 2.718281828459045;
 #endif
@@ -82,7 +88,7 @@ namespace chess
 
     extern AttackMasks BB_DIAG_MASKS, BB_FILE_MASKS, BB_RANK_MASKS;
 
-    template<std::size_t... I>
+    template<size_t... I>
     static constexpr std::array<uint64_t, sizeof ... (I)> bb_squares(std::index_sequence<I...>)
     {
         return { 1ULL << I ... };
@@ -236,6 +242,9 @@ namespace chess
 
         UNDEFINED = -1,
     };
+
+    static constexpr auto BB_DEFAULT_CASTLING_RIGHTS =
+        BB_SQUARES[A1] | BB_SQUARES[H1] | BB_SQUARES[A8] | BB_SQUARES[H8];
 
 
 #define DEFAULT_MOBILITY_WEIGHTS { 0, 0, 0, 7, 6, 5, 0 }
@@ -531,6 +540,7 @@ namespace chess
         /* Get the bitboard of squares attacked from a given square */
         Bitboard attacks_mask(Square, Bitboard occupied) const;
 
+        /* Get the bitboard of pieces of a given color that attack the given square */
         INLINE Bitboard attackers_mask(Color color, Square square, Bitboard occupied) const
         {
             const auto attackers = attacker_pieces_mask(color, square, occupied)
@@ -541,8 +551,7 @@ namespace chess
         }
 
         /*
-         * Get the bitboard of squares attacked from a given square
-         * by pieces other than pawns and kings.
+         * Get the pieces of given color, other than pawns and kings, that are attacking the square.
          */
         INLINE Bitboard attacker_pieces_mask(Color color, Square square, Bitboard occupied_mask) const
         {
@@ -812,7 +821,7 @@ namespace chess
             static constexpr double value = 1;
         };
 
-        template<std::size_t... I>
+        template<size_t... I>
         static constexpr std::array<double, sizeof ... (I)> _exp_table(std::index_sequence<I...>)
         {
             return { _exp<I>::value ... };
@@ -1045,6 +1054,8 @@ namespace chess
             return weight(piece_type_at(square));
         }
 
+        void set_piece_at(Square, PieceType, Color, PieceType promotion = PieceType::NONE);
+
         mutable std::array<int8_t, 2> _check = {-1, -1};
         mutable uint64_t _hash = 0;
 
@@ -1057,8 +1068,6 @@ namespace chess
         template<bool WithEnPassant> score_t eval_delta(const BaseMove&) const;
 
         PieceType remove_piece_at(Square);
-
-        void set_piece_at(Square, PieceType, Color, PieceType promotion_type = PieceType::NONE);
 
         static bool is_endgame(const State&);
 
@@ -1640,8 +1649,8 @@ namespace chess
     }
 
 
-    /*
-     * required by codegen
+    /**
+     * Functions required by codegen.
      */
     INLINE Bitboard sliding_attacks(int square, Bitboard occupied, const std::vector<int>& deltas)
     {
@@ -1671,7 +1680,156 @@ namespace chess
                 ((BB_FILE_A | BB_FILE_H) & ~BB_FILES[square_file(square)]));
     }
 
+
+    /** Parse square name token */
+    template<typename T> bool parse_square(T tok, Square& square)
+    {
+        int file = -1, rank = -1;
+        for (const auto c : tok)
+        {
+            if (file < 0)
+                file = std::tolower(c);
+            else if (rank < 0)
+                rank = c;
+        }
+        if (file < 'a' || file > 'h' || rank < '1' || rank > '8')
+            return false;
+
+        square = Square((rank - '1') * 8 + (file - 'a'));
+        return true;
+    }
+
+
+    INLINE PieceType piece_type(const char c)
+    {
+        switch (std::tolower(c))
+        {
+        case 'p': return PieceType::PAWN;
+        case 'n': return PieceType::KNIGHT;
+        case 'b': return PieceType::BISHOP;
+        case 'r': return PieceType::ROOK;
+        case 'q': return PieceType::QUEEN;
+        case 'k': return PieceType::KING;
+        default: return PieceType::NONE;
+        }
+    }
+
+    /**
+     * https://www.chessprogramming.org/Extended_Position_Description
+     */
+    namespace epd
+    {
+        template<size_t... I>
+        static constexpr std::array<Square, sizeof ... (I)> mirror_squares(std::index_sequence<I...>)
+        {
+            return { Square(square_mirror(I)) ... };
+        }
+
+        /** Parse piece placement, return true if no error. */
+        template<typename T, typename P> INLINE bool parse_pos(T tok, P& pos)
+        {
+            static constexpr auto squares = mirror_squares(std::make_index_sequence<64>{});
+            size_t i = 0;
+            for (const auto c : tok)
+            {
+                if (i >= 64)
+                    return false;
+
+                if (std::isblank(c))
+                    break;
+
+                switch (c)
+                {
+                case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':
+                    i += c - '0';
+                    break;
+                case '/':
+                    if (i % 8 != 0)
+                        return false;
+                    break;
+                default:
+                    {
+                        auto color = std::isupper(c) ? Color::WHITE : Color::BLACK;
+                        if (auto piece = piece_type(c))
+                            pos.set_piece_at(squares[i++], piece, color);
+                        else
+                            return false;
+                    }
+                    break;
+                }
+            }
+            return i == 64;
+        }
+
+        /** Parse castling rights */
+        template<typename T, typename P> INLINE bool parse_castling(T tok, P& pos)
+        {
+            for (const auto c : tok)
+            {
+                switch (c)
+                {
+                case 'K': pos.castling_rights |= BB_SQUARES[H1]; break;
+                case 'Q': pos.castling_rights |= BB_SQUARES[A1]; break;
+                case 'k': pos.castling_rights |= BB_SQUARES[H8]; break;
+                case 'q': pos.castling_rights |= BB_SQUARES[A8]; break;
+                case '-': break;
+                default: return false; /* unexpected */
+                }
+            }
+            return true;
+        }
+
+        template<typename T, typename P> INLINE bool parse_side_to_move(T tok, P& pos)
+        {
+            if (tok.front() == 'w')
+                pos.turn = Color::WHITE;
+            else if (tok.front() == 'b')
+                pos.turn = Color::BLACK;
+            else
+                return false;
+            return true;
+        }
+
+        template<typename T, typename P> INLINE bool parse_en_passant_target(T tok, P& pos)
+        {
+            return (tok.front() == '-') ? true : parse_square(tok, pos.en_passant_square);
+        }
+    } /* namespace */
+
+    template<typename P> INLINE bool parse_fen(const std::string& fen, P& pos)
+    {
+#if NATIVE_UCI
+        int tok_count = 0;
+        bool ok = true;
+        std::ranges::for_each(
+            std::views::lazy_split(fen, std::string_view(" ")),
+            [&](auto const &token)
+            {
+                if (token.empty())
+                    return;
+                switch (tok_count)
+                {
+                case 0:
+                    ok = epd::parse_pos(token, pos);
+                    break;
+                case 1:
+                    ok = epd::parse_side_to_move(token, pos);
+                    break;
+                case 2:
+                    ok = epd::parse_castling(token, pos);
+                    break;
+                case 3:
+                    ok = epd::parse_en_passant_target(token, pos);
+                    break;
+                }
+                ++tok_count;
+            }
+        );
+        return ok;
+#else
+        return false;
+#endif /* NATIVE_UCI */
+    }
 } /* namespace chess */
 
 #include "zobrist.h"
-

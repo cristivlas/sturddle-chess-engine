@@ -22,6 +22,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include <list>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -31,6 +32,7 @@
 template<typename I> class thread_pool
 {
 public:
+    using mutex_type = std::mutex;
     using thread_id_type = I;
 
     explicit thread_pool(size_t thread_count)
@@ -62,8 +64,8 @@ public:
 
     template<typename T> void push_task(T&& task)
     {
-        {
-            std::unique_lock<std::mutex> lock(_mutex);
+        {   /* mutex scope */
+            std::unique_lock<mutex_type> lock(_mutex);
             _tasks.emplace_back(std::move(task));
         }
         _cv.notify_all();
@@ -74,16 +76,27 @@ public:
         return _tid;
     }
 
-    void wait_for_tasks()
+    template<typename F = void (*)()>
+    void wait_for_tasks(F f = []{})
     {
-        std::unique_lock<std::mutex> lock(_mutex);
+        /* wait for all tasks to get picked up, assume enough workers */
+        std::unique_lock<mutex_type> lock(_mutex);
         while (!_tasks.empty())
         {
             _cv.notify_all();
             _cv.wait(lock);
         }
-        while (_tasks_pending)
+
+        while (tasks_pending() > 0)
+        {
+            f();
             std::this_thread::yield();
+        }
+    }
+
+    int tasks_pending() const
+    {
+        return _tasks_pending.load(std::memory_order_relaxed);
     }
 
 private:
@@ -91,21 +104,21 @@ private:
     {
         _tid = static_cast<thread_id_type>(index);
 
-        while (_running)
+        while (_running.load(std::memory_order_relaxed))
         {
             std::function<void()> task;
             {
-                std::unique_lock<std::mutex> lock(_mutex);
+                std::unique_lock<mutex_type> lock(_mutex);
                 while (_tasks.empty())
                 {
                     if (!_running)
                         return;
                     _cv.wait(lock);
                 }
-                task.swap(_tasks.back());
+                task.swap(_tasks.front());
 
                 ++_tasks_pending;
-                _tasks.pop_back();
+                _tasks.pop_front();
             }
 
             task();
@@ -114,7 +127,7 @@ private:
              * by value go out of scope before decrementing _tasks_pending
              */
             task = nullptr;
-
+            ASSERT(tasks_pending() > 0);
             --_tasks_pending;
             _cv.notify_all();
         }
@@ -123,8 +136,8 @@ private:
     std::atomic_bool _running;
     std::atomic_int _tasks_pending;
     std::condition_variable _cv;
-    std::mutex _mutex;
-    std::vector<std::function<void()>> _tasks;
+    mutex_type _mutex;
+    std::list<std::function<void()>> _tasks;
     std::vector<std::thread> _threads;
 
     static THREAD_LOCAL thread_id_type _tid;

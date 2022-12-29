@@ -70,6 +70,10 @@ using score_t = int;
 /* Collect extra stats for troubleshooting */
 #define EXTRA_STATS                         false
 
+#if !defined(NATIVE_UCI)
+  #define NATIVE_UCI                        false
+#endif /* NATIVE_UCI */
+
 #define FAVOR_SACRIFICES                    false
 
 #define KILLER_MOVE_HEURISTIC               true
@@ -95,6 +99,11 @@ using score_t = int;
 #define SINGULAR_EXTENSION                  true
 
 #define SMP                                 true
+
+/* experiment with different SEE heuristic impls */
+#if !defined(USE_SIMPLE_SEE)
+  #define USE_SIMPLE_SEE                    false
+#endif /* USE_SIMPLE_SEE */
 
 #if !WITH_NNUE && !defined(USE_PIECE_SQUARE_TABLES)
   #define USE_PIECE_SQUARE_TABLES           true

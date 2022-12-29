@@ -366,8 +366,12 @@ def test_nnue_eval():
         'r4rk1/ppp2ppp/5n2/2bPn3/4K3/2NP4/PPPBB1PP/R6R w - - 3 3',
         '1r1q1rk1/p3bBpp/2Q5/8/3Pb3/2n1BN2/P4PPP/R4RK1 b - - 0 18',
     ]
-    for fen in tests:
+    evals = [
+        57, -1074, -63, -277, 974, 426, 92, -249
+    ]
+    for i, fen in enumerate(tests):
         eval = engine.nnue_eval_fen(fen)
+        assert eval == evals[i], (eval, evals[i])
         assert eval == engine.nnue_eval_board(chess.Board(fen=fen)), (fen, eval)
 
 
@@ -401,6 +405,29 @@ def test_incremental_updates():
     for fen in tests:
         engine.test_incremental_updates(fen)
 
+
+def test_parse_fen():
+    tests = [
+        '3r4/1pk2p1N/p1n1p3/4Pq2/2Pp1b1Q/8/PP4PP/R1K1R3 w - -',
+        '3r1rk1/p3qp1p/2bb2p1/2p5/3P4/1P6/PBQN1PPP/2R2RK1 b - -',
+        'r1bqk2r/pp3ppp/5n2/8/1b1npB2/2N5/PP1Q2PP/1K2RBNR w kq -',
+        'r1b1kbr1/pp3p1p/5qp1/4p3/1P2P3/P1N3P1/5P1P/R2QKB1R w KQq -',
+        'r4rk1/1ppnbppp/p2q4/3pNb2/3P4/PP5P/2PNBPP1/R2QK2R w KQ -',
+        '8/8/4R3/2r3pk/6Pp/7P/1PPB1P2/1K1R4 b - g3',
+        '4k3/8/8/8/3pP3/8/8/4K3 b - e3',
+        '4k3/8/8/3pP3/8/8/8/4K3 w - d6',
+        '8/8/5pkp/p4p2/P4P1K/7P/8/8 w - -',
+    ]
+    for fen in tests:
+        board_state = engine.board_from_fen(fen)
+        if board_state:
+            board = engine.board_from_state(board_state)
+            result = board.epd()
+            assert fen == result, (result, fen)
+            assert board.is_valid()
+            print(f'Ok: "{result}"')
+
+
 test_castling()
 test_castling_moves_generation()
 test_connected_rooks()
@@ -416,13 +443,18 @@ test_forks()
 if engine.MOBILITY_TUNING:
     test_mobility()
 
+# Test eval components
 test_connected_pawns()
 test_isolated_pawns()
 test_longest_pawn_sequence()
 
 test_repetition()
 
+# NNUE tests
 test_nnue_piece_codes()
 test_nnue_eval()
 test_incremental_updates()
+
+test_parse_fen()
+
 print ('All tests passed')

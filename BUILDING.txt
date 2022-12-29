@@ -1,9 +1,11 @@
 Sturddle Engine Components
 ==========================
 1) Python extension module written in C++,
-2) sturddle.py script, implementing the UCI protocol,
-3) worker.py script for running a background thread when thinking on the opponents' time (Ponder).
-4) nnue binary file (provided)
+2) sturddle.py script
+3) UCI extension module (uci.pyx)
+4) worker.py script for running a background thread when thinking on the opponents' time (Ponder).
+5) nnue binary file (provided)
+
 
 GUI Integration
 ===============
@@ -57,7 +59,16 @@ https://docs.python.org/3/using/windows.html
 Build
 =====
 cd sturddle-sturddle-engine
-python3 setup.py build_ext --inplace
+CFLAGS=-march=native python3 setup.py build_ext --inplace
+
+
+Native UCI
+==========
+The UCI protocol is implemented in Cython.
+
+To experiment with a native C++ implementation, set NATIVE_UCI in the environment.
+This will cause the uci_native.cpp code to be used insead of uci.pyx
+uci_native.cpp requires a C++20 standard compiler.
 
 
 Optional: One File Executable
@@ -65,13 +76,6 @@ Optional: One File Executable
 PyInstaller can be used to bundle all the components into all-in-one, self-extracting executable.
 (https://pyinstaller.org/en/stable/)
 
-Asumming the python extension module is built for Python 3.10 on a 64-bit Window system, the command
-for creating the one-file executable will look something like this:
-
-pyinstaller sturddle.py --add-binary=chess_engine.cp310-win_amd64.pyd;. --hidden-import chess.pgn --hidden-import chess.syzygy -p . --onefile --add-data=nn-62ef826d1a6d.nnue;.
-
-It is recommended to run pyinstaller from a Python virtual environment, please see the pyinstaller documentation.
-
-Under some GUIs, a window may pop up when activating the engine. The workaround is to add --noconsole to the pyinstaller command:
-pyinstaller sturddle.py --add-binary=chess_engine.cp310-win_amd64.pyd;. --hidden-import chess.pgn --hidden-import chess.syzygy -p . --noconsole --onefile --add-data=nn-62ef826d1a6d.nnue;.
+The (experimental) tools/build.py script generates a self-extracting executable that contains the
+AVX512/AVX2/generic modules, the nnue file, the opening book, and all the scripts required to run.
 

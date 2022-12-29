@@ -270,19 +270,6 @@ namespace chess
         hash_value ^= en_passant_key(state);
 
         /* castling rights */
-    #if 0
-        if (state.castling_rights & BB_SQUARES[H1]) /* white kingside */
-            hash_value ^= random_u64[768 + 0];
-
-        if (state.castling_rights & BB_SQUARES[A1]) /* white queenside */
-            hash_value ^= random_u64[768 + 1];
-
-        if (state.castling_rights & BB_SQUARES[H8]) /* black kingside */
-            hash_value ^= random_u64[768 + 2];
-
-        if (state.castling_rights & BB_SQUARES[A8]) /* black queenside */
-            hash_value ^= random_u64[768 + 3];
-    #else
         if (state.castling_rights)
         {
             static constexpr Bitboard mask[] = { BB_EMPTY, BB_ALL };
@@ -299,7 +286,6 @@ namespace chess
             /* black queenside */
             hash_value ^= mask[bool(state.castling_rights & BB_SQUARES[A8])] & random_u64[768 + 3];
         }
-    #endif
 
         hash_value ^= side_to_move_key(state.turn);
         return hash_value;

@@ -22,12 +22,6 @@
  * TranspositionTable and related data structs.
  * Search algorithms: Negamax with TranspositionTable, MTD(f)
  */
-#if __linux__
-#include <sys/sysinfo.h>
-#elif __APPLE__
-#include <sys/sysctl.h>
-#endif
-
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -35,6 +29,18 @@
 #include "search.h"
 #include "thread_pool.hpp"
 #include "utility.h"
+
+#if __linux__
+#include <sys/sysinfo.h>
+#elif __APPLE__
+#include <sys/sysctl.h>
+#elif _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#undef ERROR
+#undef max
+#undef min
+#endif /* _WIN32 */
 
 #if HAVE_INT128
 /* primes.hpp requires __int128 */
@@ -86,25 +92,27 @@ TranspositionTable::HashTable TranspositionTable::_table(pick_prime(TRANSPOSITIO
 
 static size_t mem_avail()
 {
-    unsigned long mem = 0;
 #if __linux__
     struct sysinfo info = {};
     if (sysinfo(&info) == 0)
-    {
-        mem = info.freeram;
-    }
+        return info.freeram;
+
 #elif __APPLE__
+    unsigned long mem = 0;
     size_t len = sizeof(mem);
     static int mib[2] = { CTL_HW, HW_USERMEM };
 
-    sysctl(mib, std::extent<decltype(mib)>::value, &mem, &len, nullptr, 0);
+    if (sysctl(mib, std::extent<decltype(mib)>::value, &mem, &len, nullptr, 0) == 0)
+        return mem;
+#elif _WIN32
+    MEMORYSTATUSEX statex = {};
+    statex.dwLength = sizeof (statex);
 
-#else
+    if (::GlobalMemoryStatusEx(&statex))
+        return statex.ullAvailVirtual;
+#endif
     /* failover to psutil via Cython */
-    mem = static_cast<unsigned long>(cython_wrapper::call(search::Context::_vmem_avail));
-#endif /* __linux__ */
-
-    return mem;
+    return static_cast<size_t>(cython_wrapper::call(search::Context::_vmem_avail));
 }
 
 
@@ -472,13 +480,23 @@ bool verify_null_move(Context& ctxt, Context& null_move_ctxt)
     return false;
 }
 
+/*
+ * Adjust the multicut margin based on the complexity of the board.
+ * The assumption is that a more balanced position is less complex.
+ * Increase the multicut margin for lower complexity, to increase the
+ * breadth of the search.
+ */
+static int INLINE multicut_margin(const Context& ctxt)
+{
+    return abs(ctxt._eval) < MULTICUT_COMPLEXITY_THRESHOLD ? MULTICUT_MARGIN_HIGH : MULTICUT_MARGIN_LOW;
+}
 
 /*
  * https://www.chessprogramming.org/Multi-Cut
  */
 static bool multicut(Context& ctxt, TranspositionTable& table)
 {
-    if (ctxt._ply == 0
+    if (ctxt.is_root()
         || !ctxt._multicut_allowed
         || ctxt.depth() <= 5
         || ctxt.is_pv_node()
@@ -513,7 +531,7 @@ static bool multicut(Context& ctxt, TranspositionTable& table)
      */
     const auto min_cutoffs = MULTICUT_C - (ctxt.depth() > 5
         && ctxt._tt_entry.is_lower()
-        && ctxt._tt_entry._value + MULTICUT_MARGIN >= ctxt._beta);
+        && ctxt._tt_entry._value + multicut_margin(ctxt) >= ctxt._beta);
 
     while (auto next_ctxt = ctxt.next(false, 0, move_count))
     {
@@ -575,7 +593,7 @@ static INLINE bool probe_endtables(Context& ctxt)
 {
     int v;
 
-    if (ctxt._ply != 0 /* do not probe at root */
+    if (  !ctxt.is_root()
         && ctxt._fifty == 0
         && ctxt.state().is_endgame()
         && Context::tb_cardinality() > 0
@@ -599,11 +617,11 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     ASSERT(ctxt._beta > SCORE_MIN);
     ASSERT(ctxt._score <= ctxt._alpha);
     ASSERT(ctxt._alpha < ctxt._beta);
-    ASSERT(ctxt._ply == 0 || !ctxt._move || ctxt._move._group < MoveOrder::UNORDERED_MOVES);
+    ASSERT(ctxt.is_root() || !ctxt._move || ctxt._move._group < MoveOrder::UNORDERED_MOVES);
 
-    ctxt.set_tt(&table);
+    ASSERT(ctxt.get_tt() == &table);
 
-    if (ctxt._ply == 0) /* root? */
+    if (ctxt.is_root())
     {
         /* Do not probe end tables if the number of pieces at root
          * position has dropped below the end tables cardinality
@@ -701,7 +719,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
          * Reverse futility pruning: static eval stored in TT beats beta by a margin and
          * not in check, and no move w/ scores above MATE_HIGH in the hash table? Prune.
          */
-        if (ctxt._ply != 0
+        if (   !ctxt.is_root()
             && !ctxt._excluded /* no reverse pruning during singular extension */
             && !ctxt.is_pv_node()
             && ctxt.depth() > 0
@@ -773,7 +791,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                  * Do not extend at root, or if already deeper than twice the depth at root
                  */
 
-                if (ctxt._ply != 0 && ctxt._ply < root_depth * 2)
+                if (!ctxt.is_root() && ctxt._ply < root_depth * 2)
                 {
                 #if SINGULAR_EXTENSION
                    /*
@@ -971,7 +989,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
              * https://www.chessprogramming.org/PVS_and_Aspiration
              */
             if (ASPIRATION_WINDOW
-                && ctxt._ply == 0
+                && ctxt.is_root()
                 && move_count == 1
                 && move_score < MATE_HIGH
                 && move_score < table._w_alpha
@@ -1036,7 +1054,7 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
 score_t search::mtdf(Context& ctxt, score_t first, TranspositionTable& table)
 {
     ASSERT_ALWAYS(ctxt._algorithm == Algorithm::MTDF);
-    ASSERT_ALWAYS(ctxt._ply == 0);
+    ASSERT_ALWAYS(ctxt.is_root());
 
     auto lower = ctxt._alpha;
     auto upper = ctxt._beta;
@@ -1196,11 +1214,6 @@ public:
 
             _tables[i]._ctxt = _root.clone(_tables[i]._raw_mem);
 
-        #if VARIABLE_WINDOW
-            _tables[i]._ctxt->_alpha = std::max<int>(SCORE_MIN, _root._alpha - 2.5 * (i + 1));
-            _tables[i]._ctxt->_beta = std::min<int>(SCORE_MAX, _root._beta + 2.5 * (i + 1));
-        #endif
-
             _tables[i]._tt._w_alpha = _tables[i]._ctxt->_alpha;
             _tables[i]._tt._w_beta = _tables[i]._ctxt->_beta;
 
@@ -1346,7 +1359,7 @@ score_t search::iterative(Context& ctxt, TranspositionTable& table, int max_iter
             info.knps = ms ? info.nodes / ms : info.nodes;
             info.milliseconds = ms;
 
-            cython_wrapper::call(Context::_on_iter, Context::_engine, &ctxt, &info);
+            (*Context::_on_iter)(Context::_engine, &ctxt, &info);
         }
         ++i;
     }
