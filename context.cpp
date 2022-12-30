@@ -2135,6 +2135,7 @@ namespace search
                         ASSERT(move._score == hist_score);
                 }
                 else if (move._score >= HISTORY_LOW
+                    && abs(ctxt._eval) > MOVE_ORDER_EVAL_THRESHOLD
                     && make_move<true>(ctxt, move, futility)
                     && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
                 {

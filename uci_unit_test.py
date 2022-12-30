@@ -14,8 +14,6 @@ class EngineTestScope:
         self.start_time = None
         self.end_time = None
         engine_command_line = [ args.engine ]
-        if args.verbose:
-            engine_command_line.append('-v')
         self.engine = chess.engine.SimpleEngine.popen_uci(engine_command_line)
 
     def __enter__(self):
@@ -35,20 +33,46 @@ class EngineTestScope:
 Test the UCI "position" command.
 '''
 def test_position(test):
-    for pos in [
-        'r1bqkbnr/p1pp1ppp/1pn5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 2 4',
-        '8/7p/5k2/5p2/p1p2P2/Pr1pPK2/1P1R3P/8 b - -',
-        '8/8/4R3/2r3pk/6Pp/7P/1PPB1P2/1K1R4 b - g3',
-    ]:
-        board = chess.Board(pos)
-        test.engine.protocol._position(board)
-        assert board == test.engine.protocol.board
+    for _ in range(args.iterations):
+        for pos in [
+            'r1bqkbnr/p1pp1ppp/1pn5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 2 4',
+            '8/7p/5k2/5p2/p1p2P2/Pr1pPK2/1P1R3P/8 b - -',
+            '8/8/4R3/2r3pk/6Pp/7P/1PPB1P2/1K1R4 b - g3',
+            'r1bqkbnr/ppp2ppp/2np4/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq -',
+            'r1bqkb1r/ppp2ppp/2n2n2/4p3/4p3/N2PB3/PPPQ1PPP/R3KBNR w KQkq -',
+            'r1bqk2r/ppp2ppp/2nb1n2/4p3/4P3/N3BP2/PPPQ2PP/R3KBNR b KQkq -',
+            'r3kb1r/pppbqppp/5n2/3Pp3/1nP5/N2PBN2/PP1Q1PPP/R3KB1R b KQkq -',
+            'r3kb1r/pppbqppp/5n2/3Pp3/1nP5/N2PBN2/PP1Q1PPP/R3KB1R b KQkq -',
+            'r3kb1r/pppbqppp/5n2/3Pp3/1nP5/N2PBN2/PP1Q1PPP/R3KB1R b KQk -',
+            'r3kb1r/pppbqppp/2N2n2/3Pp3/1nP5/3PBN2/PP1Q1PPP/R3KB1R b KQkq -',
+            'r3kb1r/pppbqppp/5N2/3Pp3/1nP5/3PBN2/PP1Q1PPP/R3KB1R b KQkq -',
+            'r3k2r/pppbqppp/5n2/3Pp3/1nP5/N2PBN2/PP1Q1PPP/R3K2R b KQkq -',
+            'r1bqk2r/ppp2p1p/5B2/4b3/4p3/N2P4/P1PQ1PPP/R3KBNR w KQkq -',
+            'r1bqk2r/ppp2p1p/5B2/4b3/4p3/N2P4/P1PQ1PPP/R3KBNR b KQkq -',
+        ]:
+            board = chess.Board(pos)
+            test.engine.protocol._position(board)
+            assert board == test.engine.protocol.board
+
+
+def extract_depth(info_line):
+    # Split the line by space to get a list of words
+    words = info_line.split()
+    try:
+        # Find the index of the word "depth"
+        depth_index = words.index('depth')
+    except:
+        return 0
+    # The depth value is the word at the index after "depth", so we return the word at depth_index + 1
+    return int(words[depth_index + 1])
 
 
 '''
 Send a "go" command to the engine, optionally setting up the position.
 '''
 class GoCommand(chess.engine.BaseCommand[chess.engine.UciProtocol, None]):
+    depth = 0
+
     def __init__(self, engine, **kwargs):
         super().__init__(engine)
         self.pos = kwargs.pop('fen', None)
@@ -62,12 +86,17 @@ class GoCommand(chess.engine.BaseCommand[chess.engine.UciProtocol, None]):
             else:
                 engine.send_line(f'position fen {self.pos}')
         # Do not use the opening book
-        engine.send_line('setoption name OwnBook value false')
+        if 'stockfish' not in args.engine:
+            engine.send_line('setoption name OwnBook value false')
+        engine.send_line('setoption name Ponder value false')
         engine.send_line(f'go movetime {self.time}')
 
     def line_received(self, engine, line):
-        # print(line)
-        if not line.startswith('info '):
+        if line.startswith('info '):
+            if args.verbose:
+                print(line)
+            GoCommand.depth = extract_depth(line)
+        else:
             self.result.set_result(line)
             self.set_finished()
 
@@ -83,13 +112,25 @@ def test_go(test):
     ]:
         def _go(engine):
             return GoCommand(engine, fen=pos, moves=moves, movetime=1000)
+
         response = test.engine.communicate(_go)
+        print (f'depth {GoCommand.depth} {response}')
         assert response.startswith('bestmove '), response
 
+
+def test_tricky(test):
+    tests = [
+        '3K4/3P2k1/8/8/8/8/2r5/5R2 w - -',  # Lucena
+    ]
+    for fen in tests:
+        board = chess.Board(fen=fen)
+        info = test.engine.analyse(board, chess.engine.Limit(time=3))
+        print(f'{info["score"]}, depth={info["depth"]}')
 
 def run_tests(args):
     for test in [
         test_position,
+        test_tricky,
         test_go,
     ]:
         with EngineTestScope(args) as test_scope:
@@ -100,6 +141,8 @@ def run_tests(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-e', '--engine', default='./main.py')
+    parser.add_argument('-i', '--iterations', type=int, default=1, help='number of iterations to run')
     parser.add_argument('-v', '--verbose', action='store_true', help='verbose logging')
 
-    run_tests(parser.parse_args())
+    args = parser.parse_args()
+    run_tests(args)

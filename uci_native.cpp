@@ -940,7 +940,7 @@ void UCI::uci()
 {
     std::ios_base::sync_with_stdio(false);
     output<false>(std::format("id name {}-{}", _name, _version));
-    output<false>("id author Cristi Vlasceanu");
+    output<false>("id author Cristian Vlasceanu");
 
     refresh_options();
 
