@@ -371,7 +371,7 @@ private:
 
         if (!move)
         {
-            output("resign");
+            output("bestmove 0000");
         }
         else
         {
@@ -469,7 +469,11 @@ struct Info : public search::IterationInfo
         const auto time_limit = search::Context::time_limit();
         brief = (time_limit >= 0 && time_limit <= milliseconds + TIME_LOW);
         if (!brief)
-            pv->assign(ctxt.get_pv().begin() + 1, ctxt.get_pv().end());
+        {
+            const auto& ctxt_pv = ctxt.get_pv();
+            if (!ctxt_pv.empty())
+                pv->assign(ctxt_pv.begin() + 1, ctxt_pv.end());
+        }
     }
 };
 

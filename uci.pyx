@@ -421,7 +421,7 @@ class UCI:
         if self.output_expected:
             self.output_expected = False
             if move is None:
-                self.output('resign')
+                self.output('bestmove 0000')
             else:
                 uci = move.uci()
                 if self.ponder_enabled and request_ponder:
