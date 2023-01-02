@@ -765,13 +765,12 @@ void UCI::go(const Arguments &args)
         }
 
         const auto set_time_limit = [&] {
-            if (explicit_movetime)
+            if (explicit_movetime || movetime <= 0)
             {
                 search::Context::set_time_limit_ms(movetime);
             }
             else
             {
-                ASSERT_ALWAYS(movetime > 0);
                 search::Context::set_start_time();
                 search::Context::set_time_info(time_remaining[turn], movestogo, _score);
             }
