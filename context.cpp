@@ -1,5 +1,5 @@
 /*
- * Sturddle Chess Engine (C) 2022 Cristi Vlasceanu
+ * Sturddle Chess Engine (C) 2022, 2023 Cristian Vlasceanu
  * --------------------------------------------------------------------------
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -109,8 +109,7 @@ void _set_param(const std::string& name, int value, bool echo)
         TranspositionTable::set_hash_size(std::max(std::min(value, HASH_MAX), HASH_MIN));
 
         if (echo)
-            std::cout << "info string " << name << "=" << TranspositionTable::get_hash_size()
-                      << std::endl;
+            std::cout << "info string " << name << "=" << TranspositionTable::get_hash_size() << "\n";
         return;
     }
 
@@ -118,16 +117,19 @@ void _set_param(const std::string& name, int value, bool echo)
 
     if (iter == Config::_namespace.end())
     {
-        std::cerr << "unknown parameter: \"" << name << "\"\n";
+        search::Context::log_message(LogLevel::ERROR, "unknown parameter: \"" + name + "\"");
     }
     else if (USE_NNUE && iter->second._group == "Eval" && name.find("MOBILITY") != 0)
     {
-        std::cerr << "parameter is not used in NNUE mode: \"" << name << "\"\n";
+        search::Context::log_message(LogLevel::WARN, "parameter not used in NNUE mode: \"" + name + "\"");
     }
     else if (value < iter->second._min || value > iter->second._max)
     {
-        std::clog << name << " value " << value << " is out of range [";
-        std::clog << iter->second._min << ", " << iter->second._max << "]\n";
+        std::ostringstream err;
+        err << name << ": " << value << " is out of range [";
+        err << iter->second._min << ", " << iter->second._max << "]";
+
+        search::Context::log_message(LogLevel::ERROR, err.str());
     }
     else
     {

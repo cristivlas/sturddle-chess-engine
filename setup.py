@@ -59,6 +59,7 @@ if platform.startswith('win'):
         '/std:c++20',
         '/DWITH_NNUE',
         '/DCALLBACK_PERIOD=8192',
+        '/DCYTHON_WITHOUT_ASSERTIONS',
     ]
     if NATIVE_UCI:
         args.append('/DNATIVE_UCI=true')
@@ -85,6 +86,8 @@ else:
         '-DCALLBACK_PERIOD=8192',
         '-fno-stack-protector',
         '-DWITH_NNUE',
+        '-D_FORTIFY_SOURCE=0',
+        '-Wno-macro-redefined',
     ]
     if NATIVE_UCI:
         args += [

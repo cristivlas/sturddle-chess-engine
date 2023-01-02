@@ -1,5 +1,5 @@
 /*
- * Sturddle Chess Engine (C) 2022 Cristi Vlasceanu
+ * Sturddle Chess Engine (C) 2022, 2023 Cristian Vlasceanu
  * --------------------------------------------------------------------------
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -153,14 +153,14 @@ DECLARE_CONST(  STATIC_EXCHANGES,                     0,    0,       1)
 DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
 
 GROUP(Search)
-DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  853,    0,    1000)
+DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  661,  500,    1000)
 DECLARE_VALUE(  DOUBLE_EXT_MAX,                       6,    0,     100)
 DECLARE_VALUE(  LMP_BASE,                             2,    2,     100)
 DECLARE_VALUE(  LATE_MOVE_REDUCTION_COUNT,            4,    0,     100)
 DECLARE_VALUE(  MULTICUT_COMPLEXITY_THRESHOLD,       32,    0,     100)
-DECLARE_VALUE(  MULTICUT_MARGIN_LOW,                390,    0,    1000)
-DECLARE_VALUE(  MULTICUT_MARGIN_HIGH,               670,    0,    1000)
-DECLARE_VALUE(  NNUE_EVAL_SCALE,                    411,    0,    1000)
+DECLARE_VALUE(  MULTICUT_MARGIN_LOW,                335,   50,     350)
+DECLARE_VALUE(  MULTICUT_MARGIN_HIGH,               821,  500,    1000)
+DECLARE_VALUE(  NNUE_EVAL_SCALE,                    411,    0,     500)
 DECLARE_VALUE(  NULL_MOVE_DEPTH_WEIGHT,              16,    0,     100)
 DECLARE_VALUE(  NULL_MOVE_DEPTH_DIV,                  3,    1,     100)
 DECLARE_VALUE(  NULL_MOVE_DIV,                      272,    1,    1000)
@@ -169,17 +169,17 @@ DECLARE_VALUE(  NULL_MOVE_IMPROVEMENT_DIV,           15,    1,    1000)
 DECLARE_VALUE(  NULL_MOVE_MARGIN,                   105,    0,    1000)
 DECLARE_VALUE(  NULL_MOVE_MIN,                        5,    0,      10)
 DECLARE_VALUE(  NULL_MOVE_MIN_VERIFICATION_DEPTH,    14,    0,     100)
-DECLARE_VALUE(  RAZOR_DEPTH_COEFF,                  316,    0,    1000)
-DECLARE_VALUE(  RAZOR_INTERCEPT,                    510,    0,    1000)
+DECLARE_VALUE(  RAZOR_DEPTH_COEFF,                  181,    0,     300)
+DECLARE_VALUE(  RAZOR_INTERCEPT,                    245,    0,     300)
 #if !WITH_NNUE
 DECLARE_VALUE(  REBEL_EXTENSION,                      2,    1,      10)
 DECLARE_VALUE(  REBEL_EXTENSION_MARGIN,             185,    0,     500)
 #endif /* WITH_NNUE */
-DECLARE_VALUE(  REVERSE_FUTILITY_MARGIN,             37,    0,    1000)
+DECLARE_VALUE(  REVERSE_FUTILITY_MARGIN,             32,    0,     150)
 DECLARE_VALUE(  SINGULAR_MARGIN,                      6,    0,     100)
 
 GROUP(MoveOrdering)
-DECLARE_VALUE(  COUNTER_MOVE_BONUS,                 127,    0,     500)
+DECLARE_VALUE(  COUNTER_MOVE_BONUS,                 308,    0,     500)
 DECLARE_VALUE(  COUNTER_MOVE_MIN_DEPTH,               3,    0,      20)
 DECLARE_VALUE(  HISTORY_COUNT_HIGH,               88415,    1,  100000)
 DECLARE_VALUE(  HISTORY_SCORE_DIV,                   43,    1,     100)
@@ -188,8 +188,8 @@ DECLARE_VALUE(  HISTORY_FAIL_LOW_PENALTY,            62,    0,     100)
 DECLARE_VALUE(  HISTORY_HIGH,                        92,    0,     100)
 DECLARE_VALUE(  HISTORY_LOW,                         65,    0, HISTORY_HIGH)
 DECLARE_VALUE(  HISTORY_MIN_DEPTH,                    3,    0,     100)
-DECLARE_VALUE(  HISTORY_PRUNE,                       56,    0,     100)
-DECLARE_VALUE(  MOVE_ORDER_EVAL_THRESHOLD,           30,    0,     100)
+DECLARE_VALUE(  HISTORY_PRUNE,                       18,    0,     100)
+DECLARE_VALUE(  MOVE_ORDER_EVAL_THRESHOLD,           10,    0,     100)
 
 GROUP(Eval)
 DECLARE_VALUE(  BISHOP_PAIR,                         68,    0,     100)

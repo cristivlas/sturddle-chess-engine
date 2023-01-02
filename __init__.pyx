@@ -1,7 +1,7 @@
 # distutils: language = c++
 # cython: language_level = 3
 """
-Sturddle Chess Engine (c) 2022 Cristi Vlasceanu.
+Sturddle Chess Engine (c) 2022, 2023 Cristian Vlasceanu.
 -------------------------------------------------------------------------
 
 This program is free software: you can redistribute it and/or modify
@@ -1366,7 +1366,7 @@ nnue_init(os.path.dirname(__file__))
 _tb_init()
 
 __major__   = 1
-__minor__   = 25
+__minor__   = 26
 __build__   = ['NNUE', str(__major__), f'{int(__minor__):02d}', timestamp().decode()]
 
 
