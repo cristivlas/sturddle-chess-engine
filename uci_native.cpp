@@ -413,7 +413,7 @@ private:
     void ponder();
 
     /** iterative deepening search */
-    score_t search();
+    template<typename F = void(*)()> score_t search(F f = []{});
 
     search::Algorithm _algorithm = search::Algorithm::MTDF;
     search::ContextBuffer _buf;
@@ -688,7 +688,7 @@ void UCI::go(const Arguments &args)
 
     bool explicit_movetime = false, do_analysis = false, do_ponder = false;
     int movestogo = 40, movetime = 0;
-    int time_remaining[] = {0, 0};
+    double time_remaining[] = {0, 0};
     auto turn = _buf._state.turn;
 
     _depth = max_depth;
@@ -733,7 +733,7 @@ void UCI::go(const Arguments &args)
     ctxt->_state = &_buf._state;
 
     if (!movetime)
-        movetime = time_remaining[turn] / std::max(movestogo, 40);
+        movetime = std::max<int>(1, time_remaining[turn] / std::max(movestogo, 40));
     LOG_DEBUG(std::format("movetime {}, movestogo {}", movetime, movestogo));
 
     _extended_time = 0;
@@ -763,20 +763,29 @@ void UCI::go(const Arguments &args)
             else
                 _book_depth = std::min(_book_depth, _ply_count);
         }
-        ctxt->set_time_limit_ms(movetime);
-        if (!explicit_movetime)
-            ctxt->set_time_info(time_remaining[turn], movestogo, _score);
 
+        const auto set_time_limit = [&] {
+            if (explicit_movetime)
+            {
+                search::Context::set_time_limit_ms(movetime);
+            }
+            else
+            {
+                ASSERT_ALWAYS(movetime > 0);
+                search::Context::set_start_time();
+                search::Context::set_time_info(time_remaining[turn], movestogo, _score);
+            }
+        };
     #if 0
         /* search asynchronously on the background thread */
         _compute_pool->push_task([this, movetime] {
-            _score = search();
+            _score = search(set_time_limt);
             /* Do not request to ponder below 100 ms per move. */
             output_best_move(movetime >= 100);
         });
     #else
         /* search synchronously */
-        _score = search();
+        _score = search(set_time_limit);
         /* Do not request to ponder below 100 ms per move. */
         output_best_move(movetime >= 100);
     #endif
@@ -893,7 +902,8 @@ void UCI::position(const Arguments &args)
     LOG_DEBUG(search::Context::epd(_buf._state));
 }
 
-INLINE score_t UCI::search()
+template<typename F>
+INLINE score_t UCI::search(F set_time_limit)
 {
     if (!search::Context::_history)
         search::Context::_history = std::make_unique<search::History>();
@@ -907,6 +917,7 @@ INLINE score_t UCI::search()
     ctxt._max_depth = 1;
     ctxt._move = _last_move;
 
+    set_time_limit();
     return search::iterative(ctxt, _tt, _depth + 1);
 }
 

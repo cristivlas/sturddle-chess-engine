@@ -141,7 +141,6 @@ DECLARE_PARAM(  EVAL_FUZZ,                            0,    0,     100)
 #endif
 DECLARE_CONST(  FIFTY_MOVES_RULE,                     1,    0,       1)
 DECLARE_VALUE(  FUTILITY_PRUNING,                     1,    0,       1)
-DECLARE_VALUE(  MANAGE_TIME,                          1,    0,       1)
 DECLARE_VALUE(  MULTICUT,                             1,    0,       1)
 DECLARE_CONST(  PREALLOCATE_MOVE_COUNT,             192,    0,     512)
 

@@ -1825,41 +1825,6 @@ namespace search
     }
 
 
-    /* static */ void Context::set_time_limit_ms(int time_limit)
-    {
-        /*
-         * Time limits can be updated from a different
-         * thread, to support pondering in the background.
-         */
-        _cancel = false;
-        _time_start = std::chrono::steady_clock::now();
-        _time_limit = time_limit;
-        _callback_count = 0;
-    }
-
-
-    /*
-     * Use the time and number of moves left till the next time control,
-     * and the eval from the previous move to tweak the time limit.
-     */
-    void Context::set_time_info(int millisec, int moves, score_t eval)
-    {
-        ASSERT(is_root());
-
-        if (MANAGE_TIME && time_limit() > 0)
-        {
-            if (eval > 100)
-            {
-                _time_limit = std::max(1, millisec / std::max(std::min(250, eval / 2), moves));
-            }
-            else if (eval < -100)
-            {
-                _time_limit = std::max(1, millisec / std::min(10, moves)); /* take more time */
-            }
-        }
-    }
-
-
     /*
      * Allow for apps to implement strength levels by slowing down the engine.
      */
