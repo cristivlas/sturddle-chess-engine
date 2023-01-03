@@ -763,16 +763,18 @@ void UCI::go(const Arguments &args)
             else
                 _book_depth = std::min(_book_depth, _ply_count);
         }
+        ASSERT(!do_analysis);
+        ASSERT(!do_ponder);
 
-        const auto set_time_limit = [&] {
-            if (explicit_movetime || movetime <= 0)
+        const auto set_time_limit = [&, ctxt] {
+            if (explicit_movetime)
             {
                 search::Context::set_time_limit_ms(movetime);
             }
             else
             {
                 search::Context::set_start_time();
-                search::Context::set_time_info(time_remaining[turn], movestogo, _score);
+                ctxt->set_time_info(time_remaining[turn], movestogo, _score);
             }
         };
     #if 0

@@ -344,7 +344,7 @@ namespace search
         void        set_search_window(score_t score, score_t& prev_score);
         static void set_start_time();
         static void set_time_limit_ms(int milliseconds);
-        static void set_time_info(int time_left /* millisec */, int moves_left, score_t eval);
+        void        set_time_info(int time_left /* millisec */, int moves_left, score_t eval);
         void        set_tt(TranspositionTable* tt) { _tt = tt; }
         bool        should_verify_null_move() const;
         int         singular_margin() const;
@@ -1177,18 +1177,14 @@ namespace search
      * Use the time and number of moves left till the next time control,
      * and the eval from the previous move to tweak the time limit.
      */
-    /* static */ INLINE void Context::set_time_info(int millisec, int moves, score_t eval)
+    INLINE void Context::set_time_info(int millisec, int moves, score_t eval)
     {
-        if (eval > 100)
-        {
-            auto time_limit = std::max(1, millisec / std::max(std::min(250, eval / 2), moves));
-            _time_limit.store(time_limit, std::memory_order_relaxed);
-        }
-        else if (eval < -100)
-        {
-            auto time_limit = std::max(1, millisec / std::min(10, moves)); /* take more time */
-            _time_limit.store(time_limit, std::memory_order_relaxed);
-        }
+        int time_limit = 0;
+        if (eval < -50 && !has_improved())
+            time_limit = millisec / std::min(20, moves); /* take more time */
+        else
+            time_limit = millisec / moves;
+        _time_limit.store(std::max(1, time_limit), std::memory_order_relaxed);
     }
 
 

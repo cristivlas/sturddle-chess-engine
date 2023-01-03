@@ -1608,7 +1608,7 @@ namespace search
     factors corresponding to positions with more pieces and smaller factors corresponding
     to positions with fewer pieces.
     */
-    static INLINE float complexity_factor(const State& board)
+    static INLINE double complexity_factor(const State& board)
     {
         // number of pieces on the board
         const auto num_pieces = chess::popcount(board.occupied());
@@ -1626,7 +1626,7 @@ namespace search
     the best move. The function returns a factor based on the elapsed time, with larger factors
     corresponding to less elapsed time and smaller factors corresponding to more elapsed time.
     */
-    static INLINE float elapsed_time_factor()
+    static INLINE double elapsed_time_factor()
     {
         const auto elapsed_time = Context::elapsed_milliseconds();
 
