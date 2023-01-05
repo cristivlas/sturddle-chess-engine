@@ -167,6 +167,7 @@ class UCI:
         movetime = 0
         ponder = False
         time_remaining = [0, 0]
+        increments = [0, 0]
         turn = self.board.turn
 
         params = iter(cmd_args[1:])
@@ -183,6 +184,10 @@ class UCI:
                 time_remaining[chess.WHITE] = _to_int(next(params))
             elif a == 'btime':
                 time_remaining[chess.BLACK] = _to_int(next(params))
+            elif a == 'winc':
+                increments[chess.WHITE] = _to_int(next(params))
+            elif a == 'binc':
+                increments[chess.BLACK] = _to_int(next(params))
             elif a == 'ponder':
                 ponder = True
                 assert self.ponder_enabled
@@ -230,7 +235,7 @@ class UCI:
 
         move, _ = self.algorithm.search(
             self.board,
-            time_info = None if explicit_movetime else (time_remaining[turn], movestogo)
+            time_ctrl = None if explicit_movetime else (time_remaining, increments, movestogo)
         )
         # Do not ponder below 1s / move.
         self.output_best(move, request_ponder=(movetime >= 1000))

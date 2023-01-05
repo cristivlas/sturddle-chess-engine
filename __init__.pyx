@@ -421,6 +421,13 @@ cdef extern from 'context.h' nogil:
         void log_init_message()
 
 
+cdef extern from 'context.h' namespace 'search':
+    cdef cppclass TimeControl:
+        int millisec[2]
+        int increments[2]
+        int moves
+
+
 NNUE_FILE = NNUE_EVAL_FILE.decode()
 #
 # Export nnue functions for testing.
@@ -508,8 +515,9 @@ cdef extern from 'context.h' namespace 'search':
         int             rewind(int where, bool reorder)
 
         @staticmethod
-        void            set_time_limit_ms(int millisec) nogil
-        void            set_time_info(int millisec, int moves, score_t eval)
+        void set_time_limit_ms(int millisec) nogil
+
+        void set_time_ctrl(const TimeControl&, score_t eval)
 
         void            set_tt(TranspositionTable*) nogil
         TranspositionTable* get_tt() const
@@ -905,7 +913,7 @@ cdef class SearchAlgorithm:
     cdef public iteration_cb, move_cb, node_cb, report_cb
     cdef public best_move
     cdef public NodeContext context # important to use the type here
-    cdef public depth, is_cancelled, time_info
+    cdef public depth, is_cancelled, time_ctrl
 
     def __init__(self, board: chess.Board, depth=100, **kwargs):
         NNUE.log_init_message()
@@ -1064,7 +1072,7 @@ cdef class SearchAlgorithm:
         self.context._ctxt._prev = BaseMove()
 
         # optional: (time, moves) left till next time control
-        self.time_info = kwargs.get('time_info', None)
+        self.time_ctrl = kwargs.get('time_ctrl', None)
 
         # call algorithm-specific implementation (Template Method design pattern)
         self.score = self._search(self._table)
@@ -1089,6 +1097,7 @@ cdef class IterativeDeepening(SearchAlgorithm):
     cdef score_t _search(self, TranspositionTable& table):
         cdef int max_iter = self.depth + 1
         cdef score_t score = 0
+        cdef TimeControl ctrl
 
         self.context._ctxt._algorithm = self.algorithm
         self.context._ctxt._max_depth = 1
@@ -1097,8 +1106,15 @@ cdef class IterativeDeepening(SearchAlgorithm):
         Context.set_time_limit_ms(self.time_limit_ms)
 
         # Provide additional info so the engine can do its own time management.
-        if self.time_info:
-            self.context._ctxt.set_time_info(self.time_info[0], self.time_info[1], self.score)
+        if self.time_ctrl:
+            ctrl.millisec[chess.BLACK] = self.time_ctrl[0][chess.BLACK]
+            ctrl.millisec[chess.WHITE] = self.time_ctrl[0][chess.WHITE]
+            ctrl.increments[chess.BLACK] = self.time_ctrl[1][chess.BLACK]
+            ctrl.increments[chess.WHITE] = self.time_ctrl[1][chess.WHITE]
+            ctrl.moves = self.time_ctrl[2]
+            # logging.debug(ctrl.millisec, ctrl.increments, ctrl.moves)
+
+            self.context._ctxt.set_time_ctrl(ctrl, self.score)
 
         with nogil:
             score = iterative(deref(self.context._ctxt), table, max_iter)

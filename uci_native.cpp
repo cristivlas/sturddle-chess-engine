@@ -689,6 +689,8 @@ void UCI::go(const Arguments &args)
     bool explicit_movetime = false, do_analysis = false, do_ponder = false;
     int movestogo = 40, movetime = 0;
     double time_remaining[] = {0, 0};
+    int time_increments[] = {0, 0};
+
     auto turn = _buf._state.turn;
 
     _depth = max_depth;
@@ -717,6 +719,14 @@ void UCI::go(const Arguments &args)
         else if (a == "btime")
         {
             time_remaining[chess::BLACK] = to_int(next(args, i));
+        }
+        else if (a == "winc")
+        {
+            time_increments[chess::WHITE] = to_int(next(args, i));
+        }
+        else if (a == "binc")
+        {
+            time_increments[chess::BLACK] = to_int(next(args, i));
         }
         else if (a == "ponder")
         {
@@ -773,8 +783,15 @@ void UCI::go(const Arguments &args)
             }
             else
             {
+                search::TimeControl ctrl;
+                ctrl.millisec[chess::BLACK] = time_remaining[chess::BLACK];
+                ctrl.millisec[chess::WHITE] = time_remaining[chess::WHITE];
+                ctrl.increments[chess::BLACK] = time_increments[chess::BLACK];
+                ctrl.increments[chess::WHITE] = time_increments[chess::WHITE];
+                ctrl.moves = movestogo;
+
                 search::Context::set_start_time();
-                ctxt->set_time_info(time_remaining[turn], movestogo, _score);
+                ctxt->set_time_ctrl(ctrl, _score);
             }
         };
     #if 0

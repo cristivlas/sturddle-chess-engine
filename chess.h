@@ -1,5 +1,5 @@
 /*
- * Sturddle Chess Engine (C) 2022 Cristi Vlasceanu
+ * Sturddle Chess Engine (C) 2022, 2023 Cristian Vlasceanu
  * --------------------------------------------------------------------------
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
  * Parts inspired and ported from:
  * python-chess (C) Niklas Fiekas (https://python-chess.readthedocs.io/en/latest/)
 */
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cmath>

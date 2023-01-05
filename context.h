@@ -1,5 +1,5 @@
 /*
- * Sturddle Chess Engine (C) 2022 Cristi Vlasceanu
+ * Sturddle Chess Engine (C) 2022, 2023 Cristian Vlasceanu
  * --------------------------------------------------------------------------
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -192,6 +192,14 @@ namespace search
     };
 
 
+    struct TimeControl
+    {
+        int millisec[2]; /* time left until next time control for black, white */
+        int increments[2]; /* increments for black, white */
+        int moves; /* moves to the next time control */
+    };
+
+
     /*
      * The context of a searched node.
      */
@@ -344,7 +352,7 @@ namespace search
         void        set_search_window(score_t score, score_t& prev_score);
         static void set_start_time();
         static void set_time_limit_ms(int milliseconds);
-        void        set_time_info(int time_left /* millisec */, int moves_left, score_t eval);
+        void        set_time_ctrl(const TimeControl&, score_t eval);
         void        set_tt(TranspositionTable* tt) { _tt = tt; }
         bool        should_verify_null_move() const;
         int         singular_margin() const;
@@ -1173,13 +1181,12 @@ namespace search
     }
 
 
-    /*
-     * Use the time and number of moves left till the next time control,
-     * and the eval from the previous move to tweak the time limit.
-     */
-    INLINE void Context::set_time_info(int millisec, int moves, score_t eval)
+    INLINE void Context::set_time_ctrl(const TimeControl& ctrl, score_t eval)
     {
         int time_limit = 0;
+        const auto millisec = ctrl.millisec[turn()];
+        const auto moves = ctrl.moves;
+
         if (eval < -50 && !has_improved())
             time_limit = millisec / std::min(20, moves); /* take more time */
         else
