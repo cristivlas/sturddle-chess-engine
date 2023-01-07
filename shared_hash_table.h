@@ -22,7 +22,8 @@
 
 #include <new>
 
-#if __cpp_lib_hardware_interference_size
+#if _MSC_VER
+/* __cpp_lib_hardware_interference_size is broken in versions of clang */
 static constexpr auto CACHE_LINE_SIZE = std::hardware_destructive_interference_size;
 #else
 #ifdef _WIN32
