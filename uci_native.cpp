@@ -25,6 +25,7 @@ static void raise_runtime_error(const char* err)
 #include "thread_pool.hpp" /* pondering, go infinite */
 
 #define LOG_DEBUG(x) while (_debug) { log_debug((x)); break; }
+#define OUTPUT_POOL false
 
 static constexpr auto INFINITE = -1;
 static std::string g_out; /* global output buffer */
@@ -273,9 +274,14 @@ public:
         , _version(version)
         , _use_opening_book(search::Context::_book_init(_book))
     {
+        search::Context::_history = std::make_unique<search::History>();
+        search::Context::log_message(LogLevel::INFO,
+            std::format("TT_Entry size: {}", std::to_string(sizeof(search::TT_Entry))));
+
         set_start_position();
 
         search::Context::_on_iter = on_iteration;
+        search::Context::_on_move = on_move;
 
         refresh_options();
         _options.emplace("algorithm", std::make_shared<OptionAlgo>(_algorithm));
@@ -306,6 +312,7 @@ private:
 
     /** Context callbacks */
     static void on_iteration(PyObject *, search::Context *, const search::IterationInfo *);
+    static void on_move(PyObject *, const std::string&, int);
 
 private:
     /** position() helper */
@@ -313,6 +320,8 @@ private:
     {
         _last_move = chess::BaseMove();
         _ply_count = 0;
+
+        search::Context::_history->emplace(_buf._state);
 
         for (const auto &m : moves)
             if (m.size() >= 4)
@@ -358,9 +367,13 @@ private:
             if constexpr(synchronous)
                 output_best_move(move, request_ponder);
             else
-                _output_pool->push_task([this, move, request_ponder] {
+                #if OUTPUT_POOL
+                    _output_pool->push_task([this, move, request_ponder] {
+                        output_best_move(move, request_ponder);
+                    });
+                #else
                     output_best_move(move, request_ponder);
-                });
+                #endif /* OUTPUT_POOL */
         }
     }
 
@@ -425,11 +438,14 @@ private:
     int _depth = max_depth;
     int _ply_count = 0;
     score_t _score = 0;
+    score_t _score_delta = 0;
     EngineOptions _options;
     const std::string _name;
     const std::string _version; /* engine version */
     static std::unique_ptr<ThreadPool> _compute_pool;
+#if OUTPUT_POOL
     static std::unique_ptr<ThreadPool> _output_pool;
+#endif /* OUTPUT_POOL */
     static std::atomic_bool _output_expected;
     bool _ponder = false;
     bool _use_opening_book = false;
@@ -437,7 +453,9 @@ private:
     chess::BaseMove _last_move;
 };
 
+#if OUTPUT_POOL
 std::unique_ptr<ThreadPool> UCI::_output_pool(std::make_unique<ThreadPool>(1));
+#endif /* OUTPUT_POOL */
 std::unique_ptr<ThreadPool> UCI::_compute_pool(std::make_unique<ThreadPool>(1));
 
 std::atomic_bool UCI::_output_expected(false);
@@ -535,17 +553,33 @@ static void INLINE output_info(const Info& info)
     }
 }
 
+
 /* static */
-INLINE void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *iter_info)
+void UCI::on_iteration(PyObject *, search::Context *ctxt, const search::IterationInfo *iter_info)
 {
     if (ctxt && iter_info)
     {
+    #if OUTPUT_POOL
         const Info info(*ctxt, *iter_info);
         _output_pool->push_task([info] {
             output_info(info);
         });
+    #else
+        output_info(Info(*ctxt, *iter_info));
+    #endif /* OUTPUT_POOL */
     }
 }
+
+
+/* static */
+void UCI::on_move(PyObject *, const std::string& move, int move_num)
+{
+    static std::string move_info; /* thread-safe: callback is called at root, on thread 0 only */
+    move_info.clear();
+    std::format_to(std::back_inserter(move_info), "info currmove {} currmovenumber {}", move, move_num);
+    output(move_info);
+}
+
 
 void UCI::run()
 {
@@ -671,8 +705,7 @@ void UCI::debug()
     output(std::format("fen: {}", search::Context::epd(_buf._state)));
     output(std::format("hash: {}", _buf._state._hash));
     size_t history_size = 0;
-    if (search::Context::_history)
-        history_size = search::Context::_history->_positions.size();
+    history_size = search::Context::_history->_positions.size();
     output(std::format("history_size: {}", history_size));
     std::ostringstream checkers;
     chess::for_each_square(_buf._state.checkers_mask(_buf._state.turn),
@@ -791,7 +824,7 @@ void UCI::go(const Arguments &args)
                 ctrl.moves = movestogo;
 
                 search::Context::set_start_time();
-                ctxt->set_time_ctrl(ctrl, _score);
+                ctxt->set_time_ctrl(ctrl, _score_delta);
             }
         };
     #if 0
@@ -873,6 +906,7 @@ void UCI::position(const Arguments &args)
 
     fen.clear();
     moves.clear();
+    search::Context::_history->clear();
 
     for (const auto &a : std::ranges::subrange(args.begin() + 1, args.end()))
     {
@@ -883,10 +917,6 @@ void UCI::position(const Arguments &args)
         else if (a == "moves")
         {
             in_moves = true;
-            if (search::Context::_history)
-                search::Context::_history->clear();
-            else
-                search::Context::_history = std::make_unique<search::History>();
         }
         else if (a == "startpos")
         {
@@ -936,7 +966,14 @@ INLINE score_t UCI::search(F set_time_limit)
     ctxt._move = _last_move;
 
     set_time_limit();
-    return search::iterative(ctxt, _tt, _depth + 1);
+    const auto score = search::iterative(ctxt, _tt, _depth + 1);
+
+    _score_delta = score - _score;
+#if 0
+    if (_score_delta < -50)
+        search::Context::log_message(LogLevel::INFO, std::format("score drop from {} to {}", _score, score));
+#endif
+    return score;
 }
 
 void UCI::setoption(const Arguments &args)
@@ -965,7 +1002,9 @@ void UCI::stop()
 {
     search::Context::set_time_limit_ms(0);
     _compute_pool->wait_for_tasks([] { search::Context::cancel(); });
+#if OUTPUT_POOL
     _output_pool->wait_for_tasks();
+#endif /* OUTOUT_POOL */
     output_best_move<true>();
 }
 

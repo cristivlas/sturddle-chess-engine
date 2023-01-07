@@ -1181,16 +1181,18 @@ namespace search
     }
 
 
-    INLINE void Context::set_time_ctrl(const TimeControl& ctrl, score_t eval)
+    INLINE void Context::set_time_ctrl(const TimeControl& ctrl, score_t delta)
     {
         int time_limit = 0;
-        const auto millisec = ctrl.millisec[turn()];
+        const auto side_to_move = turn();
+        const auto millisec = ctrl.millisec[side_to_move];
         const auto moves = ctrl.moves;
 
-        if (eval < -50 && !has_improved())
-            time_limit = millisec / std::min(20, moves); /* take more time */
+        if (delta < -50)
+            time_limit = millisec / std::min(10, moves); /* take more time */
         else
             time_limit = millisec / moves;
+
         _time_limit.store(std::max(1, time_limit), std::memory_order_relaxed);
     }
 

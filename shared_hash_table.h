@@ -1,5 +1,5 @@
 /*
- * Sturddle Chess Engine (C) 2022 Cristi Vlasceanu
+ * Sturddle Chess Engine (C) 2022, 2023 Cristian Vlasceanu
  * --------------------------------------------------------------------------
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,9 +20,50 @@
  */
 #pragma once
 
-#define FULL_SIZE_LOCK true
-static constexpr auto QUADRATIC_PROBING = false;
+#include <new>
 
+#if __cpp_lib_hardware_interference_size
+static constexpr auto CACHE_LINE_SIZE = std::hardware_destructive_interference_size;
+#else
+#ifdef _WIN32
+    #include <Windows.h>
+#elif __APPLE__
+    #include <sys/types.h>
+    #include <sys/sysctl.h>
+#elif __linux__
+    #include <unistd.h>
+#endif
+
+static int get_cache_line_size()
+{
+    int cache_line_size = 64;
+
+#ifdef _WIN32
+    // Use GetLogicalProcessorInformationEx on Windows
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info = {};
+    DWORD size = sizeof(info);
+    if (GetLogicalProcessorInformationEx(RelationCache, &info, &size))
+    {
+        cache_line_size = info.Cache.LineSize;
+    }
+#elif __APPLE__
+    // Use sysctl on macOS
+    size_t size_of_cache_line_size = sizeof(cache_line_size);
+    sysctlbyname("hw.cachelinesize", &cache_line_size, &size_of_cache_line_size, nullptr, 0);
+#elif __linux__
+    // Use sysconf on Linux
+    cache_line_size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+#else
+    #error "Unsupported platform"
+#endif
+    return cache_line_size;
+}
+
+static const size_t CACHE_LINE_SIZE = get_cache_line_size();
+#endif /* !__cpp_lib_hardware_interference_size */
+
+#define FULL_SIZE_LOCK false /* half-size: 32 bit, full: 64 bit*/
+static constexpr auto QUADRATIC_PROBING = false; /* linear probing */
 
 namespace search
 {
@@ -34,6 +75,7 @@ namespace search
         return hash;
     }
 #else
+    /* 32-bit lock: smaller TT_Entry at the expense of an extra match() */
     using key_t = uint32_t;
 
     static INLINE constexpr key_t key(uint64_t key)
@@ -237,21 +279,18 @@ namespace search
                 return (hash + j) % _data.size();
         }
 
-    #if 0
-        static size_t bucket_size() { return SMP_CORES * 2; }
-    #else
-        static constexpr size_t bucket_size() { return 8; }
-    #endif
+        static constexpr size_t bucket_size() { return CACHE_LINE_SIZE / sizeof(entry_t); }
 
-        Proxy lookup_read(const chess::State& state)
+        INLINE Proxy lookup_read(const chess::State& state)
         {
             const auto h = state.hash();
             const size_t index = h % _data.size();
 
-            for (size_t i = index, j = 1; j < bucket_size(); ++j)
+            for (size_t i = index, j = 1; j <= bucket_size(); ++j)
             {
                 Proxy p(*this, i, h);
 
+                /* using full-size lock? */
                 if constexpr(sizeof(key_t) == sizeof(h))
                 {
                     if (p)
@@ -270,12 +309,12 @@ namespace search
             return Proxy();
         }
 
-        Proxy lookup_write(const chess::State& state, int depth)
+        INLINE Proxy lookup_write(const chess::State& state, int depth)
         {
             const auto h = state.hash();
             size_t index = h % _data.size();
 
-            for (size_t i = index, j = 1; j < bucket_size(); ++j)
+            for (size_t i = index, j = 1; j <= bucket_size(); ++j)
             {
                 Proxy q(*this, i, h); /* try non-blocking locking 1st */
                 if (q)

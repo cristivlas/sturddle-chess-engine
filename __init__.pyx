@@ -909,7 +909,7 @@ def clear_hashtable():
 
 cdef class SearchAlgorithm:
     cdef TranspositionTable _table
-    cdef score_t score
+    cdef score_t score, delta
     cdef public iteration_cb, move_cb, node_cb, report_cb
     cdef public best_move
     cdef public NodeContext context # important to use the type here
@@ -1075,7 +1075,9 @@ cdef class SearchAlgorithm:
         self.time_ctrl = kwargs.get('time_ctrl', None)
 
         # call algorithm-specific implementation (Template Method design pattern)
-        self.score = self._search(self._table)
+        cdef int score = self._search(self._table)
+        self.delta = score - self.score
+        self.score = score
 
         self.best_move = self.context.best_move()
         return (self.best_move, self.score)
@@ -1114,7 +1116,7 @@ cdef class IterativeDeepening(SearchAlgorithm):
             ctrl.moves = self.time_ctrl[2]
             # logging.debug(ctrl.millisec, ctrl.increments, ctrl.moves)
 
-            self.context._ctxt.set_time_ctrl(ctrl, self.score)
+            self.context._ctxt.set_time_ctrl(ctrl, self.delta)
 
         with nogil:
             score = iterative(deref(self.context._ctxt), table, max_iter)
