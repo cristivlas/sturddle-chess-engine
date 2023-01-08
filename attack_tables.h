@@ -1,6 +1,6 @@
 #pragma once
 /*
- * Sturddle Chess Engine (C) 2022 Cristi Vlasceanu
+ * Sturddle Chess Engine (C) 2022, 2023 Cristian Vlasceanu
  * --------------------------------------------------------------------------
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
