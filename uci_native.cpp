@@ -776,7 +776,7 @@ void UCI::go(const Arguments &args)
     ctxt->_state = &_buf._state;
 
     if (!movetime)
-        movetime = std::max<int>(1, time_remaining[turn] / std::max(movestogo, 40));
+        movetime = std::max<int>(0, time_remaining[turn] / std::max(movestogo, 40));
     LOG_DEBUG(std::format("movetime {}, movestogo {}", movetime, movestogo));
 
     _extended_time = 0;
