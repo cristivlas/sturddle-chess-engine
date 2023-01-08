@@ -1,6 +1,6 @@
 #pragma once
 /*
- * Sturddle Chess Engine (C) 2022 Cristian Vlasceanu
+ * Sturddle Chess Engine (C) 2022, 2023 Cristian Vlasceanu
  * --------------------------------------------------------------------------
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,11 +29,12 @@
 #include "common.h"
 
 
-template<typename I> class thread_pool
+template <class Container = std::list<std::function<void()>>, bool FIFO = true>
+class thread_pool
 {
 public:
     using mutex_type = std::mutex;
-    using thread_id_type = I;
+    using thread_id_type = int;
 
     explicit thread_pool(size_t thread_count)
         : _running(true)
@@ -115,10 +116,17 @@ private:
                         return;
                     _cv.wait(lock);
                 }
-                task.swap(_tasks.front());
+                if constexpr(FIFO)
+                    task.swap(_tasks.front());
+                else
+                    task.swap(_tasks.back());
 
                 ++_tasks_pending;
-                _tasks.pop_front();
+
+                if constexpr(FIFO)
+                    _tasks.pop_front();
+                else
+                    _tasks.pop_back();
             }
 
             task();
@@ -137,11 +145,11 @@ private:
     std::atomic_int _tasks_pending;
     std::condition_variable _cv;
     mutex_type _mutex;
-    std::list<std::function<void()>> _tasks;
+    Container _tasks;
     std::vector<std::thread> _threads;
 
     static THREAD_LOCAL thread_id_type _tid;
 };
 
 
-template<typename T> THREAD_LOCAL T thread_pool<T>::_tid;
+template <class Container, bool FIFO> int THREAD_LOCAL thread_pool<Container, FIFO>::_tid;

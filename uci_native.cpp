@@ -259,7 +259,7 @@ namespace
     };
 }
 
-using ThreadPool = thread_pool<int>;
+using ThreadPool = thread_pool<>;
 
 class UCI
 {

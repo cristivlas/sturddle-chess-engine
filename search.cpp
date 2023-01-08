@@ -1137,9 +1137,9 @@ static score_t search_iteration(Context& ctxt, TranspositionTable& table, score_
 /****************************************************************************
  * Lazy SMP. https://www.chessprogramming.org/Lazy_SMP
  ****************************************************************************/
-using ThreadPool = thread_pool<int>;
-static std::unique_ptr<ThreadPool> threads;
+using ThreadPool = thread_pool<std::vector<std::function<void()>>, false>;
 
+static std::unique_ptr<ThreadPool> threads;
 
 static size_t start_pool()
 {
