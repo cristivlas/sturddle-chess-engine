@@ -32,10 +32,6 @@
 #include <cstdint>
 #include <functional>
 
-#if (__x86_64__ || _M_X64) /* _mm_load_si128 */
-#include <immintrin.h>
-#endif /* (__x86_64__ || _M_X64) */
-
 #include <utility>
 #include <string>
 #include <type_traits>
@@ -1683,7 +1679,7 @@ namespace chess
 
 
     /** Parse square name token */
-    template<typename T> bool parse_square(T tok, Square& square)
+    template<typename T> INLINE bool parse_square(T tok, Square& square)
     {
         int file = -1, rank = -1;
         for (const auto c : tok)
