@@ -64,7 +64,7 @@ if platform.startswith('win'):
     if NATIVE_UCI:
         args.append('/DNATIVE_UCI=true')
 
-    if environ.get('CL_EXE', '')=='clang-cl.exe':
+    if environ.get('CL_EXE', '').endswith('clang-cl.exe'):
         args += [
             '-Ofast',
             '-Wno-unused-command-line-argument',
