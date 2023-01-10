@@ -1510,7 +1510,7 @@ namespace search
      */
     void Context::extend()
     {
-        if (_extension || depth() > 6)
+        if (_extension || depth() >= MIN_EXT_DEPTH)
         {
             /*
              * things that could add interestingness along the search path

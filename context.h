@@ -1188,7 +1188,7 @@ namespace search
         const auto millisec = ctrl.millisec[side_to_move];
         const auto moves = ctrl.moves;
 
-        if (delta < -50)
+        if (delta < TIME_CTRL_EVAL_THRESHOLD)
             time_limit = millisec / std::min(10, moves); /* take more time */
         else
             time_limit = millisec / moves;
