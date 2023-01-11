@@ -374,7 +374,7 @@ class UCI:
 
     def _uci(self, *_):
         self.output(f'id name {NAME}-{engine.version()}-{self.args.algorithm}')
-        self.output('id author Cristi Vlasceanu')
+        self.output('id author Cristian Vlasceanu')
 
         self.output(f'option name Algorithm type combo default {self.args.algorithm} ' + \
             ' '.join([f'var {k}' for k in ALGORITHM.keys()]))

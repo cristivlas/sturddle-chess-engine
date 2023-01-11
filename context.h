@@ -301,8 +301,8 @@ namespace search
         const Move* first_valid_move();
         score_t     futility_margin();
 
-        bool        has_improved(score_t margin = 0) const { return improvement() > margin; }
-        bool        has_moves() { return _move_maker.has_moves(*this); }
+        INLINE bool has_improved(score_t margin = 0) const { return improvement() > margin; }
+        INLINE bool has_moves() { return _move_maker.has_moves(*this); }
 
         int         history_count(const Move&) const;
         float       history_score(const Move&) const;
@@ -311,27 +311,27 @@ namespace search
         static void init();
         bool        is_beta_cutoff(Context*, score_t);
         static bool is_cancelled() { return _cancel.load(std::memory_order_relaxed); }
-        bool        is_capture() const { return state().capture_value != 0; }
-        bool        is_check() const { return state().is_check(); }
+        INLINE bool is_capture() const { return state().capture_value != 0; }
+        INLINE bool is_check() const { return state().is_check(); }
         bool        is_counter_move(const Move&) const;
         bool        is_evasion() const;
         bool        is_extended() const;
         bool        is_last_move();
-        bool        is_leftmost() const { return is_root() || _leftmost; }
+        INLINE bool is_leftmost() const { return is_root() || _leftmost; }
         bool        is_leaf(); /* treat as terminal node ? */
         bool        is_mate_bound() const;
         bool        is_null_move_ok(); /* ok to generate null move? */
-        bool        is_null_move() const { return _is_null_move; }
-        bool        is_promotion() const { return state().promotion; }
-        bool        is_pv_node() const { return _is_pv; }
+        INLINE bool is_null_move() const { return _is_null_move; }
+        INLINE bool is_promotion() const { return state().promotion; }
+        INLINE bool is_pv_node() const { return _is_pv; }
         bool        is_pvs_ok() const;
-        bool        is_qsearch() const { return _ply > _max_depth; }
+        INLINE bool is_qsearch() const { return _ply > _max_depth; }
         bool        is_recapture() const;
         bool        is_reduced() const;
         int         is_repeated() const;
-        bool        is_retry() const { return _is_retry; }
-        bool        is_root() const { return _ply == 0; }
-        int         iteration() const { ASSERT(_tt); return _tt->_iteration; }
+        INLINE bool is_retry() const { return _is_retry; }
+        INLINE bool is_root() const { return _ply == 0; }
+        INLINE int  iteration() const { ASSERT(_tt); return _tt->_iteration; }
 
         LMRAction   late_move_reduce(int move_count);
         static int  late_move_reduction_count();
@@ -344,29 +344,29 @@ namespace search
 
         template<bool Construct = false> Context* next_ply() const;
 
-        int         next_move_index() { return _move_maker.current(*this); }
+        INLINE int  next_move_index() { return _move_maker.current(*this); }
         bool        on_next();
         void        reinitialize();
         int         rewind(int where = 0, bool reorder = false);
-        void        set_counter_move(const BaseMove& move) { _counter_move = move; }
+        INLINE void set_counter_move(const BaseMove& move) { _counter_move = move; }
         void        set_search_window(score_t score, score_t& prev_score);
         static void set_start_time();
         static void set_time_limit_ms(int milliseconds);
         void        set_time_ctrl(const TimeControl&, score_t eval);
-        void        set_tt(TranspositionTable* tt) { _tt = tt; }
+        INLINE void set_tt(TranspositionTable* tt) { _tt = tt; }
         bool        should_verify_null_move() const;
         int         singular_margin() const;
         int         tid() const { return _tt->_tid; }
         static int  time_limit() { return _time_limit.load(std::memory_order_relaxed); }
         Color       turn() const { return state().turn; }
 
-        const State& state() const { ASSERT(_state); return *_state; }
-        TranspositionTable* get_tt() const { return _tt; }
+        INLINE const State& state() const { ASSERT(_state); return *_state; }
+        INLINE TranspositionTable* get_tt() const { return _tt; }
 
-        const MovesList& moves() const { return moves(tid(), _ply); }
-        MovesList& moves() { return moves(tid(), _ply); }
+        INLINE const MovesList& moves() const { return moves(tid(), _ply); }
+        INLINE MovesList& moves() { return moves(tid(), _ply); }
 
-        void set_moves(const Context& from_ctxt)
+        INLINE void set_moves(const Context& from_ctxt)
         {
             auto first = from_ctxt.moves().begin();
             auto last = first + std::max(0, from_ctxt._move_maker.count());
@@ -376,7 +376,7 @@ namespace search
         }
 
         /* retrieve PV from TT */
-        const PV& get_pv() const { return get_tt()->get_pv(); }
+        INLINE const PV& get_pv() const { return get_tt()->get_pv(); }
 
         /* buffers for generating and making moves */
         static MovesList& moves(int tid, int ply);
