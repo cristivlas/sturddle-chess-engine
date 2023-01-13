@@ -2004,11 +2004,16 @@ namespace search
 
 
     /* Phase 4 */
-    static INLINE bool move_overhead_exceeded(const Context& ctxt, int64_t time)
+    static INLINE bool move_overhead_exceeded(const Context& ctxt)
     {
-        if (!MOVE_OVERHEAD || Context::time_limit() < 0 || ctxt.state().is_endgame())
+        if (MOVE_OVERHEAD == 0
+            || Context::time_limit() < 0
+            || ctxt.state().is_endgame()
+            || ctxt.iteration() == 1
+           )
             return false;
-        return time * 100 > Context::time_limit() * MOVE_OVERHEAD;
+
+        return ctxt.get_tt()->_move_overhead * 100 > Context::time_limit() * MOVE_OVERHEAD;
     }
 
 
@@ -2092,6 +2097,10 @@ namespace search
                 {
                     make_move<true>(ctxt, move, MoveOrder::HISTORY_COUNTERS, hist_score);
                 }
+                else if (move_overhead_exceeded(ctxt))
+                {
+                    return;
+                }
                 else if (ctxt.is_counter_move(move)
                     || move.from_square() == ctxt._capture_square
                     || is_pawn_push(ctxt, move))
@@ -2110,11 +2119,6 @@ namespace search
             }
             else /* Phase == 4 */
             {
-                if (move_overhead_exceeded(ctxt, ctxt.get_tt()->_move_overhead))
-                {
-                    mark_as_pruned(ctxt, move);
-                    continue;
-                }
                 if (make_move<true>(ctxt, move, futility))
                 {
                     move._group = MoveOrder::LATE_MOVES;
