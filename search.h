@@ -272,6 +272,7 @@ namespace search
         size_t _history_counters_hit = 0;
         size_t _hits = 0;
         size_t _late_move_prune_count = 0;
+        size_t _move_overhead = 0;
         size_t _nodes = 0;
         size_t _nps = 0; /* nodes per second */
         size_t _null_move_cutoffs = 0;

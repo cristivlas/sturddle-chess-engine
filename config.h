@@ -29,6 +29,8 @@
  *
  * To cherry-pick, replace DECLARE_VALUE with DECLARE_PARAM
  */
+
+
 #if REFCOUNT_PARAM
 /* Instrumentation & debug: count parameter usage */
 struct Val
@@ -41,10 +43,11 @@ struct Val
     INLINE operator int() const { ++_refcount; return _v; }
 };
 #else
-using Val = int;
+  using Val = int;
 #endif /* REFCOUNT_PARAM */
 
 #if defined(CONFIG_IMPL)
+
 #include <map>
 #include <string>
 #include <thread>
@@ -150,6 +153,7 @@ DECLARE_VALUE(  SEE_PIN_AWARENESS_DEPTH,             -1,   -1,     100)
 DECLARE_CONST(  STATIC_EXCHANGES,                     0,    0,       1)
 
 DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
+DECLARE_ALIAS(  MOVE_OVERHEAD, Overhead,             25,    0,     100)
 
 GROUP(Search)
 DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  952,  500,    1000)

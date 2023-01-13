@@ -186,6 +186,7 @@ void TranspositionTable::clear()
     _history_counters_hit = 0;
     _hits = 0;
     _late_move_prune_count = 0;
+    _move_overhead = 0;
     _nodes = 0;
     _nps = 0; /* nodes per second */
     _null_move_cutoffs = 0;

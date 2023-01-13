@@ -121,7 +121,7 @@ void _set_param(const std::string& name, int value, bool echo)
     }
     else if (USE_NNUE && iter->second._group == "Eval" && name.find("MOBILITY") != 0)
     {
-        search::Context::log_message(LogLevel::WARN, "parameter not used in NNUE mode: \"" + name + "\"");
+        search::Context::log_message(LogLevel::WARN, "not used in NNUE mode: \"" + name + "\"");
     }
     else if (value < iter->second._min || value > iter->second._max)
     {
@@ -194,21 +194,21 @@ static INLINE score_t eval_insufficient_material(const State& state, score_t eva
     {
         eval = f();
     }
-
     return eval;
 }
 
 
 /*
- * Allow apps on top of the engine to implement strength levels by "fuzzing" the evaluation.
+ * Allow apps built on top of the engine to implement strength levels
+ * by "fuzzing" the evaluation.
  */
 static INLINE int eval_fuzz()
 {
-    #if EVAL_FUZZ_ENABLED
-        return EVAL_FUZZ ? random_int(-EVAL_FUZZ, EVAL_FUZZ) : 0;
-    #else
-        return 0;
-    #endif /* EVAL_FUZZ_ENABLED */
+#if EVAL_FUZZ_ENABLED
+    return EVAL_FUZZ ? random_int(-EVAL_FUZZ, EVAL_FUZZ) : 0;
+#else
+    return 0;
+#endif /* EVAL_FUZZ_ENABLED */
 }
 
 
@@ -469,7 +469,8 @@ namespace search
 
 
     /* Call into the Python logger */
-    /* static */ void Context::log_message(LogLevel level, const std::string& msg, bool force)
+    /* static */
+    void Context::log_message(LogLevel level, const std::string& msg, bool force)
     {
         cython_wrapper::call(_log_message, int(level), msg, force);
     }
@@ -1221,7 +1222,6 @@ namespace search
                 });
             }
         }
-
         return score;
     }
 
@@ -1991,13 +1991,6 @@ namespace search
         return ctxt.state().pawns & BB_PASSED[ctxt.turn()] & BB_SQUARES[move.from_square()];
     }
 
-#if 0
-    static INLINE bool is_attack_on_king(const Context& ctxt, const Move& move)
-    {
-        const auto king = ctxt.state().king(!ctxt.turn());
-        return square_distance(king, move.to_square()) <= 2;
-    }
-#endif
 
     template<std::size_t... I>
     static constexpr std::array<double, sizeof ... (I)> thresholds(std::index_sequence<I...>)
@@ -2006,8 +1999,17 @@ namespace search
         return { logistic(I) ... };
     }
 
-
+    /* Phase 3 */
     static const auto hist_thresholds = thresholds(std::make_index_sequence<PLY_MAX>{});
+
+
+    /* Phase 4 */
+    static INLINE bool move_overhead_exceeded(const Context& ctxt, int64_t time)
+    {
+        if (!MOVE_OVERHEAD || Context::time_limit() < 0 || ctxt.state().is_endgame())
+            return false;
+        return time * 100 > Context::time_limit() * MOVE_OVERHEAD;
+    }
 
 
     template<int Phase>
@@ -2092,11 +2094,7 @@ namespace search
                 }
                 else if (ctxt.is_counter_move(move)
                     || move.from_square() == ctxt._capture_square
-                    || is_pawn_push(ctxt, move)
-                #if 0
-                    || is_attack_on_king(ctxt, move)
-                #endif
-                    )
+                    || is_pawn_push(ctxt, move))
                 {
                     if (make_move<true>(ctxt, move, MoveOrder::TACTICAL_MOVES, hist_score))
                         ASSERT(move._score == hist_score);
@@ -2110,12 +2108,20 @@ namespace search
                     move._score = hist_score;
                 }
             }
-            else if (make_move<true>(ctxt, move, futility)) /* Phase == 4 */
+            else /* Phase == 4 */
             {
-                move._group = MoveOrder::LATE_MOVES;
-                move._score =
-                    ctxt.history_score(move) / (1 + HISTORY_LOW)
-                    + eval_material_and_piece_squares(*move._state);
+                if (move_overhead_exceeded(ctxt, ctxt.get_tt()->_move_overhead))
+                {
+                    mark_as_pruned(ctxt, move);
+                    continue;
+                }
+                if (make_move<true>(ctxt, move, futility))
+                {
+                    move._group = MoveOrder::LATE_MOVES;
+                    move._score =
+                        ctxt.history_score(move) / (1 + HISTORY_LOW)
+                        + eval_material_and_piece_squares(*move._state);
+                }
             }
         }
     }
@@ -2133,6 +2139,8 @@ namespace search
         ASSERT(ctxt.moves()[start_at]._group == MoveOrder::UNORDERED_MOVES);
 
         _have_move = false;
+
+        const auto start_time = high_resolution_clock::now();
 
         auto& moves_list = ctxt.moves();
         const auto count = size_t(_count);
@@ -2168,6 +2176,10 @@ namespace search
             ASSERT(compare_moves_ge(moves_list[i-1], moves_list[i]));
         }
     #endif /* NO_ASSERT */
+
+        const auto now = high_resolution_clock::now();
+        ctxt.get_tt()->_move_overhead +=
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
     }
 } /* namespace */
 

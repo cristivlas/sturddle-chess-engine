@@ -280,7 +280,7 @@ namespace search
         Context*    clone(ContextBuffer&, int ply = 0) const;
 
         int         depth() const { return _max_depth - _ply; }
-        static int  elapsed_milliseconds();
+        static int64_t elapsed_milliseconds();
 
         static void ensure_stacks();
 
@@ -665,7 +665,7 @@ namespace search
     }
 
 
-    /* static */ INLINE int Context::elapsed_milliseconds()
+    /* static */ INLINE int64_t Context::elapsed_milliseconds()
     {
         const auto now = std::chrono::steady_clock::now();
         return std::chrono::duration_cast<std::chrono::milliseconds>(
