@@ -17,7 +17,7 @@
  * --------------------------------------------------------------------------
  * Third-party files included in this project are subject to copyright
  * and licensed as stated in their respective header notes.
- *--------------------------------------------------------------------------
+ * --------------------------------------------------------------------------
  */
 #include "common.h"
 
