@@ -247,8 +247,7 @@ namespace search
         };
 
     public:
-        explicit SharedHashTable(size_t capacity)
-            : _data(capacity)
+        explicit SharedHashTable(size_t capacity) : _data(capacity)
         {
         }
 

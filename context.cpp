@@ -25,9 +25,6 @@
  */
 #include <cerrno>
 #include <chrono>
-#if __cplusplus >= 202002L /* C++20 */
-  #include <format>
-#endif
 #include <iomanip>
 #include <iterator>
 #include <map>
@@ -1951,12 +1948,6 @@ namespace search
         {
             ctxt.state().generate_pseudo_legal_moves(moves_list);
             moves_cache.write(ctxt.state(), moves_list);
-
-        #if 0 && __cplusplus >= 202002L
-            Context::log_message(LogLevel::INFO,
-                std::format("iteration: {}, thread: {}, moves: {}, ply: {}, hash: {}",
-                ctxt.iteration(), ctxt.tid(), moves_list.size(), ctxt._ply, ctxt.state().hash()));
-        #endif /* __cplusplus >= 202002L */
         }
 
         _count = int(moves_list.size());
