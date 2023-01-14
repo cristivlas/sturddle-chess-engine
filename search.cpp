@@ -88,6 +88,7 @@ static constexpr int ONE_MEGABYTE = 1024 * 1024;
 
 
 TranspositionTable::HashTable TranspositionTable::_table(pick_prime(TRANSPOSITION_TABLE_SLOTS));
+MovesCache TranspositionTable::_moves_cache(1031);
 
 
 static size_t mem_avail()
@@ -207,7 +208,9 @@ void TranspositionTable::clear()
 /* static */ void TranspositionTable::clear_shared_hashtable()
 {
     assert_param_ref();
+
     _table.clear();
+    _moves_cache.clear();
 }
 
 

@@ -368,11 +368,13 @@ namespace search
 
         INLINE void set_moves(const Context& from_ctxt)
         {
+        #if !USE_MOVES_CACHE
             auto first = from_ctxt.moves().begin();
             auto last = first + std::max(0, from_ctxt._move_maker.count());
 
             _tt->_moves.assign(first, last);
             _tt->_moves_hash = from_ctxt.state().hash();
+        #endif /* !USE_MOVES_CACHE */
         }
 
         /* retrieve PV from TT */
