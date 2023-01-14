@@ -217,6 +217,8 @@ namespace search
 
     class MovesCache
     {
+        static constexpr size_t BUCKET_SIZE = 4;
+
         struct Entry
         {
             State       _state;
@@ -240,27 +242,40 @@ namespace search
 
         INLINE bool lookup(const State& state, MovesList& moves)
         {
-            const auto index = state.hash() % _data.size();
-            auto& entry = _data[index];
-            std::lock_guard<std::mutex> lock(entry._mutex);
-            if (state.hash() == entry._state.hash() && state == entry._state)
+            const auto hash = state.hash();
+
+            for (size_t j = 0; j < BUCKET_SIZE; ++j)
             {
-                ++entry._use_count;
-                moves.assign(entry._moves.begin(), entry._moves.end());
-                return true;
+                const auto i = (hash + j) % _data.size();
+                auto& entry = _data[i];
+                std::lock_guard<std::mutex> lock(entry._mutex);
+                if (state.hash() == entry._state.hash() && state == entry._state)
+                {
+                    ++entry._use_count;
+                    moves.assign(entry._moves.begin(), entry._moves.end());
+                    return true;
+                }
             }
             return false;
         }
 
         INLINE void write(const State& state, const MovesList& moves)
         {
-            const auto index = state.hash() % _data.size();
-            auto& entry = _data[index];
-            std::lock_guard<std::mutex> lock(entry._mutex);
-            if (++entry._write_attempts > entry._use_count)
+            const auto hash = state.hash();
+
+            for (size_t j = 0; j < BUCKET_SIZE; ++j)
             {
-                entry._moves.assign(moves.begin(), moves.end());
-                entry._state = state;
+                const auto i = (hash + j) % _data.size();
+                auto& entry = _data[i];
+                std::lock_guard<std::mutex> lock(entry._mutex);
+                if (++entry._write_attempts > 2 * entry._use_count)
+                {
+                    entry._moves.assign(moves.begin(), moves.end());
+                    entry._state = state;
+                    entry._use_count = 0;
+                    entry._write_attempts = 0;
+                    break;
+                }
             }
         }
     };
@@ -308,9 +323,6 @@ namespace search
         int _eval_depth = 0;
         PV  _pv; /* principal variation */
         PlyHistory _plyHistory;
-
-        MovesList _moves;
-        uint64_t _moves_hash = uint64_t(-1);
 
         /* search window bounds */
         score_t _w_alpha = SCORE_MIN;

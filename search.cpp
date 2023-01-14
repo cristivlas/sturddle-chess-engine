@@ -822,7 +822,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         auto s_ctxt = ctxt.clone(buf, ctxt._ply + 2);
 
                         s_ctxt->set_tt(ctxt.get_tt());
-                        s_ctxt->set_moves(ctxt);
                         s_ctxt->_excluded = next_ctxt->_move;
                         s_ctxt->_max_depth = s_ctxt->_ply + (ctxt.depth() - 1) / 2;
                         s_ctxt->_alpha = s_beta - 1;
@@ -1216,14 +1215,10 @@ public:
             }
 
             _tables[i]._ctxt = _root.clone(_tables[i]._raw_mem);
-
             _tables[i]._tt._w_alpha = _tables[i]._ctxt->_alpha;
             _tables[i]._tt._w_beta = _tables[i]._ctxt->_beta;
-
             _tables[i]._ctxt->_max_depth += (i % 2) == 0;
-
             _tables[i]._ctxt->set_tt(&_tables[i]._tt);
-            _tables[i]._ctxt->set_moves(_root);
             _tables[i]._ctxt->_tt_entry._hash_move = hash_move;
 
             if (prev_best)

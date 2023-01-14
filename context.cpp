@@ -580,8 +580,6 @@ namespace search
 
                     if (_retry_next)
                     {
-                        set_moves(*next_ctxt);
-
                         /* rewind and search again at full depth */
                         rewind(-1);
                         return false;
@@ -1938,9 +1936,7 @@ namespace search
         ASSERT(_state_index == 0);
 
         auto& moves_list = ctxt.moves();
-        moves_list.clear();
 
-    #if USE_MOVES_CACHE
         auto& moves_cache = ctxt.get_tt()->moves_cache();
         if (moves_cache.lookup(ctxt.state(), moves_list))
         {
@@ -1956,29 +1952,12 @@ namespace search
             ctxt.state().generate_pseudo_legal_moves(moves_list);
             moves_cache.write(ctxt.state(), moves_list);
 
-        // #if __cplusplus >= 202002L
-        //     Context::log_message(LogLevel::INFO,
-        //         std::format("iteration: {}, thread: {}, moves: {}, ply: {}, hash: {}",
-        //         ctxt.iteration(), ctxt.tid(), moves_list.size(), ctxt._ply, ctxt.state().hash()));
-        // #endif /* __cplusplus >= 202002L */
+        #if 0 && __cplusplus >= 202002L
+            Context::log_message(LogLevel::INFO,
+                std::format("iteration: {}, thread: {}, moves: {}, ply: {}, hash: {}",
+                ctxt.iteration(), ctxt.tid(), moves_list.size(), ctxt._ply, ctxt.state().hash()));
+        #endif /* __cplusplus >= 202002L */
         }
-    #else
-        if (ctxt.get_tt()->_moves.empty() || ctxt.state().hash() != ctxt.get_tt()->_moves_hash)
-        {
-            ctxt.state().generate_pseudo_legal_moves(moves_list);
-        }
-        else
-        {
-            moves_list.swap(ctxt.get_tt()->_moves);
-
-            for (auto& move : moves_list)
-            {
-                move._state = nullptr;
-                move._score = 0;
-                move._group = MoveOrder::UNORDERED_MOVES;
-            }
-        }
-    #endif /* !USE_MOVES_CACHE */
 
         _count = int(moves_list.size());
         _current = 0;

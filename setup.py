@@ -44,8 +44,8 @@ NATIVE_UCI = environ.get('NATIVE_UCI', '').lower() in ['1', 'true', 'yes']
 # Debug build
 if environ.get('BUILD_DEBUG', None):
     if platform.startswith('win'):
-        args = [ '/Od', '/Zi' ]
-        link = ['/DEBUG']
+        args = [ '/Od', '/Zi', '/DTUNING_ENABLED' ]
+        link = [ '/DEBUG' ]
     else:
         args = [ '-O0', '-D_DEBUG', '-DTUNING_ENABLED' ]
 

@@ -366,17 +366,6 @@ namespace search
         INLINE const MovesList& moves() const { return moves(tid(), _ply); }
         INLINE MovesList& moves() { return moves(tid(), _ply); }
 
-        INLINE void set_moves(const Context& from_ctxt)
-        {
-        #if !USE_MOVES_CACHE
-            auto first = from_ctxt.moves().begin();
-            auto last = first + std::max(0, from_ctxt._move_maker.count());
-
-            _tt->_moves.assign(first, last);
-            _tt->_moves_hash = from_ctxt.state().hash();
-        #endif /* !USE_MOVES_CACHE */
-        }
-
         /* retrieve PV from TT */
         INLINE const PV& get_pv() const { return get_tt()->get_pv(); }
 
