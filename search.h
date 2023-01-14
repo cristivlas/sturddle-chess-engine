@@ -167,7 +167,8 @@ namespace search
         BaseMove    _hash_move;
         int16_t     _value = SCORE_MIN;
         uint64_t    _hash = 0;
-
+        uint8_t     _reads = 0;
+        uint8_t     _overwrite_attempts = 0;
     #if !NO_ASSERT
         void*       _owner = nullptr;
     #endif /* NO_ASSERT */

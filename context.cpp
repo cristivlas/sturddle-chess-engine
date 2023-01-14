@@ -25,6 +25,9 @@
  */
 #include <cerrno>
 #include <chrono>
+#if __cplusplus >= 202002L /* C++20 */
+  #include <format>
+#endif
 #include <iomanip>
 #include <iterator>
 #include <map>
@@ -1940,6 +1943,12 @@ namespace search
         if (ctxt.get_tt()->_moves.empty() || ctxt.state().hash() != ctxt.get_tt()->_moves_hash)
         {
             ctxt.state().generate_pseudo_legal_moves(moves_list);
+
+        #if 0 && __cplusplus >= 202002L
+            Context::log_message(LogLevel::INFO,
+                std::format("iteration: {}, thread: {}, moves: {}, ply: {}, hash: {}",
+                ctxt.iteration(), ctxt.tid(), moves_list.size(), ctxt._ply, ctxt.state().hash()));
+        #endif /* __cplusplus >= 202002L */
         }
         else
         {
@@ -2006,14 +2015,11 @@ namespace search
     /* Phase 4 */
     static INLINE bool move_overhead_exceeded(const Context& ctxt)
     {
-        if (MOVE_OVERHEAD == 0
-            || Context::time_limit() < 0
-            || ctxt.state().is_endgame()
-            || ctxt.iteration() == 1
-           )
+        /* overhead disabled, or time limit set to INFINITE (analysis mode)? */
+        if (MOVE_OVERHEAD == 0 || Context::time_limit() < 0)
             return false;
 
-        return ctxt.get_tt()->_move_overhead * 100 > Context::time_limit() * MOVE_OVERHEAD;
+        return ctxt.get_tt()->_move_overhead * 100 > size_t(Context::time_limit() * MOVE_OVERHEAD);
     }
 
 
@@ -2099,6 +2105,10 @@ namespace search
                 }
                 else if (move_overhead_exceeded(ctxt))
                 {
+                    /* Time spent on generating and ordering moves has exceeded
+                     * the prescribed percentage of overall time limit? Skip the
+                     * fancy tactical moves heuristics; go straight to Phase 4.
+                     */
                     return;
                 }
                 else if (ctxt.is_counter_move(move)

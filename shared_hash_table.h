@@ -280,7 +280,10 @@ namespace search
                 return (hash + j) % _data.size();
         }
 
-        static constexpr size_t bucket_size() { return CACHE_LINE_SIZE / sizeof(entry_t); }
+        static constexpr size_t bucket_size()
+        {
+            return 2 * CACHE_LINE_SIZE / sizeof(entry_t);
+        }
 
         INLINE Proxy lookup_read(const chess::State& state)
         {
@@ -297,11 +300,13 @@ namespace search
                     if (p)
                     {
                         ASSERT(p->matches(state));
+                        ++(*p)._reads;
                         return p;
                     }
                 }
                 else if (p && p->matches(state))
                 {
+                    ++(*p)._reads;
                     return p;
                 }
                 i = next<QUADRATIC_PROBING>(h, j);
@@ -342,15 +347,16 @@ namespace search
                 if (p->_age != _clock)
                     return p;
 
-                if (depth >= p->_depth)
+                if (depth > p->_depth)
                 {
-                #if 1
                     index = i;
                     depth = p->_depth;
-                #else
-                    return p;
-                #endif
                 }
+                else if (++(*p)._overwrite_attempts >= 2 * p->_reads)
+                {
+                    index = i;
+                }
+
                 i = next<QUADRATIC_PROBING>(h, j);
             }
             return Proxy(*this, index);

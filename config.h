@@ -153,7 +153,7 @@ DECLARE_VALUE(  SEE_PIN_AWARENESS_DEPTH,             -1,   -1,     100)
 DECLARE_CONST(  STATIC_EXCHANGES,                     0,    0,       1)
 
 DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
-DECLARE_ALIAS(  MOVE_OVERHEAD, MaxMoveOverhead,      50,    0,     100)
+DECLARE_ALIAS(  MOVE_OVERHEAD, MaxMoveOverhead,       5,    0,     100)
 
 GROUP(Search)
 DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  952,  500,    1000)
