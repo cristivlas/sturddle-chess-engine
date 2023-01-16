@@ -808,9 +808,12 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     */
                     if (ctxt.depth() >= (ctxt.is_pv_node() ? 7 : 5)
                         && ctxt._tt_entry.is_lower()
+                        && next_ctxt->_move._group == MoveOrder::HASH_MOVES
+                    #if WITH_NNUE
+                        && abs(ctxt._eval) < SINGULAR_EVAL_MARGIN
+                    #endif
                         && abs(ctxt._tt_entry._value) < MATE_HIGH
                         && !ctxt._excluded
-                        && next_ctxt->_move == ctxt._tt_entry._hash_move
                         && ctxt._tt_entry._depth >= ctxt.depth() - 3)
                     {
                         const auto s_beta = std::max(int(ctxt._tt_entry._value) - ctxt.singular_margin(), MATE_LOW);
@@ -829,12 +832,10 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                         s_ctxt->_score = SCORE_MIN;
 
                         const auto eval = negamax(*s_ctxt, table);
-                        /* if eval == SCORE_MIN: either the search got cancelled, or there's only one legal move */
 
                         if (eval < s_beta)
                         {
                             next_ctxt->_extension += ONE_PLY;
-
                             if (!ctxt.is_pv_node() && eval + DOUBLE_EXT_MARGIN < s_beta)
                             {
                                 next_ctxt->_extension += ONE_PLY;

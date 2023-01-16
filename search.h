@@ -20,6 +20,7 @@
  */
 #pragma once
 
+#include <atomic>
 #include <algorithm>
 #include <limits>
 #include <memory>
@@ -167,8 +168,10 @@ namespace search
         BaseMove    _hash_move;
         int16_t     _value = SCORE_MIN;
         uint64_t    _hash = 0;
+    #if EVICT_LOW_USE
         uint8_t     _reads = 0;
         uint8_t     _overwrite_attempts = 0;
+    #endif
     #if !NO_ASSERT
         void*       _owner = nullptr;
     #endif /* NO_ASSERT */
@@ -218,14 +221,24 @@ namespace search
     class MovesCache
     {
         static constexpr size_t BUCKET_SIZE = 4;
-
         struct Entry
         {
+            using lock_t = std::atomic_flag;
             State       _state;
             MovesList   _moves;
             int         _use_count = 0;
             int         _write_attempts = 0;
-            std::mutex  _mutex;
+            lock_t      _locked = ATOMIC_FLAG_INIT;
+
+            INLINE void lock()
+            {
+                while (_locked.test_and_set(std::memory_order_acquire))
+                    /* spin */;
+            }
+            INLINE void unlock()
+            {
+                _locked.clear(std::memory_order_release);
+            }
         };
 
         std::vector<Entry> _data;
@@ -248,7 +261,7 @@ namespace search
             {
                 const auto i = (hash + j) % _data.size();
                 auto& entry = _data[i];
-                std::lock_guard<std::mutex> lock(entry._mutex);
+                std::lock_guard<Entry> lock(entry);
                 if (state.hash() == entry._state.hash() && state == entry._state)
                 {
                     ++entry._use_count;
@@ -267,7 +280,7 @@ namespace search
             {
                 const auto i = (hash + j) % _data.size();
                 auto& entry = _data[i];
-                std::lock_guard<std::mutex> lock(entry._mutex);
+                std::lock_guard<Entry> lock(entry);
                 if (++entry._write_attempts > 2 * entry._use_count)
                 {
                     entry._moves.assign(moves.begin(), moves.end());

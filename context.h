@@ -1116,7 +1116,7 @@ namespace search
 
     INLINE int Context::singular_margin() const
     {
-        return SINGULAR_MARGIN * depth();
+        return SINGULAR_DEPTH_MARGIN * depth();
     }
 
 

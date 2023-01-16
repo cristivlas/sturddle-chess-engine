@@ -20,7 +20,11 @@
  */
 #pragma once
 
+#include <cstdlib>
 #include <new>
+
+#define FULL_SIZE_LOCK false /* half-size: 32 bit, full: 64 bit*/
+
 
 #if _MSC_VER
 /* __cpp_lib_hardware_interference_size is broken in versions of clang */
@@ -40,7 +44,7 @@ static int get_cache_line_size()
     int cache_line_size = 64;
 
 #ifdef _WIN32
-    // Use GetLogicalProcessorInformationEx on Windows
+    /* Use GetLogicalProcessorInformationEx on Windows */
     SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info = {};
     DWORD size = sizeof(info);
     if (GetLogicalProcessorInformationEx(RelationCache, &info, &size))
@@ -48,11 +52,11 @@ static int get_cache_line_size()
         cache_line_size = info.Cache.LineSize;
     }
 #elif __APPLE__
-    // Use sysctl on macOS
+    /* Use sysctl on macOS */
     size_t size_of_cache_line_size = sizeof(cache_line_size);
     sysctlbyname("hw.cachelinesize", &cache_line_size, &size_of_cache_line_size, nullptr, 0);
 #elif __linux__
-    // Use sysconf on Linux
+    /* Use sysconf on Linux */
     cache_line_size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
 #else
     #error "Unsupported platform"
@@ -63,8 +67,62 @@ static int get_cache_line_size()
 static const size_t CACHE_LINE_SIZE = get_cache_line_size();
 #endif /* !__cpp_lib_hardware_interference_size */
 
-#define FULL_SIZE_LOCK false /* half-size: 32 bit, full: 64 bit*/
-static constexpr auto QUADRATIC_PROBING = false; /* linear probing */
+
+template <typename T>
+class CacheLineAlignedAllocator
+{
+public:
+    using value_type = T;
+    using pointer = T*;
+
+    CacheLineAlignedAllocator() = default;
+
+    template <typename U>
+    struct rebind { using other = CacheLineAlignedAllocator<U>; };
+
+    template <typename U>
+    CacheLineAlignedAllocator(const CacheLineAlignedAllocator<U>&) noexcept {}
+
+    INLINE pointer allocate(std::size_t n)
+    {
+    #if _WIN32
+        auto p = _aligned_malloc(n * sizeof(T), CACHE_LINE_SIZE);
+        if(!p) throw std::bad_alloc();
+    #else
+        void* p = nullptr;
+        if (posix_memalign(&p, CACHE_LINE_SIZE, n * sizeof(T)) != 0)
+            throw std::bad_alloc();
+    #endif /* !_WIN32 */
+
+        return reinterpret_cast<pointer>(p);
+    }
+
+    INLINE void deallocate(pointer p, std::size_t)
+    {
+    #if _WIN32
+        _aligned_free(p);
+    #else
+        std::free(p);
+    #endif /* _WIN32 */
+    }
+
+    template <typename U, typename... Args>
+    INLINE void construct(U* p, Args&&... args) { new(p) U(std::forward<Args>(args)...); }
+
+    template <typename U> INLINE void destroy(U* p) { p->~U(); }
+};
+
+template <typename T, typename U>
+INLINE bool operator==(const CacheLineAlignedAllocator<T>&, const CacheLineAlignedAllocator<U>&) noexcept
+{
+    return true;
+}
+
+template <typename T, typename U>
+INLINE bool operator!=(const CacheLineAlignedAllocator<T>& a, const CacheLineAlignedAllocator<U>& b) noexcept
+{
+    return !(a == b);
+}
 
 namespace search
 {
@@ -92,7 +150,7 @@ namespace search
     template<typename T> class SharedHashTable
     {
         using entry_t = T;
-        using data_t = std::vector<entry_t>;
+        using data_t = std::vector<entry_t, CacheLineAlignedAllocator<entry_t>>;
         using lock_t = std::atomic<key_t>;
 
     public:
@@ -246,6 +304,12 @@ namespace search
             }
         };
 
+        static INLINE bool same_bucket(size_t i, size_t j)
+        {
+            static const auto bucket_size = 2 * CACHE_LINE_SIZE;
+            return (j == i) || (j > i && (j - i) * sizeof(entry_t) < bucket_size);
+        }
+
     public:
         explicit SharedHashTable(size_t capacity) : _data(capacity)
         {
@@ -268,28 +332,12 @@ namespace search
             data_t(capacity).swap(_data);
         }
 
-        template<bool quadratic> INLINE size_t next(uint64_t hash, size_t j) const
-        {
-            /*
-             * https://en.wikipedia.org/wiki/Open_addressing
-             */
-            if constexpr(quadratic)
-                return (hash + j * j) % _data.size();
-            else
-                return (hash + j) % _data.size();
-        }
-
-        static constexpr size_t bucket_size()
-        {
-            return 2 * CACHE_LINE_SIZE / sizeof(entry_t);
-        }
-
         INLINE Proxy lookup_read(const chess::State& state)
         {
             const auto h = state.hash();
             const size_t index = h % _data.size();
 
-            for (size_t i = index, j = 1; j <= bucket_size(); ++j)
+            for (size_t i = index; same_bucket(index, i); i = (i + 1) % _data.size())
             {
                 Proxy p(*this, i, h);
 
@@ -299,16 +347,19 @@ namespace search
                     if (p)
                     {
                         ASSERT(p->matches(state));
+                    #if EVICT_LOW_USE
                         ++(*p)._reads;
+                    #endif
                         return p;
                     }
                 }
                 else if (p && p->matches(state))
                 {
+                #if EVICT_LOW_USE
                     ++(*p)._reads;
+                #endif
                     return p;
                 }
-                i = next<QUADRATIC_PROBING>(h, j);
             }
 
             return Proxy();
@@ -319,7 +370,7 @@ namespace search
             const auto h = state.hash();
             size_t index = h % _data.size();
 
-            for (size_t i = index, j = 1; j <= bucket_size(); ++j)
+            for (size_t i = index; same_bucket(index, i); i = (i + 1) % _data.size())
             {
                 Proxy q(*this, i, h); /* try non-blocking locking 1st */
                 if (q)
@@ -351,12 +402,10 @@ namespace search
                     index = i;
                     depth = p->_depth;
                 }
-                else if (++(*p)._overwrite_attempts >= 2 * p->_reads)
-                {
+            #if EVICT_LOW_USE
+                else if (++(*p)._overwrite_attempts > p->_reads)
                     index = i;
-                }
-
-                i = next<QUADRATIC_PROBING>(h, j);
+            #endif
             }
             return Proxy(*this, index);
         }

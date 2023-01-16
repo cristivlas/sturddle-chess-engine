@@ -180,7 +180,8 @@ DECLARE_VALUE(  REBEL_EXTENSION,                      2,    1,      10)
 DECLARE_VALUE(  REBEL_EXTENSION_MARGIN,             185,    0,     500)
 #endif /* WITH_NNUE */
 DECLARE_VALUE(  REVERSE_FUTILITY_MARGIN,             32,    0,     150)
-DECLARE_VALUE(  SINGULAR_MARGIN,                      6,    0,     100)
+DECLARE_VALUE(  SINGULAR_DEPTH_MARGIN,                6,    0,     100)
+DECLARE_VALUE(  SINGULAR_EVAL_MARGIN,                50,    0,     500)
 DECLARE_VALUE(  TIME_CTRL_EVAL_THRESHOLD,           -50, -150,       0)
 
 GROUP(MoveOrdering)
