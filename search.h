@@ -20,7 +20,6 @@
  */
 #pragma once
 
-#include <atomic>
 #include <algorithm>
 #include <limits>
 #include <memory>
@@ -168,10 +167,6 @@ namespace search
         BaseMove    _hash_move;
         int16_t     _value = SCORE_MIN;
         uint64_t    _hash = 0;
-    #if EVICT_LOW_USE
-        uint8_t     _reads = 0;
-        uint8_t     _overwrite_attempts = 0;
-    #endif
     #if !NO_ASSERT
         void*       _owner = nullptr;
     #endif /* NO_ASSERT */
@@ -228,17 +223,10 @@ namespace search
             MovesList   _moves;
             int         _use_count = 0;
             int         _write_attempts = 0;
-            lock_t      _locked = ATOMIC_FLAG_INIT;
+            std::mutex  _mutex;
 
-            INLINE void lock()
-            {
-                while (_locked.test_and_set(std::memory_order_acquire))
-                    /* spin */;
-            }
-            INLINE void unlock()
-            {
-                _locked.clear(std::memory_order_release);
-            }
+            INLINE void lock() { _mutex.lock(); }
+            INLINE void unlock() { _mutex.unlock(); }
         };
 
         std::vector<Entry> _data;
@@ -392,9 +380,6 @@ namespace search
 
         size_t hits() const { return _hits; }
         size_t nodes() const { return _nodes; }
-
-        /* number of occupied slots in the shared hashtable */
-        static size_t size();
 
         /* percent usage (size over capacity) */
         static double usage();

@@ -127,12 +127,11 @@ using score_t = int;
 #endif /* !SMP */
 
 
-/* NOTE: the hash table size (in MB) can be changed at runtime with set_param() */
+/* default hash table size in megabytes */
 #if LOW_MEMORY_PROFILE
-  /* https://planetmath.org/goodhashtableprimes */
-  constexpr size_t TRANSPOSITION_TABLE_SLOTS = 3145739;
+  constexpr size_t DEFAULT_HASH_TABLE_SIZE = 4;
 #else
-  constexpr size_t TRANSPOSITION_TABLE_SLOTS = 16 * 1024 * 1024;
+  constexpr size_t DEFAULT_HASH_TABLE_SIZE = 16;
 #endif /* LOW_MEMORY_PROFILE */
 
 #if !defined(MOBILITY_TUNING_ENABLED)

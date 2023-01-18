@@ -860,9 +860,6 @@ cdef extern from 'search.h' namespace 'search':
         void    clear_shared_hashtable() nogil
 
         @staticmethod
-        size_t  size() nogil const
-
-        @staticmethod
         double  usage() nogil const
 
         @staticmethod
@@ -1004,11 +1001,6 @@ cdef class SearchAlgorithm:
     @property
     def tt_hits(self):
         return self._table._hits
-
-
-    @property
-    def tt_size(self):
-        return self._table.size()
 
 
     @property

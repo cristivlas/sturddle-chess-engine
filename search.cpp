@@ -42,16 +42,11 @@
 #undef min
 #endif /* _WIN32 */
 
-#if HAVE_INT128
-/* primes.hpp requires __int128 */
-    #define USE_PRIMES_HPP true
-    #include "primes.hpp"
-#else
-    #define USE_PRIMES_HPP false
-#endif
 
 using namespace chess;
 using namespace search;
+
+constexpr size_t ONE_MEGABYTE = 1024 * 1024;
 
 
 template<bool Debug = false>
@@ -69,26 +64,6 @@ static void log_pv(const TranspositionTable& tt, const Context* ctxt, const char
         Context::log_message(LogLevel::INFO, out.str());
     }
 }
-
-
-/*
- * Thanks to Thomas Neumann for primes.hpp
- * http://databasearchitects.blogspot.com/2020/01/all-hash-table-sizes-you-will-ever-need.html
- */
-static inline size_t pick_prime(size_t n)
-{
-#if USE_PRIMES_HPP
-    return primes::Prime::pick(n).get();
-#else
-    return n;
-#endif /* USE_PRIMES_HPP */
-}
-
-static constexpr int ONE_MEGABYTE = 1024 * 1024;
-
-
-TranspositionTable::HashTable TranspositionTable::_table(pick_prime(TRANSPOSITION_TABLE_SLOTS));
-MovesCache TranspositionTable::_moves_cache(1031);
 
 
 static size_t mem_avail()
@@ -117,9 +92,13 @@ static size_t mem_avail()
 }
 
 
+TranspositionTable::HashTable TranspositionTable::_table(DEFAULT_HASH_TABLE_SIZE, mem_avail());
+MovesCache TranspositionTable::_moves_cache(1031);
+
+
 /* static */ size_t TranspositionTable::max_hash_size()
 {
-    const size_t cur_size = HashTable::size_in_bytes(_table.capacity());
+    const size_t cur_size = _table.byte_capacity();
     const size_t max_mem = mem_avail() + cur_size;
 
     return max_mem / ONE_MEGABYTE;
@@ -128,45 +107,24 @@ static size_t mem_avail()
 
 /* static */ size_t TranspositionTable::get_hash_size()
 {
-    return HashTable::size_in_bytes(_table.capacity()) / ONE_MEGABYTE;
+    return _table.byte_capacity() / ONE_MEGABYTE;
 }
 
 
 /* static */ void TranspositionTable::set_hash_size(size_t MB)
 {
-    const auto max_size = max_hash_size(); /* in Megabytes */
-
-    /* convert requested size to requested capacity */
-    auto req_cap = (MB * ONE_MEGABYTE) / HashTable::size_in_bytes(1);
-
-    /* prime number close to requested capacity */
-    auto prime_cap = pick_prime(req_cap);
-
-    while (true)
+    if (_table.resize(MB, mem_avail()))
     {
-        if (prime_cap == _table.capacity())
-            return;
+        std::ostringstream out;
+        out << "set_hash_size: requested=" << MB << " new="
+            << get_hash_size() << " free=" << mem_avail() / ONE_MEGABYTE;
 
-        auto size = HashTable::size_in_bytes(prime_cap) / ONE_MEGABYTE;
-        if (size < max_size)
-            break;
-
-        if (req_cap == 0)
-        {
-            Context::log_message(LogLevel::ERROR, "hash: cannot resize");
-            return;
-        }
-        else
-        {
-            --req_cap;
-            prime_cap = pick_prime(req_cap);
-        }
+        Context::log_message(LogLevel::DEBUG, out.str());
     }
-    _table.resize(prime_cap);
-
-    std::ostringstream out;
-    out << "hash: req=" << MB << " new=" << get_hash_size() << " free=" << mem_avail() / ONE_MEGABYTE;
-    Context::log_message(LogLevel::DEBUG, out.str(), false);
+    else
+    {
+        Context::log_message(LogLevel::ERROR, "set_hash_size: failed.");
+    }
 }
 
 
@@ -217,12 +175,6 @@ void TranspositionTable::clear()
 /* static */ void TranspositionTable::increment_clock()
 {
     _table.increment_clock();
-}
-
-
-/* static */ size_t TranspositionTable::size()
-{
-    return _table.size();
 }
 
 
@@ -278,6 +230,7 @@ void TranspositionTable::store(Context& ctxt, TT_Entry& entry, score_t alpha, in
 
     entry._hash = ctxt.state().hash();
     entry._depth = depth;
+    entry._age = _table.clock();
 }
 
 

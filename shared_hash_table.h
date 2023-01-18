@@ -23,49 +23,35 @@
 #include <cstdlib>
 #include <new>
 
-#define FULL_SIZE_LOCK false /* half-size: 32 bit, full: 64 bit*/
+#define FULL_SIZE_LOCK false /* half-size => 32 bit, full => 64 bit */
 
 
 #if _MSC_VER
-/* __cpp_lib_hardware_interference_size is broken in versions of clang */
-static constexpr auto CACHE_LINE_SIZE = std::hardware_destructive_interference_size;
+    static constexpr auto CACHE_LINE_SIZE = std::hardware_destructive_interference_size;
 #else
-#ifdef _WIN32
-    #include <Windows.h>
-#elif __APPLE__
-    #include <sys/types.h>
-    #include <sys/sysctl.h>
-#elif __linux__
-    #include <unistd.h>
-#endif
+    /* __cpp_lib_hardware_interference_size is broken in versions of clang and gcc */
+    static constexpr size_t CACHE_LINE_SIZE = 64;
+#endif /* _MSC_VER */
 
-static int get_cache_line_size()
-{
-    int cache_line_size = 64;
 
-#ifdef _WIN32
-    /* Use GetLogicalProcessorInformationEx on Windows */
-    SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info = {};
-    DWORD size = sizeof(info);
-    if (GetLogicalProcessorInformationEx(RelationCache, &info, &size))
+/*
+ * Thomas Neumann's primes.hpp requires __int128
+ * http://databasearchitects.blogspot.com/2020/01/all-hash-table-sizes-you-will-ever-need.html
+ */
+#if HAVE_INT128
+    #include "primes.hpp"
+
+    static INLINE size_t pick_prime(size_t n)
     {
-        cache_line_size = info.Cache.LineSize;
+        return primes::Prime::pick(n).get();
     }
-#elif __APPLE__
-    /* Use sysctl on macOS */
-    size_t size_of_cache_line_size = sizeof(cache_line_size);
-    sysctlbyname("hw.cachelinesize", &cache_line_size, &size_of_cache_line_size, nullptr, 0);
-#elif __linux__
-    /* Use sysconf on Linux */
-    cache_line_size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
 #else
-    #error "Unsupported platform"
-#endif
-    return cache_line_size;
-}
+    static INLINE size_t pick_prime(size_t n)
+    {
+        return n;
+    }
+#endif /* HAVE_INT128 */
 
-static const size_t CACHE_LINE_SIZE = get_cache_line_size();
-#endif /* !__cpp_lib_hardware_interference_size */
 
 
 template <typename T>
@@ -124,6 +110,7 @@ INLINE bool operator!=(const CacheLineAlignedAllocator<T>& a, const CacheLineAli
     return !(a == b);
 }
 
+
 namespace search
 {
 #if FULL_SIZE_LOCK
@@ -150,17 +137,17 @@ namespace search
     template<typename T> class SharedHashTable
     {
         using entry_t = T;
-        using data_t = std::vector<entry_t, CacheLineAlignedAllocator<entry_t>>;
+        using data_t = std::vector<uint8_t, CacheLineAlignedAllocator<uint8_t>>;
         using lock_t = std::atomic<key_t>;
+
+        static constexpr auto bucket_size = 2 * CACHE_LINE_SIZE;
+        static constexpr auto entries_per_bucket = bucket_size / sizeof(entry_t);
 
     public:
         class SpinLock
         {
-            using table_t = SharedHashTable;
-
-            table_t*        _ht = nullptr;
-            const size_t    _ix = 0;
-            bool            _locked = false;
+            entry_t* _entry = nullptr;
+            bool _locked = false;
 
     #if SMP
             INLINE lock_t* lock_p()
@@ -230,13 +217,13 @@ namespace search
         protected:
             SpinLock() = default;
 
-            SpinLock(SharedHashTable& ht, size_t ix) : _ht(&ht), _ix(ix)
+            explicit SpinLock(entry_t* e) : _entry(e)
             {
                 blocking_lock(this->entry());
                 ASSERT(_locked);
             }
 
-            SpinLock(SharedHashTable& ht, size_t ix, uint64_t hash) : _ht(&ht), _ix(ix)
+            SpinLock(entry_t* e, uint64_t hash) : _entry(e)
             {
                 non_blocking_lock(this->entry(), hash);
             }
@@ -248,8 +235,7 @@ namespace search
             }
 
             SpinLock(SpinLock&& other)
-                : _ht(other._ht)
-                , _ix(other._ix)
+                : _entry(other._entry)
                 , _locked(other._locked)
             {
                 other._locked = false;
@@ -263,8 +249,7 @@ namespace search
             SpinLock& operator=(SpinLock&&) = delete;
             SpinLock& operator=(const SpinLock&) = delete;
 
-            uint8_t clock() const { return _ht->_clock; }
-            entry_t* entry() { return &_ht->_data[_ix]; }
+            entry_t* entry() const { return _entry; }
             bool is_locked() const { return _locked; }
 
         public:
@@ -274,45 +259,41 @@ namespace search
 
         class Proxy : public SpinLock
         {
-            entry_t* const _entry = nullptr;
-
         public:
             Proxy() = default;
 
-            Proxy(SharedHashTable& ht, size_t ix) /* write */
-                : SpinLock(ht, ix)
-                , _entry(this->entry())
-            {
-                ASSERT(this->is_locked());
-            }
+            Proxy(entry_t* e) : SpinLock(e) { ASSERT(this->is_locked()); }
+            Proxy(entry_t* e, uint64_t hash) : SpinLock(e, hash) {}
 
-            Proxy(SharedHashTable& ht, size_t ix, uint64_t hash) /* read */
-                : SpinLock(ht, ix, hash)
-                , _entry(this->is_locked() ? this->entry() : nullptr)
-            {
-            }
+            INLINE const entry_t* operator->() const { return SpinLock::entry(); }
+            INLINE const entry_t& operator *() const { return *SpinLock::entry(); }
 
-            INLINE const entry_t* operator->() const { return _entry; }
-            INLINE const entry_t& operator *() const { return *_entry; }
-
-            INLINE entry_t& operator *()
-            {
-                ASSERT(_entry);
-
-                _entry->_age = this->clock();
-                return *_entry;
-            }
+            INLINE entry_t& operator *() { return *SpinLock::entry(); }
         };
 
-        static INLINE bool same_bucket(size_t i, size_t j)
+
+        /* Allocation helper */
+        static INLINE size_t get_buckets(size_t megabytes, size_t mem_avail)
         {
-            static const auto bucket_size = 2 * CACHE_LINE_SIZE;
-            return (j == i) || (j > i && (j - i) * sizeof(entry_t) < bucket_size);
+            auto buckets = megabytes * 1024 * 1024 / bucket_size;
+            auto prime_buckets = pick_prime(buckets);
+            while (prime_buckets * bucket_size > mem_avail)
+            {
+                if (buckets == 0)
+                    return 0;
+                prime_buckets = pick_prime(--buckets);
+            }
+            return prime_buckets;
         }
 
     public:
-        explicit SharedHashTable(size_t capacity) : _data(capacity)
+        SharedHashTable(size_t megabytes, size_t mem_avail)
+            : _buckets(get_buckets(megabytes, mem_avail))
         {
+            if (_buckets == 0)
+                throw std::bad_alloc();
+
+            _data.resize(_buckets * bucket_size);
         }
 
         SharedHashTable(const SharedHashTable&) = delete;
@@ -322,24 +303,31 @@ namespace search
         {
             if (_used > 0)
             {
-                std::fill_n(&_data[0], _data.size(), entry_t());
+                std::fill_n(&_data[0], _data.size(), data_t::value_type());
                 _used = 0;
             }
         }
 
-        void resize(size_t capacity)
+        bool resize(size_t megabytes, size_t mem_avail)
         {
-            data_t(capacity).swap(_data);
+            auto buckets = get_buckets(megabytes, mem_avail + byte_capacity());
+            if (buckets == 0)
+                return false;
+            _data.resize(buckets * bucket_size);
+            _buckets = buckets;
+            return true;
         }
 
         INLINE Proxy lookup_read(const chess::State& state)
         {
             const auto h = state.hash();
-            const size_t index = h % _data.size();
+            auto* const first = get_entry(h);
+            auto* const last = first + entries_per_bucket;
 
-            for (size_t i = index; same_bucket(index, i); i = (i + 1) % _data.size())
+            for (auto e = first; e < last; ++e)
             {
-                Proxy p(*this, i, h);
+                ASSERT((const uint8_t*)(e + 1) <= &_data.back());
+                Proxy p(e, h);
 
                 /* using full-size lock? */
                 if constexpr(sizeof(key_t) == sizeof(h))
@@ -347,36 +335,31 @@ namespace search
                     if (p)
                     {
                         ASSERT(p->matches(state));
-                    #if EVICT_LOW_USE
-                        ++(*p)._reads;
-                    #endif
                         return p;
                     }
                 }
                 else if (p && p->matches(state))
                 {
-                #if EVICT_LOW_USE
-                    ++(*p)._reads;
-                #endif
                     return p;
                 }
             }
-
             return Proxy();
         }
 
         INLINE Proxy lookup_write(const chess::State& state, int depth)
         {
             const auto h = state.hash();
-            size_t index = h % _data.size();
+            auto* entry = get_entry(h);
+            auto* const last = entry + entries_per_bucket;
 
-            for (size_t i = index; same_bucket(index, i); i = (i + 1) % _data.size())
+            for (auto e = entry; e < last; ++e)
             {
-                Proxy q(*this, i, h); /* try non-blocking locking 1st */
+                ASSERT((const uint8_t*)(e + 1) <= &_data.back());
+                Proxy q(e, h); /* try non-blocking locking 1st */
                 if (q)
                     return q;
 
-                Proxy p(*this, i);
+                Proxy p(e);
                 ASSERT(p);
 
                 if (!p->is_valid())
@@ -399,31 +382,33 @@ namespace search
 
                 if (depth > p->_depth)
                 {
-                    index = i;
+                    entry = e;
                     depth = p->_depth;
                 }
-            #if EVICT_LOW_USE
-                else if (++(*p)._overwrite_attempts > p->_reads)
-                    index = i;
-            #endif
             }
-            return Proxy(*this, index);
+            return Proxy(entry);
         }
 
-        INLINE size_t capacity() const { return _data.size(); }
-        INLINE size_t size() const { return _used; }
-
-        static INLINE size_t size_in_bytes(size_t n)
-        {
-            return n * sizeof(typename data_t::value_type);
-        }
+        INLINE size_t byte_capacity() const { return _data.size(); }
+        INLINE size_t capacity() const { return _buckets * entries_per_bucket; }
 
         INLINE uint8_t clock() const { return _clock; }
         INLINE void increment_clock() { ++_clock; }
+
+        INLINE size_t size() const { return _used; }
+
+    private:
+        INLINE entry_t* get_entry(uint64_t hash)
+        {
+            auto index = (hash % _buckets) * bucket_size;
+            ASSERT(index + sizeof(entry_t) * entries_per_bucket <= _data.size());
+            return reinterpret_cast<entry_t*>(&_data[index]);
+        }
 
     private:
         uint8_t     _clock = 0;
         count_t     _used = 0;
         data_t      _data;
+        size_t      _buckets;
     };
 }
