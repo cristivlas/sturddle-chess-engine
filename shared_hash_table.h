@@ -321,6 +321,7 @@ namespace search
         INLINE Proxy lookup_read(const chess::State& state)
         {
             const auto h = state.hash();
+            ASSERT(h);
             auto* const first = get_entry(h);
             auto* const last = first + entries_per_bucket;
 
@@ -349,6 +350,7 @@ namespace search
         INLINE Proxy lookup_write(const chess::State& state, int depth)
         {
             const auto h = state.hash();
+            ASSERT(h);
             auto* entry = get_entry(h);
             auto* const last = entry + entries_per_bucket;
 
@@ -380,7 +382,7 @@ namespace search
                 if (p->_age != _clock)
                     return p;
 
-                if (depth > p->_depth)
+                if (depth >= p->_depth)
                 {
                     entry = e;
                     depth = p->_depth;

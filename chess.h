@@ -584,7 +584,7 @@ namespace chess
             /* there should always be a king */
             ASSERT(king_mask);
 
-            return Square(msb(king_mask));
+            return king_mask ? Square(msb(king_mask)) : Square::UNDEFINED;
         }
 
         INLINE Bitboard kings_quarter(Color color) const
