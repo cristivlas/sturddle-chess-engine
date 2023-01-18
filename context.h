@@ -1421,7 +1421,15 @@ namespace search
                 mark_as_pruned(ctxt, move);
                 return false;
             }
+        }
 
+        ctxt.state().clone_into(*move._state);
+        ASSERT(move._state->capture_value == 0);
+
+        move._state->apply_move(move);
+
+        if constexpr(LateMovePrune)
+        {
             /* History-based pruning. */
             if (ctxt.depth() > 0
                 && ctxt.history_count(move) >= HISTORY_PRUNE * pow2(ctxt.depth())
@@ -1432,11 +1440,6 @@ namespace search
                 return false;
             }
         }
-
-        ctxt.state().clone_into(*move._state);
-        ASSERT(move._state->capture_value == 0);
-
-        move._state->apply_move(move);
 
         if (_group_quiet_moves && is_quiet(*move._state))
         {
