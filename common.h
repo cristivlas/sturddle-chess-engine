@@ -78,11 +78,6 @@ using score_t = int;
 
 #define KILLER_MOVE_HEURISTIC               true
 
-#if !defined(LOW_MEMORY_PROFILE) && (__arm__ || __aarch64__)
-  /* lower memory requirements for mobile */
-  #define LOW_MEMORY_PROFILE                true
-#endif /* LOW_MEMORY_PROFILE */
-
 #define MTDF_CSTAR_BISECT                   true
 
 #define MTDF_REORDER_MOVES                  true
@@ -128,11 +123,8 @@ using score_t = int;
 
 
 /* default hash table size in megabytes */
-#if LOW_MEMORY_PROFILE
-  constexpr size_t DEFAULT_HASH_TABLE_SIZE = 4;
-#else
-  constexpr size_t DEFAULT_HASH_TABLE_SIZE = 16;
-#endif /* LOW_MEMORY_PROFILE */
+constexpr size_t DEFAULT_HASH_TABLE_SIZE =  32;
+
 
 #if !defined(MOBILITY_TUNING_ENABLED)
   #define MOBILITY_TUNING_ENABLED           false
