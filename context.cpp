@@ -453,7 +453,7 @@ namespace search
     void (*Context::_on_next)(PyObject*, int64_t) = nullptr;
 
     std::string(*Context::_pgn)(Context*) = nullptr;
-    void (*Context::_print_state)(const State&) = nullptr;
+    void (*Context::_print_state)(const State&, bool) = nullptr;
     void (*Context::_report)(PyObject*, std::vector<Context*>&) = nullptr;
 
     bool (*Context::_tb_probe_wdl)(const State&, int*) = nullptr;

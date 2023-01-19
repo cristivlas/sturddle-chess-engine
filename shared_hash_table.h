@@ -140,7 +140,7 @@ namespace search
         using data_t = std::vector<uint8_t, CacheLineAlignedAllocator<uint8_t>>;
         using lock_t = std::atomic<key_t>;
 
-        static constexpr auto bucket_size = 2 * CACHE_LINE_SIZE;
+        static constexpr auto bucket_size = CACHE_LINE_SIZE;
         static constexpr auto entries_per_bucket = bucket_size / sizeof(entry_t);
 
     public:

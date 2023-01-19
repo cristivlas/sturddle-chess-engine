@@ -71,8 +71,9 @@ cdef int[2] SIGN = [-1, 1]
 """
 Print chessboard using unicode symbols, with rank / file names.
 """
-def print_board(board):
-    for i, row in enumerate(board.unicode(empty_square='.').split('\n')):
+def print_board(board, use_unicode=False):
+    repr = board.unicode(empty_square='.') if use_unicode else str(board)
+    for i, row in enumerate(repr.split('\n')):
         print(f'{8-i} {row}')
     print('  a b c d e f g h\n')
 
@@ -495,7 +496,7 @@ cdef extern from 'context.h' namespace 'search':
         void            (*_on_move)(PyObject*, const string&, int)
         void            (*_on_next)(PyObject*, int64_t)
         string          (*_pgn)(Context*)
-        void            (*_print_state)(const State&)
+        void            (*_print_state)(const State&, bool)
         void            (*_report)(PyObject*, vector[Context*]&)
         bool            (*_tb_probe_wdl)(const State&, int*)
         size_t          (*_vmem_avail)()
@@ -550,8 +551,8 @@ cdef board_from_cxx_state(const State& state):
     return board_from_state(board_state)
 
 
-cdef void print_state(const State& state) except* :
-    print_board(board_from_cxx_state(state))
+cdef void print_state(const State& state, bool use_unicode) except* :
+    print_board(board_from_cxx_state(state), use_unicode)
 
 
 cdef void report(self, vector[Context*]& ctxts) except* :
@@ -700,7 +701,7 @@ cdef class NodeContext:
         self._ctxt._epd = <string (*)(const State&)> epd
         self._ctxt._log_message = <void (*)(int, const string&, bool)> log_message
         self._ctxt._pgn = <string (*)(Context*)> pgn
-        self._ctxt._print_state = <void (*)(const State&)> print_state
+        self._ctxt._print_state = <void (*)(const State&, bool)> print_state
         self._ctxt._vmem_avail = <size_t (*)()> vmem_avail
         self._ctxt._tb_probe_wdl = <bool (*)(const State&, int*)> tb_probe_wdl
 

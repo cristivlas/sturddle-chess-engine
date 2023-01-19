@@ -701,7 +701,12 @@ INLINE const auto &next(const T &v, size_t &i)
 
 void UCI::debug()
 {
-    cython_wrapper::call(search::Context::_print_state, _buf._state);
+#if _WIN32
+    bool use_unicode = false; /* cmd does not support unicode */
+#else
+    bool use_unicode = true;
+#endif
+    cython_wrapper::call(search::Context::_print_state, _buf._state, use_unicode);
     output(std::format("fen: {}", search::Context::epd(_buf._state)));
     output(std::format("hash: {}", _buf._state._hash));
     size_t history_size = 0;

@@ -391,7 +391,7 @@ namespace search
         static void         (*_on_move)(PyObject*, const std::string&, int);
         static void         (*_on_next)(PyObject*, int64_t);
         static std::string  (*_pgn)(Context*);
-        static void         (*_print_state)(const State&);
+        static void         (*_print_state)(const State&, bool unicode);
         static void         (*_report)(PyObject*, std::vector<Context*>&);
         static bool         (*_tb_probe_wdl)(const State&, int*);
         static size_t       (*_vmem_avail)();
