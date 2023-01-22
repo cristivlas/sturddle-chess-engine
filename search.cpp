@@ -351,36 +351,35 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
 }
 
 
-template<bool Debug>
-void TranspositionTable::store_pv(Context& root)
+template<bool Debug> void TranspositionTable::store_pv(Context& root)
 {
-    PV pv;
-
     ASSERT(root._best_move);
+
+    _pvBuilder.clear();
 
     for (auto ctxt = &root; true; )
     {
-        pv.emplace_back(ctxt->_move);
+        _pvBuilder.emplace_back(ctxt->_move);
         auto next = ctxt->next_ply();
 
         if (next->is_null_move())
             break;
 
         if ((next->_move == ctxt->_best_move)
-            && is_valid_pv_move<Debug>(__func__, pv, root, ctxt->state(), next->_move))
+            && is_valid_pv_move<Debug>(__func__, _pvBuilder, root, ctxt->state(), next->_move))
         {
             ASSERT(next->_parent == ctxt);
             ctxt = next;
             continue;
         }
 
-        get_pv_from_table<Debug>(root, *ctxt, pv);
+        get_pv_from_table<Debug>(root, *ctxt, _pvBuilder);
         break;
     }
 
-    if (pv.size() > _pv.size() || !std::equal(pv.begin(), pv.end(), _pv.begin()))
+    if (_pvBuilder.size() > _pv.size() || !std::equal(_pvBuilder.begin(), _pvBuilder.end(), _pv.begin()))
     {
-        _pv.swap(pv);
+        _pv.swap(_pvBuilder);
         log_pv<Debug>(*this, &root, "store_pv");
     }
 }

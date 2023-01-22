@@ -24,7 +24,12 @@ static void raise_runtime_error(const char* err)
 #include "nnue.h"
 #include "thread_pool.hpp" /* pondering, go infinite */
 
-#define LOG_DEBUG(x) while (_debug) { log_debug((x)); break; }
+#if 0
+  /* enable additional logging */
+  #define LOG_DEBUG(x) while (_debug) { log_debug((x)); break; }
+#else
+  #define LOG_DEBUG(x)
+#endif
 #define OUTPUT_POOL false
 
 static constexpr auto INFINITE = -1;
@@ -89,7 +94,8 @@ namespace
     {
         output(std::cout, str);
         std::cout.write("\n", 1);
-        LOG_DEBUG(std::format("<<< {}", str));
+        if (_debug)
+            log_debug(std::format("<<< {}", str));
         if constexpr(flush)
             std::cout.flush();
     }
@@ -599,7 +605,8 @@ void UCI::run()
             cmd.erase(nl + 1);
         if (cmd.empty())
             continue;
-        LOG_DEBUG(std::format(">>> {}", cmd));
+        if (_debug)
+            log_debug(std::format(">>> {}", cmd));
 
         args.clear();
         /* tokenize command */
