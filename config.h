@@ -29,8 +29,6 @@
  *
  * To cherry-pick, replace DECLARE_VALUE with DECLARE_PARAM
  */
-
-
 #if REFCOUNT_PARAM
 /* Instrumentation & debug: count parameter usage */
 struct Val
@@ -43,11 +41,10 @@ struct Val
     INLINE operator int() const { ++_refcount; return _v; }
 };
 #else
-  using Val = int;
+using Val = int;
 #endif /* REFCOUNT_PARAM */
 
 #if defined(CONFIG_IMPL)
-
 #include <map>
 #include <string>
 #include <thread>
@@ -153,17 +150,14 @@ DECLARE_VALUE(  SEE_PIN_AWARENESS_DEPTH,             -1,   -1,     100)
 DECLARE_CONST(  STATIC_EXCHANGES,                     0,    0,       1)
 
 DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
-DECLARE_ALIAS(  MOVE_OVERHEAD, MaxMoveOverhead,      33,    0,     100)
 
 GROUP(Search)
-DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  952,  500,    1000)
-DECLARE_VALUE(  DOUBLE_EXT_MAX,                      12,    0,     100)
+DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  853,    0,    1000)
+DECLARE_VALUE(  DOUBLE_EXT_MAX,                       6,    0,     100)
 DECLARE_VALUE(  LMP_BASE,                             2,    2,     100)
 DECLARE_VALUE(  LATE_MOVE_REDUCTION_COUNT,            4,    0,     100)
 DECLARE_VALUE(  MIN_EXT_DEPTH,                        7,    0,     100)
-DECLARE_VALUE(  MULTICUT_COMPLEXITY_THRESHOLD,       32,    0,     100)
-DECLARE_VALUE(  MULTICUT_MARGIN_LOW,                237,   50,     350)
-DECLARE_VALUE(  MULTICUT_MARGIN_HIGH,               880,  500,    1000)
+DECLARE_VALUE(  MULTICUT_MARGIN,                    827,    0,    1000)
 DECLARE_VALUE(  NNUE_EVAL_SCALE,                    411,    0,     500)
 DECLARE_VALUE(  NULL_MOVE_DEPTH_WEIGHT,              16,    0,     100)
 DECLARE_VALUE(  NULL_MOVE_DEPTH_DIV,                  3,    1,     100)
@@ -185,7 +179,7 @@ DECLARE_VALUE(  SINGULAR_EVAL_MARGIN,                50,    0,     500)
 DECLARE_VALUE(  TIME_CTRL_EVAL_THRESHOLD,           -50, -150,       0)
 
 GROUP(MoveOrdering)
-DECLARE_VALUE(  COUNTER_MOVE_BONUS,                 268,    0,     500)
+DECLARE_VALUE(  COUNTER_MOVE_BONUS,                 127,    0,     500)
 DECLARE_VALUE(  COUNTER_MOVE_MIN_DEPTH,               3,    0,      20)
 DECLARE_VALUE(  HISTORY_COUNT_HIGH,               88415,    1,  100000)
 DECLARE_VALUE(  HISTORY_SCORE_DIV,                   43,    1,     100)
@@ -194,8 +188,7 @@ DECLARE_VALUE(  HISTORY_FAIL_LOW_PENALTY,            62,    0,     100)
 DECLARE_VALUE(  HISTORY_HIGH,                        92,    0,     100)
 DECLARE_VALUE(  HISTORY_LOW,                         65,    0, HISTORY_HIGH)
 DECLARE_VALUE(  HISTORY_MIN_DEPTH,                    3,    0,     100)
-DECLARE_VALUE(  HISTORY_PRUNE,                       18,    0,     100)
-DECLARE_VALUE(  MOVE_ORDER_EVAL_THRESHOLD,           10,    0,     100)
+DECLARE_VALUE(  HISTORY_PRUNE,                       56,    0,     100)
 
 GROUP(Eval)
 DECLARE_VALUE(  BISHOP_PAIR,                         68,    0,     100)

@@ -1597,42 +1597,6 @@ namespace search
         rewind(0, true);
     }
 
-    /*
-    The complexity_factor() function is intended to adjust the aspiration window size
-    based on the number of pieces on the board. The assumption is that as the number of
-    pieces decreases, the score of a given move becomes easier to predict, so the engine
-    can afford to use a smaller aspiration window and can search more efficiently.
-    The function returns a factor based on the number of pieces on the board, with larger
-    factors corresponding to positions with more pieces and smaller factors corresponding
-    to positions with fewer pieces.
-    */
-    static INLINE double complexity_factor(const State& board)
-    {
-        // number of pieces on the board
-        const auto num_pieces = chess::popcount(board.occupied());
-
-        if (num_pieces < 8) return 1.0;
-        if (num_pieces < 12) return 0.8;
-        if (num_pieces < 16) return 0.6;
-        return 0.4;
-    }
-
-    /*
-    The elapsed_time_factor() function is intended to adjust the aspiration window size based
-    on the elapsed time. The assumption is that as the elapsed time increases, the engine may
-    have less time to search and may need to use a larger aspiration window in order to find
-    the best move. The function returns a factor based on the elapsed time, with larger factors
-    corresponding to less elapsed time and smaller factors corresponding to more elapsed time.
-    */
-    static INLINE double elapsed_time_factor()
-    {
-        const auto elapsed_time = Context::elapsed_milliseconds();
-
-        if (elapsed_time < 5.0) return 1.0;
-        if (elapsed_time < 10.0) return 0.8;
-        if (elapsed_time < 20.0) return 0.6;
-        return 0.4;
-    }
 
     void Context::set_search_window(score_t score, score_t& prev_score)
     {
@@ -1651,29 +1615,23 @@ namespace search
             _alpha = SCORE_MIN;
             _beta = _tt->_w_beta;
         }
+        else if (score <= _tt->_w_alpha)
+        {
+            _alpha = std::max<score_t>(SCORE_MIN, score - HALF_WINDOW * pow2(iteration()));
+            _beta = _tt->_w_beta;
+        }
+        else if (score >= _tt->_w_beta)
+        {
+            _alpha = _tt->_w_alpha;
+            _beta = std::min<score_t>(SCORE_MAX, score + HALF_WINDOW * pow2(iteration()));
+        }
         else
         {
-            // Calculate the size of the aspiration window based on the search depth and other factors
-            score_t window_size = HALF_WINDOW * pow2(iteration()) * complexity_factor(state()) * elapsed_time_factor();
+            const score_t delta = score - prev_score;
+            prev_score = score;
 
-            if (score <= _tt->_w_alpha)
-            {
-                _alpha = std::max<score_t>(SCORE_MIN, score - window_size);
-                _beta = _tt->_w_beta;
-            }
-            else if (score >= _tt->_w_beta)
-            {
-                _alpha = _tt->_w_alpha;
-                _beta = std::min<score_t>(SCORE_MAX, score + window_size);
-            }
-            else
-            {
-                const score_t delta = score - prev_score;
-                prev_score = score;
-
-                _alpha = std::max<score_t>(SCORE_MIN, score - std::max(window_size, delta));
-                _beta = std::min<score_t>(SCORE_MAX, score + std::max(window_size, -delta));
-            }
+            _alpha = std::max<score_t>(SCORE_MIN, score - std::max(HALF_WINDOW, delta));
+            _beta = std::min<score_t>(SCORE_MAX, score + std::max(HALF_WINDOW, -delta));
         }
 
         /* save iteration bounds */
@@ -2000,17 +1958,6 @@ namespace search
     static const auto hist_thresholds = thresholds(std::make_index_sequence<PLY_MAX>{});
 
 
-    /* Phase 4 */
-    static INLINE bool move_overhead_exceeded(const Context& ctxt)
-    {
-        /* overhead disabled, or time limit set to INFINITE (analysis mode)? */
-        if (MOVE_OVERHEAD == 0 || Context::time_limit() < 0)
-            return false;
-
-        return ctxt.get_tt()->_move_overhead * 100 > size_t(Context::time_limit() * MOVE_OVERHEAD);
-    }
-
-
     template<int Phase>
     INLINE void MoveMaker::order_moves_phase(
             Context&    ctxt,
@@ -2091,14 +2038,6 @@ namespace search
                 {
                     make_move<true>(ctxt, move, MoveOrder::HISTORY_COUNTERS, hist_score);
                 }
-                else if (move_overhead_exceeded(ctxt))
-                {
-                    /* Time spent on generating and ordering moves has exceeded
-                     * the prescribed percentage of overall time limit? Skip the
-                     * fancy tactical moves heuristics; go straight to Phase 4.
-                     */
-                    return;
-                }
                 else if (ctxt.is_counter_move(move)
                     || move.from_square() == ctxt._capture_square
                     || is_pawn_push(ctxt, move))
@@ -2107,7 +2046,6 @@ namespace search
                         ASSERT(move._score == hist_score);
                 }
                 else if (move._score >= HISTORY_LOW
-                    && abs(ctxt._eval) > MOVE_ORDER_EVAL_THRESHOLD
                     && make_move<true>(ctxt, move, futility)
                     && (move._state->has_fork(!move._state->turn) || is_direct_check(move)))
                 {
@@ -2141,8 +2079,6 @@ namespace search
         ASSERT(ctxt.moves()[start_at]._group == MoveOrder::UNORDERED_MOVES);
 
         _have_move = false;
-
-        const auto start_time = high_resolution_clock::now();
 
         auto& moves_list = ctxt.moves();
         const auto count = size_t(_count);
@@ -2178,10 +2114,6 @@ namespace search
             ASSERT(compare_moves_ge(moves_list[i-1], moves_list[i]));
         }
     #endif /* NO_ASSERT */
-
-        const auto now = high_resolution_clock::now();
-        ctxt.get_tt()->_move_overhead +=
-            std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
     }
 } /* namespace */
 
