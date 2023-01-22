@@ -190,7 +190,7 @@ namespace chess
                 auto a = attacks.back();
                 attacks.pop_back();
 
-                plan.emplace_back(a);
+                plan.push_back(a);
                 if (!a._support.empty())
                 {
                     attacks.insert(attacks.end(), a._support.cbegin(), a._support.cend());

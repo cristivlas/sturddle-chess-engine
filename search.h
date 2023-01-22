@@ -323,6 +323,7 @@ namespace search
         int _iteration = 0;
         int _eval_depth = 0;
         PV  _pv; /* principal variation */
+        PV  _pvBuilder;
         PlyHistory _plyHistory;
 
         /* search window bounds */

@@ -39,6 +39,9 @@
   #include "nnue.h"
 #endif
 
+#if __clang__
+  #define USE_VECTOR true
+#endif
 #if USE_VECTOR
   #include <xmmintrin.h>
 #endif
@@ -408,8 +411,11 @@ void search::Context::eval_incremental()
     /* Make sure that insufficient material conditions are detected. */
     eval = eval_insufficient_material(state(), eval, [eval](){ return eval; });
 
-    eval *= NNUE_EVAL_SCALE + evaluate_material() / 32;
-    eval /= 1024;
+    if (eval)
+    {
+        eval *= NNUE_EVAL_SCALE + evaluate_material() / 32;
+        eval /= 1024;
+    }
 
     _eval = std::max(-CHECKMATE, std::min(CHECKMATE, eval));
 }
@@ -950,29 +956,6 @@ namespace search
     }
 
 
-    score_t eval_captures(Context& ctxt)
-    {
-        if constexpr(DEBUG_CAPTURES)
-            ctxt.log_message(LogLevel::DEBUG, "eval_captures");
-
-        const auto* const state = ctxt._state;
-
-        score_t result;
-
-        if constexpr(STATIC_EXCHANGES)
-            result = estimate_captures(*state);
-        else
-            result = do_captures(ctxt.tid(), *state, BB_ALL, BB_ALL);
-
-        ASSERT(result >= 0);
-
-        if constexpr(DEBUG_CAPTURES)
-            ctxt.log_message(LogLevel::DEBUG, "captures: " + std::to_string(result));
-
-        return result;
-    }
-
-
     /*----------------------------------------------------------------------
      * Tactical evaluations.
      * All tactical scores are computed from the white side's perspective.
@@ -1351,6 +1334,34 @@ namespace search
     }
 
 
+    score_t eval_captures(Context& ctxt)
+    {
+        if constexpr(DEBUG_CAPTURES)
+            ctxt.log_message(LogLevel::DEBUG, "eval_captures");
+
+        ASSERT(ctxt._state);
+        const auto& state = *ctxt._state;
+
+        score_t result;
+
+        if constexpr(STATIC_EXCHANGES)
+            result = estimate_captures(state);
+        else
+            result = do_captures(ctxt.tid(), state, BB_ALL, BB_ALL);
+
+        ASSERT(result >= 0);
+
+        if constexpr(DEBUG_CAPTURES)
+            ctxt.log_message(LogLevel::DEBUG, "captures: " + std::to_string(result));
+
+    #if WITH_NNUE
+        /* Adjust material difference */
+        result += SIGN[state.turn] * eval_piece_grading(state, popcount(state.occupied()));
+    #endif /* WITH_NNUE */
+        return result;
+    }
+
+
     static INLINE int eval_pawn_structure(const State& state, int pc)
     {
         int eval = eval_passed_formation(state, pc);
@@ -1651,29 +1662,25 @@ namespace search
             _alpha = SCORE_MIN;
             _beta = _tt->_w_beta;
         }
+        else if (score <= _tt->_w_alpha)
+        {
+            score_t window_size = HALF_WINDOW * pow2(iteration()) * complexity_factor(state()) * elapsed_time_factor();
+            _alpha = std::max<score_t>(SCORE_MIN, score - window_size);
+            _beta = _tt->_w_beta;
+        }
+        else if (score >= _tt->_w_beta)
+        {
+            score_t window_size = HALF_WINDOW * pow2(iteration()) * complexity_factor(state()) * elapsed_time_factor();
+            _alpha = _tt->_w_alpha;
+            _beta = std::min<score_t>(SCORE_MAX, score + window_size);
+        }
         else
         {
-            // Calculate the size of the aspiration window based on the search depth and other factors
-            score_t window_size = HALF_WINDOW * pow2(iteration()) * complexity_factor(state()) * elapsed_time_factor();
+            const score_t delta = score - prev_score;
+            prev_score = score;
 
-            if (score <= _tt->_w_alpha)
-            {
-                _alpha = std::max<score_t>(SCORE_MIN, score - window_size);
-                _beta = _tt->_w_beta;
-            }
-            else if (score >= _tt->_w_beta)
-            {
-                _alpha = _tt->_w_alpha;
-                _beta = std::min<score_t>(SCORE_MAX, score + window_size);
-            }
-            else
-            {
-                const score_t delta = score - prev_score;
-                prev_score = score;
-
-                _alpha = std::max<score_t>(SCORE_MIN, score - std::max(window_size, delta));
-                _beta = std::min<score_t>(SCORE_MAX, score + std::max(window_size, -delta));
-            }
+            _alpha = std::max<score_t>(SCORE_MIN, score - std::max(HALF_WINDOW, delta));
+            _beta = std::min<score_t>(SCORE_MAX, score + std::max(HALF_WINDOW, -delta));
         }
 
         /* save iteration bounds */

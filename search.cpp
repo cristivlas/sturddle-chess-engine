@@ -332,7 +332,7 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
         }
 
         /* Add the move to the principal variation. */
-        pv.emplace_back(move);
+        pv.push_back(move);
 
         auto p = _table.lookup_read(state);
         if (!p)
@@ -352,36 +352,34 @@ void TranspositionTable::get_pv_from_table(Context& root, const Context& ctxt, P
 }
 
 
-template<bool Debug>
-void TranspositionTable::store_pv(Context& root)
+template <bool Debug> void TranspositionTable::store_pv(Context& root)
 {
-    PV pv;
-
     ASSERT(root._best_move);
+    _pvBuilder.clear();
 
     for (auto ctxt = &root; true; )
     {
-        pv.emplace_back(ctxt->_move);
+        _pvBuilder.push_back(ctxt->_move);
         auto next = ctxt->next_ply();
 
         if (next->is_null_move())
             break;
 
         if ((next->_move == ctxt->_best_move)
-            && is_valid_pv_move<Debug>(__func__, pv, root, ctxt->state(), next->_move))
+            && is_valid_pv_move<Debug>(__func__, _pvBuilder, root, ctxt->state(), next->_move))
         {
             ASSERT(next->_parent == ctxt);
             ctxt = next;
             continue;
         }
 
-        get_pv_from_table<Debug>(root, *ctxt, pv);
+        get_pv_from_table<Debug>(root, *ctxt, _pvBuilder);
         break;
     }
 
-    if (pv.size() > _pv.size() || !std::equal(pv.begin(), pv.end(), _pv.begin()))
+    if (_pvBuilder.size() > _pv.size() || !std::equal(_pvBuilder.begin(), _pvBuilder.end(), _pv.begin()))
     {
-        _pv.swap(pv);
+        _pv.swap(_pvBuilder);
         log_pv<Debug>(*this, &root, "store_pv");
     }
 }
@@ -762,9 +760,6 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
                     if (ctxt.depth() >= (ctxt.is_pv_node() ? 7 : 5)
                         && ctxt._tt_entry.is_lower()
                         && next_ctxt->_move._group == MoveOrder::HASH_MOVES
-                    #if WITH_NNUE
-                        && abs(ctxt._eval) < SINGULAR_EVAL_MARGIN
-                    #endif
                         && abs(ctxt._tt_entry._value) < MATE_HIGH
                         && !ctxt._excluded
                         && ctxt._tt_entry._depth >= ctxt.depth() - 3)
@@ -1217,7 +1212,7 @@ public:
             {
                 if (table._ctxt && table._ctxt->get_tt())
                 {
-                    ctxts.emplace_back(table._ctxt);
+                    ctxts.push_back(table._ctxt);
                     ASSERT(ctxts.back()->get_tt() == &table._tt);
                 }
             }
@@ -1245,7 +1240,7 @@ struct SMPTasks
         {
             static std::vector<Context*> ctxts;
             ctxts.clear();
-            ctxts.emplace_back(_ctxt);
+            ctxts.push_back(_ctxt);
             cython_wrapper::call(Context::_report, Context::_engine, ctxts);
         }
     }
