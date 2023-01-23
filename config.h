@@ -153,7 +153,7 @@ DECLARE_ALIAS(  SMP_CORES, Threads,                   1,    1, THREAD_MAX)
 
 GROUP(Search)
 DECLARE_VALUE(  DOUBLE_EXT_MARGIN,                  853,    0,    1000)
-DECLARE_VALUE(  DOUBLE_EXT_MAX,                       6,    0,     100)
+DECLARE_VALUE(  DOUBLE_EXT_MAX,                      12,    0,     100)
 DECLARE_VALUE(  LMP_BASE,                             2,    2,     100)
 DECLARE_VALUE(  LATE_MOVE_REDUCTION_COUNT,            4,    0,     100)
 DECLARE_VALUE(  MIN_EXT_DEPTH,                        7,    0,     100)
