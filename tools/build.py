@@ -4,6 +4,7 @@ Build all-in-one executable.
 import argparse
 import glob
 import os
+import platform
 import secrets
 import shutil
 import string
@@ -114,6 +115,8 @@ if __name__ == '__main__':
     if is_windows():
         MAIN += '.exe'
         NAME += '.exe'
+    else:
+        NAME += f'-{platform.system()}-{platform.version().split()[0]}'
 
     while True:
         try:
