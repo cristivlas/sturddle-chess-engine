@@ -116,7 +116,7 @@ if __name__ == '__main__':
         MAIN += '.exe'
         NAME += '.exe'
     else:
-        NAME += f'-{platform.system()}-{platform.version().split()[0]}'
+        NAME += f'-{platform.system()}-{platform.machine()}'
 
     while True:
         try:
