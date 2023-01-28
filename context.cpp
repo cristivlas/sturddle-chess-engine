@@ -716,7 +716,7 @@ namespace search
             ASSERT(capturer_value == state.piece_weight_at(move.from_square()));
 
             /*
-             * If the value of the capture exceed the other's side gain plus the value of the
+             * If the value of the capture exceeds the other's side gain plus the value of the
              * capturing piece there is no need to call ourselves recursively, as even in the
              * worst case scenario of the capturer being taken the difference cannot be offset.
              */
@@ -1135,7 +1135,7 @@ namespace search
 
 
     /*
-     * If the difference in material is with a pawn or less, favor
+     * If the difference in material is within a pawn or less, favor
      * the side with two minor pieces over the side with extra rook.
      */
     static INLINE int eval_redundant_rook(const State& state, int pcs)
@@ -1867,7 +1867,7 @@ namespace search
      * Lookup move in the principal variation from the previous iteration.
      * https://www.chessprogramming.org/PV-Move
      */
-    const BaseMove* lookup_pv(const Context& ctxt)
+    static INLINE const BaseMove* lookup_pv(const Context& ctxt)
     {
         if (!ctxt.get_tt() || !ctxt._move)
             return nullptr;

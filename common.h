@@ -97,7 +97,7 @@ using score_t = int;
 
 /* experiment with different SEE heuristic impls */
 #if !defined(USE_SIMPLE_SEE)
-  #define USE_SIMPLE_SEE                    false
+  #define USE_SIMPLE_SEE                    true
 #endif /* USE_SIMPLE_SEE */
 
 #if !WITH_NNUE && !defined(USE_PIECE_SQUARE_TABLES)

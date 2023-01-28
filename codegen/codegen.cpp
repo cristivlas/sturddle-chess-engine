@@ -1,5 +1,5 @@
 /*
- * Sturddle Chess Engine (C) 2022 Cristi Vlasceanu
+ * Sturddle Chess Engine (C) 2022, 2023 Cristian Vlasceanu
  * --------------------------------------------------------------------------
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@
  * --------------------------------------------------------------------------
  * Third-party files included in this project are subject to copyright
  * and licensed as stated in their respective header notes.
- *--------------------------------------------------------------------------
+ * --------------------------------------------------------------------------
  */
 /* Generates the attacks.h file */
 
