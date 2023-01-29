@@ -1,8 +1,34 @@
-from setuptools import Extension, setup
-from Cython.Build import cythonize
-from os import environ
-from datetime import datetime
 import sysconfig
+from datetime import datetime
+from os import environ, pathsep
+
+from Cython.Build import cythonize
+from setuptools import Extension, setup
+from setuptools.command.build_ext import build_ext
+
+'''
+Monkey-patch MSVCCompiler to use clang-cl.exe on Windows.
+'''
+cl_exe=environ.get('CL_EXE', '')
+if cl_exe:
+    from setuptools._distutils._msvccompiler import MSVCCompiler, _find_exe
+
+    _initialize = MSVCCompiler.initialize
+
+    def initialize(self, platform=None):
+        _initialize(self, platform)
+        paths = self._paths.split(pathsep)
+        self.cc = _find_exe(cl_exe, paths)
+        print(self.cc)
+
+    class BuildExt(build_ext):
+        def build_extensions(self):
+            self.compiler.__class__.initialize = initialize
+            build_ext.build_extensions(self)
+else:
+    class BuildExt(build_ext):
+        pass
+
 
 build_stamp = datetime.now().strftime('%m%d%y.%H%M')
 
@@ -64,7 +90,7 @@ if platform.startswith('win'):
     if NATIVE_UCI:
         args.append('/DNATIVE_UCI=true')
 
-    if environ.get('CL_EXE', '').endswith('clang-cl.exe'):
+    if cl_exe.endswith('clang-cl.exe'):
         args += [
             '-Ofast',
             '-Wno-unused-command-line-argument',
@@ -127,4 +153,4 @@ if not NATIVE_UCI:
     extensions.append(Extension(name='uci', sources=['uci.pyx']))
 
 
-setup(ext_modules=cythonize(extensions))
+setup(ext_modules=cythonize(extensions), cmdclass={'build_ext': BuildExt})
