@@ -665,21 +665,25 @@ namespace search
     }
 
 
-#if !WITH_NNUE
-    INLINE void Context::eval_incremental()
-    {
-    }
-#endif /* !WITH_NNUE */
-
-
-    /*
-     * Use value from the TT if available,
-     * else do a quick material evaluation.
-     */
+#if WITH_NNUE
     INLINE score_t Context::static_eval()
     {
         return _eval == SCORE_MIN ? evaluate_material() : _eval;
     }
+#else
+    /*
+     * Use value from the TT if available, else do a quick material evaluation.
+     */
+    INLINE score_t Context::static_eval()
+    {
+        return _tt_entry._value == SCORE_MIN ? evaluate_material() : _tt_entry._value;
+    }
+
+
+    INLINE void Context::eval_incremental()
+    {
+    }
+#endif /* !WITH_NNUE */
 
 
     template<bool EvalCaptures> INLINE score_t Context::evaluate()

@@ -659,6 +659,12 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
     {
         ASSERT(ctxt._alpha < ctxt._beta);
 
+    #if WITH_NNUE
+        const auto eval = ctxt._eval;
+    #else
+        const auto eval = ctxt._tt_entry._value;
+    #endif
+
     #if REVERSE_FUTILITY_PRUNING
         /*
          * Reverse futility pruning: static eval stored in TT beats beta by a margin and
@@ -669,21 +675,22 @@ score_t search::negamax(Context& ctxt, TranspositionTable& table)
             && !ctxt.is_pv_node()
             && ctxt.depth() > 0
             && ctxt.depth() < 7
-            && ctxt._eval < MATE_HIGH
-            && ctxt._eval > ctxt._beta
+            && eval < MATE_HIGH
+            && eval > ctxt._beta
                 + std::max<score_t>(REVERSE_FUTILITY_MARGIN * ctxt.depth(), ctxt.improvement())
             && !ctxt.is_check())
         {
-            ASSERT(ctxt._eval > SCORE_MIN);
-            ASSERT(ctxt._eval < SCORE_MAX);
-            return ctxt._eval;
+            ASSERT(eval > SCORE_MIN);
+            ASSERT(eval < SCORE_MAX);
+
+            return eval;
         }
     #endif /* REVERSE_FUTILITY_PRUNING */
 
     #if RAZORING
         if (ctxt.depth() > 0
-            && ctxt._eval < alpha - RAZOR_INTERCEPT - RAZOR_DEPTH_COEFF * pow2(ctxt.depth())
-            && ctxt._eval + eval_captures(ctxt) < alpha)
+            && eval < alpha - RAZOR_INTERCEPT - RAZOR_DEPTH_COEFF * pow2(ctxt.depth())
+            && eval + eval_captures(ctxt) < alpha)
         {
             return alpha;
         }
