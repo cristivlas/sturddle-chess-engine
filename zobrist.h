@@ -26,7 +26,7 @@ namespace chess
 {
     namespace
     {
-        constexpr static std::uint64_t random_u64[782] = {
+        constexpr static uint64_t random_u64[782] = {
             0x9D39247E33776D41, 0x2AF7398005AAA5C7, 0x44DB015024623547, 0x9C15F73E62A76AE2,
             0x75834465489C0C89, 0x3290AC3A203001BF, 0x0FBBAD1F61042279, 0xE83A908FF2FB60CA,
             0x0D7E765D58755C10, 0x1A083822CEAFE02D, 0x9605D5F0E25EC3B0, 0xD021FF5CD13A2ED5,
@@ -226,7 +226,7 @@ namespace chess
         };
 
 
-        INLINE std::uint64_t en_passant_key(const State& board)
+        INLINE uint64_t en_passant_key(const State& board)
         {
             if (board.en_passant_square != Square::UNDEFINED)
             {
@@ -244,9 +244,27 @@ namespace chess
         }
 
 
-        constexpr INLINE std::uint64_t side_to_move_key(int turn)
+        constexpr INLINE uint64_t side_to_move_key(int turn)
         {
             return random_u64[781 - turn];
+        }
+
+
+        INLINE void hash_castling_rights(uint64_t castling_rights, uint64_t& hash_value)
+        {
+            static constexpr Bitboard mask[] = { BB_EMPTY, BB_ALL };
+
+            /* white kingside */
+            hash_value ^= mask[bool(castling_rights & BB_SQUARES[H1])] & random_u64[768 + 0];
+
+            /* white queenside */
+            hash_value ^= mask[bool(castling_rights & BB_SQUARES[A1])] & random_u64[768 + 1];
+
+            /* black kingside */
+            hash_value ^= mask[bool(castling_rights & BB_SQUARES[H8])] & random_u64[768 + 2];
+
+            /* black queenside */
+            hash_value ^= mask[bool(castling_rights & BB_SQUARES[A8])] & random_u64[768 + 3];
         }
     } /* namespace */
 
@@ -269,23 +287,8 @@ namespace chess
 
         hash_value ^= en_passant_key(state);
 
-        /* castling rights */
         if (state.castling_rights)
-        {
-            static constexpr Bitboard mask[] = { BB_EMPTY, BB_ALL };
-
-            /* white kingside */
-            hash_value ^= mask[bool(state.castling_rights & BB_SQUARES[H1])] & random_u64[768 + 0];
-
-            /* white queenside */
-            hash_value ^= mask[bool(state.castling_rights & BB_SQUARES[A1])] & random_u64[768 + 1];
-
-            /* black kingside */
-            hash_value ^= mask[bool(state.castling_rights & BB_SQUARES[H8])] & random_u64[768 + 2];
-
-            /* black queenside */
-            hash_value ^= mask[bool(state.castling_rights & BB_SQUARES[A8])] & random_u64[768 + 3];
-        }
+            hash_castling_rights(state.castling_rights, hash_value);
 
         hash_value ^= side_to_move_key(state.turn);
         return hash_value;
@@ -302,15 +305,6 @@ namespace chess
         if (state._hash != 0)
         {
             ASSERT(state._hash == zobrist_hash(state));
-
-            return;
-        }
-        else if (state.castling_rights != prev_state.castling_rights)
-        {
-            /*
-             * TODO
-             */
-            state._hash = zobrist_hash(state);
         }
         else
         {
@@ -329,7 +323,7 @@ namespace chess
                     state._hash ^= random_u64[64 * index + move.to_square()];
                 }
 
-                auto moved_piece_type = prev_state.piece_type_at(move.from_square());
+                const auto moved_piece_type = prev_state.piece_type_at(move.from_square());
                 ASSERT(moved_piece_type);
 
                 int index = (static_cast<int>(moved_piece_type) - 1) * 2 + prev_state.turn;
@@ -340,7 +334,28 @@ namespace chess
                     index = (static_cast<int>(move.promotion()) - 1) * 2 + prev_state.turn;
                 }
                 state._hash ^= random_u64[64 * index + move.to_square()];
+
+                if (prev_state.is_castling(move))
+                {
+                    ASSERT(moved_piece_type == KING);
+                    ASSERT(prev_state.castling_rights != state.castling_rights);
+
+                    const auto color = prev_state.turn;
+                    const auto king_to_file = square_file(move.to_square());
+                    ASSERT(king_to_file == 2 || king_to_file == 6);
+
+                    const auto rook_from_square = rook_castle_squares[king_to_file == 2][0][color];
+                    const auto rook_to_square = rook_castle_squares[king_to_file == 2][1][color];
+
+                    index = (static_cast<int>(ROOK) - 1) * 2 + color;
+                    state._hash ^= random_u64[64 * index + rook_from_square];
+                    state._hash ^= random_u64[64 * index + rook_to_square];
+                }
+                const auto castling_rights = state.castling_rights ^ prev_state.castling_rights;
+                hash_castling_rights(castling_rights, state._hash);
             }
+            else
+                ASSERT(state.castling_rights == prev_state.castling_rights);
 
             state._hash ^= en_passant_key(prev_state);
             state._hash ^= en_passant_key(state);

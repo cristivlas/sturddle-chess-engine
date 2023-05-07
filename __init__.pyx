@@ -172,7 +172,7 @@ cdef extern from 'chess.h' namespace 'chess':
         bool    equals(const State&) const
         score_t eval() const
         score_t eval_incremental(const BaseMove&) const
-        size_t  hash() const
+        uint64_t hash() const
         void    rehash()
 
         bool    has_connected_rooks(int) const
@@ -203,7 +203,7 @@ cdef extern from 'chess.h' namespace 'chess':
 
 
 cdef extern from 'zobrist.h' namespace 'chess':
-    cdef size_t zobrist_hash(const State&)
+    cdef uint64_t zobrist_hash(const State&)
 
 
 assert BLACK == chess.BLACK
@@ -375,7 +375,7 @@ cdef class BoardState:
         return [py_move(m) for m in moves]
 
 
-    cpdef size_t zobrist(self):
+    cpdef uint64_t zobrist(self):
         return zobrist_hash(self._state)
 
 
@@ -1377,7 +1377,7 @@ nnue_init(os.path.dirname(__file__))
 _tb_init()
 
 __major__   = 1
-__minor__   = 28
+__minor__   = 29
 __build__   = ['NNUE', str(__major__), f'{int(__minor__):02d}', timestamp().decode()]
 
 
