@@ -51,7 +51,9 @@ if __name__ == '__main__':
 
     exe = sys.executable # the Python interpreter
 
-    for arch in ['AVX512', 'AVX2', '']:
+    ARCHS = ['AVX512', 'AVX2', ''] if platform.machine() in ['x86_64', 'AMD64'] else ['']
+
+    for arch in ARCHS:
         delete(['uci.cpp', '__init__.cpp']) # force re-cythonize
         print('*********************************************************')
         print(f'Building {arch if arch else "generic"} module')

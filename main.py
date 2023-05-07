@@ -15,26 +15,30 @@ import chess
 import chess.pgn
 import chess.polyglot
 import chess.syzygy
-import cpufeature
 import psutil
 
-'''
-Import the chess engine module flavor that best matches the CPU capabilities.
-'''
-def _is_avx512_supported():
-    for f in cpufeature.extension.CPUFeature:
-        if (f.startswith('AVX512') and cpufeature.extension.CPUFeature[f]):
-            return True
-    return False
+platform = sysconfig.get_platform()
+if any(('arm' in platform, 'aarch64' in platform)):
+    flavors = { 'chess_engine': lambda *_: True }
+else:
+    import cpufeature
+    '''
+    Import the chess engine module flavor that best matches the CPU capabilities.
+    '''
+    def _is_avx512_supported():
+        for f in cpufeature.extension.CPUFeature:
+            if (f.startswith('AVX512') and cpufeature.extension.CPUFeature[f]):
+                return True
+        return False
 
-def _is_avx2_supported():
-    return cpufeature.extension.CPUFeature['AVX2']
+    def _is_avx2_supported():
+        return cpufeature.extension.CPUFeature['AVX2']
 
-flavors = {
-    'chess_engine_avx512': _is_avx512_supported,
-    'chess_engine_avx2': _is_avx2_supported,
-    'chess_engine': lambda *_: True,
-}
+    flavors = {
+        'chess_engine_avx512': _is_avx512_supported,
+        'chess_engine_avx2': _is_avx2_supported,
+        'chess_engine': lambda *_: True,
+    }
 
 def load_engine():
     for eng in flavors:
