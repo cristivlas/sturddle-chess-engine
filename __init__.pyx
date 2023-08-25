@@ -488,18 +488,18 @@ cdef extern from 'context.h' namespace 'search':
         BaseMove        _best_move
         PyObject*       _engine
 
-        bool            (*_book_init)(const string&)
-        BaseMove        (*_book_lookup)(const State&, bool)
-        string          (*_epd)(const State&)
-        void            (*_log_message)(int, const string&, bool)
-        void            (*_on_iter)(PyObject*, Context*, const IterationInfo*)
-        void            (*_on_move)(PyObject*, const string&, int)
-        void            (*_on_next)(PyObject*, int64_t)
-        string          (*_pgn)(Context*)
-        void            (*_print_state)(const State&, bool)
-        void            (*_report)(PyObject*, vector[Context*]&)
-        bool            (*_tb_probe_wdl)(const State&, int*)
-        size_t          (*_vmem_avail)()
+        bool            (*_book_init)(const string&) except*
+        BaseMove        (*_book_lookup)(const State&, bool) except*
+        string          (*_epd)(const State&) except*
+        void            (*_log_message)(int, const string&, bool) except*
+        void            (*_on_iter)(PyObject*, Context*, const IterationInfo*) except*
+        void            (*_on_move)(PyObject*, const string&, int) except*
+        void            (*_on_next)(PyObject*, int64_t) except*
+        string          (*_pgn)(Context*) except*
+        void            (*_print_state)(const State&, bool) except*
+        void            (*_report)(PyObject*, vector[Context*]&) except*
+        bool            (*_tb_probe_wdl)(const State&, int*) except*
+        size_t          (*_vmem_avail)() except*
 
         int64_t         nanosleep(int) nogil
 
@@ -870,9 +870,9 @@ cdef extern from 'search.h' namespace 'search':
         void    set_hash_size(size_t)
 
 
-    cdef score_t negamax(Context&, TranspositionTable&) nogil except*
-    cdef score_t mtdf(Context&, score_t, TranspositionTable&) nogil except*
-    cdef score_t iterative(Context&, TranspositionTable&, int) nogil except*
+    cdef score_t negamax(Context&, TranspositionTable&) except* nogil
+    cdef score_t mtdf(Context&, score_t, TranspositionTable&) except* nogil
+    cdef score_t iterative(Context&, TranspositionTable&, int) except* nogil
 
 
 cdef task_stats(const TranspositionTable& table):
